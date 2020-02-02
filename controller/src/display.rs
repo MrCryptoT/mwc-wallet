@@ -170,8 +170,7 @@ pub fn txs(
 			bMG->"Kernel",
 			bMG->"Tx \nData",
 		]);
-	}
-	else {
+	} else {
 		// 'short' format is used by mwc 713 wallet
 		table.set_titles(row![
 			bMG->"Id",
@@ -245,8 +244,7 @@ pub fn txs(
 		};
 		let payment_proof = if has_proof(t) {
 			"Yes".to_owned()
-		}
-		else {
+		} else {
 			"None".to_owned()
 		};
 
@@ -315,20 +313,19 @@ pub fn txs(
 					]);
 				}
 			}
-		}
-		else {
+		} else {
 			// Short supports only dark scheme, we really don't need more
 			table.add_row(row![
 				bFC->id,
-                bFC->entry_type,
-                bFB->short_slate_id,
-                bFC->address,
-                bFB->creation_ts,
-                bFG->confirmed,
-                bFG->height,
-                bFB->confirmation_ts,
-                bFY->net_diff,
-                bFG->payment_proof,
+				bFC->entry_type,
+				bFB->short_slate_id,
+				bFC->address,
+				bFB->creation_ts,
+				bFG->confirmed,
+				bFG->height,
+				bFB->confirmation_ts,
+				bFY->net_diff,
+				bFG->payment_proof,
 			]);
 		}
 	}

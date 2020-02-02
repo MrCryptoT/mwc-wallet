@@ -19,9 +19,9 @@ use std::io;
 use std::path::PathBuf;
 
 use crate::controller::common::Error;
-use crate::util::secp::key::SecretKey;
 use crate::core::global::ChainTypes;
 use crate::util::logger::LoggingConfig;
+use crate::util::secp::key::SecretKey;
 
 /// Command-line wallet configuration
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -117,10 +117,10 @@ impl WalletConfig {
 		443
 	}
 
-        /// get the mwcmqs domain 
-        pub fn mwcmqs_domain(&self) -> String {
-                format!("mqs.mwc.mw")
-        }
+	/// get the mwcmqs domain
+	pub fn mwcmqs_domain(&self) -> String {
+		format!("mqs.mwc.mw")
+	}
 
 	pub fn get_mwcmqs_address(&self) -> Result<MWCMQSAddress, Error> {
 		let public_key = self.get_grinbox_public_key()?;

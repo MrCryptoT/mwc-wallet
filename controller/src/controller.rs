@@ -15,32 +15,32 @@
 //! Controller for wallet.. instantiates and handles listeners (or single-run
 //! invocations) as needed.
 
-use std::thread;
-use grin_wallet_util::grin_core::core;
-use crate::common::COLORED_PROMPT;
-use crate::mwcmq::CloseReason;
-use crate::tx_proof::TxProof;
 use crate::api::{self, ApiServer, BasicAuthMiddleware, ResponseFuture, Router, TLSConfig};
+use crate::common::COLORED_PROMPT;
 use crate::config::TorConfig;
 use crate::keychain::Keychain;
 use crate::libwallet::{
 	address, Error, ErrorKind, NodeClient, NodeVersionInfo, Slate, WalletInst, WalletLCProvider,
 	GRIN_BLOCK_HEADER_VERSION,
 };
+use crate::mwcmq::CloseReason;
+use crate::tx_proof::TxProof;
+use grin_wallet_util::grin_core::core;
+use std::thread;
 
-use colored::Colorize;
-use crate::mwcmq::Publisher;
-use crate::mwcmq::SubscriptionHandler;
-use crate::contacts::types::AddressBook;
-use grin_wallet_config::WalletConfig;
 use crate::contacts::types::Address;
+use crate::contacts::types::AddressBook;
 use crate::mwcmq::MWCMQPublisher;
 use crate::mwcmq::MWCMQSubscriber;
+use crate::mwcmq::Publisher;
+use crate::mwcmq::SubscriptionHandler;
 use crate::util::secp::key::SecretKey;
 use crate::util::{from_hex, static_secp_instance, to_base64, Mutex};
+use colored::Colorize;
 use failure::ResultExt;
 use futures::future::{err, ok};
 use futures::{Future, Stream};
+use grin_wallet_config::WalletConfig;
 use hyper::header::HeaderValue;
 use hyper::{Body, Request, Response, StatusCode};
 use serde::{Deserialize, Serialize};
@@ -171,217 +171,225 @@ where
 }
 
 struct Controller {
-    name: String,
-    wallet: Arc<Mutex<Wallet>>,
-    address_book: Arc<Mutex<AddressBook>>,
-    publisher: Box<dyn Publisher + Send>,
+	name: String,
+	wallet: Arc<Mutex<Wallet>>,
+	address_book: Arc<Mutex<AddressBook>>,
+	publisher: Box<dyn Publisher + Send>,
 }
 
 impl Controller {
-    pub fn new(
-        name: &str,
-        wallet: Arc<Mutex<Wallet>>,
-        address_book: Arc<Mutex<AddressBook>>,
-        publisher: Box<dyn Publisher + Send>,
-    ) -> Result<Self, Error> {
-        Ok(Self {
-            name: name.to_string(),
-            wallet,
-            address_book,
-            publisher,
-        })
-    }
+	pub fn new(
+		name: &str,
+		wallet: Arc<Mutex<Wallet>>,
+		address_book: Arc<Mutex<AddressBook>>,
+		publisher: Box<dyn Publisher + Send>,
+	) -> Result<Self, Error> {
+		Ok(Self {
+			name: name.to_string(),
+			wallet,
+			address_book,
+			publisher,
+		})
+	}
 
-    fn process_incoming_slate(
-        &self,
-        address: Option<String>,
-        slate: &mut Slate,
-        tx_proof: Option<&mut TxProof>,
-        config: Option<WalletConfig>,
-        dest_acct_name: Option<&str>,
-    ) -> Result<bool, Error> {
-        if slate.num_participants > slate.participant_data.len() {
-            //TODO: this needs to be changed to properly figure out if this slate is an invoice or a send
-            if slate.tx.inputs().len() == 0 {
-                self.wallet.lock().process_receiver_initiated_slate(slate, address.clone())?;
-            } else {
-                let mut w = self.wallet.lock();
-                let old_account = w.active_account.clone();
-                w.process_sender_initiated_slate(address, slate, None, None, dest_acct_name)?;
-            }
-            Ok(false)
-        } else {
-            // Try both to finalize
-            let w = self.wallet.lock();
-            match w.finalize_slate(slate, tx_proof) {
-                Err(_) => w.finalize_invoice_slate(slate)?,
-                Ok(_) => (),
-            }
-            Ok(true)
-        }
-    }
+	fn process_incoming_slate(
+		&self,
+		address: Option<String>,
+		slate: &mut Slate,
+		tx_proof: Option<&mut TxProof>,
+		config: Option<WalletConfig>,
+		dest_acct_name: Option<&str>,
+	) -> Result<bool, Error> {
+		if slate.num_participants > slate.participant_data.len() {
+			//TODO: this needs to be changed to properly figure out if this slate is an invoice or a send
+			if slate.tx.inputs().len() == 0 {
+				self.wallet
+					.lock()
+					.process_receiver_initiated_slate(slate, address.clone())?;
+			} else {
+				let mut w = self.wallet.lock();
+				let old_account = w.active_account.clone();
+				w.process_sender_initiated_slate(address, slate, None, None, dest_acct_name)?;
+			}
+			Ok(false)
+		} else {
+			// Try both to finalize
+			let w = self.wallet.lock();
+			match w.finalize_slate(slate, tx_proof) {
+				Err(_) => w.finalize_invoice_slate(slate)?,
+				Ok(_) => (),
+			}
+			Ok(true)
+		}
+	}
 }
 
 impl SubscriptionHandler for Controller {
-    fn on_open(&self) {
-        println!("listener started for [{}]", self.name.bright_green());
-        print!("{}", COLORED_PROMPT);
-    }
+	fn on_open(&self) {
+		println!("listener started for [{}]", self.name.bright_green());
+		print!("{}", COLORED_PROMPT);
+	}
 
-    fn on_slate(&self, from: &dyn Address, slate: &mut Slate, tx_proof: Option<&mut TxProof>, config: Option<WalletConfig>) {
-        let mut display_from = from.stripped();
-        if let Ok(contact) = self
-            .address_book
-            .lock()
-            .get_contact_by_address(&from.to_string())
-        {
-            display_from = contact.get_name().to_string();
-        }
+	fn on_slate(
+		&self,
+		from: &dyn Address,
+		slate: &mut Slate,
+		tx_proof: Option<&mut TxProof>,
+		config: Option<WalletConfig>,
+	) {
+		let mut display_from = from.stripped();
+		if let Ok(contact) = self
+			.address_book
+			.lock()
+			.get_contact_by_address(&from.to_string())
+		{
+			display_from = contact.get_name().to_string();
+		}
 
-        if slate.num_participants > slate.participant_data.len() {
-            let message = &slate.participant_data[0].message;
-            if message.is_some() {
-                println!(
-                    "slate [{}] received from [{}] for [{}] MWCs. Message: [\"{}\"]",
-                    slate.id.to_string().bright_green(),
-                    display_from.bright_green(),
-                    core::amount_to_hr_string(slate.amount, false).bright_green(),
-                    message.clone().unwrap().bright_green()
-                );
-            }
-            else {
-                println!(
-                    "slate [{}] received from [{}] for [{}] MWCs.",
-                    slate.id.to_string().bright_green(),
-                    display_from.bright_green(),
-                    core::amount_to_hr_string(slate.amount, false).bright_green()
-                );
-            }
-        } else {
-            println!(
-                "slate [{}] received back from [{}] for [{}] MWCs",
-                slate.id.to_string().bright_green(),
-                display_from.bright_green(),
-                core::amount_to_hr_string(slate.amount, false).bright_green()
-            );
-        };
+		if slate.num_participants > slate.participant_data.len() {
+			let message = &slate.participant_data[0].message;
+			if message.is_some() {
+				println!(
+					"slate [{}] received from [{}] for [{}] MWCs. Message: [\"{}\"]",
+					slate.id.to_string().bright_green(),
+					display_from.bright_green(),
+					core::amount_to_hr_string(slate.amount, false).bright_green(),
+					message.clone().unwrap().bright_green()
+				);
+			} else {
+				println!(
+					"slate [{}] received from [{}] for [{}] MWCs.",
+					slate.id.to_string().bright_green(),
+					display_from.bright_green(),
+					core::amount_to_hr_string(slate.amount, false).bright_green()
+				);
+			}
+		} else {
+			println!(
+				"slate [{}] received back from [{}] for [{}] MWCs",
+				slate.id.to_string().bright_green(),
+				display_from.bright_green(),
+				core::amount_to_hr_string(slate.amount, false).bright_green()
+			);
+		};
 
-        if from.address_type() == AddressType::Grinbox {
-            GrinboxAddress::from_str(&from.to_string()).expect("invalid mwcmq address");
-        }
+		if from.address_type() == AddressType::Grinbox {
+			GrinboxAddress::from_str(&from.to_string()).expect("invalid mwcmq address");
+		}
 
+		let account = {
+			// lock must be very local
+			let w = self.wallet.lock();
+			w.active_account.clone()
+		};
 
-        let account = {
-            // lock must be very local
-            let w = self.wallet.lock();
-            w.active_account.clone()
-        };
+		let result = self
+			.process_incoming_slate(
+				Some(from.to_string()),
+				slate,
+				tx_proof,
+				config,
+				Some(&account),
+			)
+			.and_then(|is_finalized| {
+				if !is_finalized {
+					self.publisher
+						.post_slate(slate, from)
+						.map_err(|e| {
+							println!("{}: {}", "ERROR".bright_red(), e);
+							e
+						})
+						.expect("failed posting slate!");
+					println!(
+						"slate [{}] sent back to [{}] successfully",
+						slate.id.to_string().bright_green(),
+						display_from.bright_green()
+					);
+				} else {
+					println!(
+						"slate [{}] finalized successfully",
+						slate.id.to_string().bright_green()
+					);
+				}
+				Ok(())
+			});
 
-        let result = self
-            .process_incoming_slate(Some(from.to_string()), slate, tx_proof, config, Some(&account) )
-            .and_then(|is_finalized| {
-                if !is_finalized {
-                    self.publisher
-                        .post_slate(slate, from)
-                        .map_err(|e| {
-                            println!("{}: {}", "ERROR".bright_red(), e);
-                            e
-                        })
-                        .expect("failed posting slate!");
-                    println!(
-                        "slate [{}] sent back to [{}] successfully",
-                        slate.id.to_string().bright_green(),
-                        display_from.bright_green()
-                    );
-                } else {
-                    println!(
-                        "slate [{}] finalized successfully",
-                        slate.id.to_string().bright_green()
-                    );
-                }
-                Ok(())
-            });
+		match result {
+			Ok(()) => {}
+			Err(e) => println!("{}", e),
+		}
+	}
 
-        match result {
-            Ok(()) => {}
-            Err(e) => println!("{}", e),
-        }
-    }
+	fn on_close(&self, reason: CloseReason) {
+		match reason {
+			CloseReason::Normal => println!("listener [{}] stopped", self.name.bright_green()),
+			CloseReason::Abnormal(_) => println!(
+				"{}: listener [{}] stopped unexpectedly",
+				"ERROR".bright_red(),
+				self.name.bright_green()
+			),
+		}
+	}
 
-    fn on_close(&self, reason: CloseReason) {
-        match reason {
-            CloseReason::Normal => println!("listener [{}] stopped", self.name.bright_green()),
-            CloseReason::Abnormal(_) => println!(
-                "{}: listener [{}] stopped unexpectedly",
-                "ERROR".bright_red(),
-                self.name.bright_green()
-            ),
-        }
-    }
+	fn on_dropped(&self) {
+		println!("{}: listener [{}] lost connection. it will keep trying to restore connection in the background.", "WARNING".bright_yellow(), self.name.bright_green())
+	}
 
-    fn on_dropped(&self) {
-        println!("{}: listener [{}] lost connection. it will keep trying to restore connection in the background.", "WARNING".bright_yellow(), self.name.bright_green())
-    }
-
-    fn on_reestablished(&self) {
-        println!(
-            "{}: listener [{}] reestablished connection.",
-            "INFO".bright_blue(),
-            self.name.bright_green()
-        )
-    }
+	fn on_reestablished(&self) {
+		println!(
+			"{}: listener [{}] reestablished connection.",
+			"INFO".bright_blue(),
+			self.name.bright_green()
+		)
+	}
 }
-
-
 
 /// Start the mqs listener
 fn start_mwcmqs_listener(
-    config: &WalletConfig,
-    wallet: Arc<Mutex<Wallet>>,
-    address_book: Arc<Mutex<AddressBook>>,
+	config: &WalletConfig,
+	wallet: Arc<Mutex<Wallet>>,
+	address_book: Arc<Mutex<AddressBook>>,
 ) -> Result<(MWCMQPublisher, MWCMQSubscriber), Error> {
-    // make sure wallet is not locked, if it is try to unlock with no passphrase
-    {
-        let mut wallet = wallet.lock();
-        if wallet.is_locked() {
-            wallet.unlock(config, "default", grin_wallet_util::grin_util::ZeroingString::from(""))?;
-        }
-    }
+	// make sure wallet is not locked, if it is try to unlock with no passphrase
+	{
+		let mut wallet = wallet.lock();
+		if wallet.is_locked() {
+			wallet.unlock(
+				config,
+				"default",
+				grin_wallet_util::grin_util::ZeroingString::from(""),
+			)?;
+		}
+	}
 
-    println!("starting mwcmqs listener...");
+	println!("starting mwcmqs listener...");
 
-    let mwcmqs_address = config.get_mwcmqs_address().unwrap();
-    let mwcmqs_secret_key = config.get_mwcmqs_secret_key().unwrap();
+	let mwcmqs_address = config.get_mwcmqs_address().unwrap();
+	let mwcmqs_secret_key = config.get_mwcmqs_secret_key().unwrap();
 
-    let mwcmqs_publisher = MWCMQPublisher::new(
-        &mwcmqs_address,
-        &mwcmqs_secret_key,
-        config,
-    )?;
+	let mwcmqs_publisher = MWCMQPublisher::new(&mwcmqs_address, &mwcmqs_secret_key, config)?;
 
-    let mwcmqs_subscriber = MWCMQSubscriber::new(
-        &mwcmqs_publisher
-    )?;
+	let mwcmqs_subscriber = MWCMQSubscriber::new(&mwcmqs_publisher)?;
 
-    let cloned_publisher = mwcmqs_publisher.clone();
-    let mut cloned_subscriber = mwcmqs_subscriber.clone();
+	let cloned_publisher = mwcmqs_publisher.clone();
+	let mut cloned_subscriber = mwcmqs_subscriber.clone();
 
-    let _ = thread::Builder::new()
-        .name("mwcmqs-broker".to_string())
-        .spawn(move || {
-            let controller = Controller::new(
-                &mwcmqs_address.stripped(),
-                wallet.clone(),
-                address_book.clone(),
-                Box::new(cloned_publisher),
-            )
-            .expect("could not start mwcmqs controller!");
-            cloned_subscriber
-                .start(Box::new(controller))
-                .expect("something went wrong!");
-        })?;
+	let _ = thread::Builder::new()
+		.name("mwcmqs-broker".to_string())
+		.spawn(move || {
+			let controller = Controller::new(
+				&mwcmqs_address.stripped(),
+				wallet.clone(),
+				address_book.clone(),
+				Box::new(cloned_publisher),
+			)
+			.expect("could not start mwcmqs controller!");
+			cloned_subscriber
+				.start(Box::new(controller))
+				.expect("something went wrong!");
+		})?;
 
-    Ok((mwcmqs_publisher, mwcmqs_subscriber))
+	Ok((mwcmqs_publisher, mwcmqs_subscriber))
 }
 
 /// Listener version, providing same API but listening for requests on a

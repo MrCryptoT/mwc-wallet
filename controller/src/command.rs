@@ -27,6 +27,7 @@ use crate::libwallet::{
 use crate::util::secp::key::SecretKey;
 use crate::util::{to_hex, Mutex, ZeroingString};
 use crate::{controller, display};
+use grin_wallet_libwallet::TxLogEntry;
 use serde_json as json;
 use std::fs::File;
 use std::io::Write;
@@ -34,7 +35,6 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 use uuid::Uuid;
-use grin_wallet_libwallet::TxLogEntry;
 
 /// Arguments common to all wallet commands
 #[derive(Clone)]
