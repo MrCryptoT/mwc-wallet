@@ -1,5 +1,5 @@
-use failure::Error;
 use crate::error_kind::ErrorKind;
+use failure::Error;
 use sha2::{Digest, Sha256};
 
 const ALPHABET: &'static [u8] = b"123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";

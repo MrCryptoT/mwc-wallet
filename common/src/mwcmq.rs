@@ -3,17 +3,17 @@ extern crate reqwest;
 
 use ws::{Error as WsError, ErrorKind as WsErrorKind};
 
+use super::COLORED_PROMPT;
+use super::{Arc, ErrorKind, Mutex};
+use crate::crypto::public_key_from_secret_key;
 use crate::crypto::sign_challenge;
 use crate::crypto::Hex;
 use crate::crypto::SecretKey;
-use crate::crypto::public_key_from_secret_key;
 use crate::message::EncryptedMessage;
-use super::COLORED_PROMPT;
-use failure::Error;
-use super::{Arc, ErrorKind, Mutex};
-use crate::types::{Address, GrinboxAddress, MWCMQSAddress, DEFAULT_MWCMQS_PORT};
 use crate::tx_proof::TxProof;
+use crate::types::{Address, GrinboxAddress, MWCMQSAddress, DEFAULT_MWCMQS_PORT};
 use colored::Colorize;
+use failure::Error;
 use grin_wallet_libwallet::Slate;
 use grin_wallet_util::grin_util::secp::key::PublicKey;
 use regex::Regex;
@@ -62,10 +62,7 @@ pub trait Publisher {
 }
 
 pub trait Subscriber {
-	fn start(
-		&mut self,
-		handler: Box<dyn SubscriptionHandler + Send>,
-	) -> Result<(), Error>;
+	fn start(&mut self, handler: Box<dyn SubscriptionHandler + Send>) -> Result<(), Error>;
 	fn stop(&mut self) -> bool;
 	fn is_running(&self) -> bool;
 }
@@ -127,46 +124,51 @@ pub struct MWCMQSubscriber {
 }
 
 impl MWCMQSubscriber {
-    pub fn new(publisher: &MWCMQPublisher) -> Result<Self, Error> {
-        Ok(Self {
-            address: publisher.address.clone(),
-            broker: publisher.broker.clone(),
-            secret_key: publisher.secret_key.clone(),
-            config: publisher.config.clone(),
-        })
-    }
+	pub fn new(publisher: &MWCMQPublisher) -> Result<Self, Error> {
+		Ok(Self {
+			address: publisher.address.clone(),
+			broker: publisher.broker.clone(),
+			secret_key: publisher.secret_key.clone(),
+			config: publisher.config.clone(),
+		})
+	}
 
-    pub fn start(&mut self, handler: Box<dyn SubscriptionHandler + Send>) -> Result<(), Error> {
-        self.broker
-            .subscribe(&self.address, &self.secret_key, handler, self.config.clone());
-        Ok(())
-    }
+	pub fn start(&mut self, handler: Box<dyn SubscriptionHandler + Send>) -> Result<(), Error> {
+		self.broker.subscribe(
+			&self.address,
+			&self.secret_key,
+			handler,
+			self.config.clone(),
+		);
+		Ok(())
+	}
 
-    pub fn stop(&mut self) -> bool {
-        let client = reqwest::Client::builder()
-                         .timeout(Duration::from_secs(60))
-                         .build().unwrap();
+	pub fn stop(&mut self) -> bool {
+		let client = reqwest::Client::builder()
+			.timeout(Duration::from_secs(60))
+			.build()
+			.unwrap();
 
+		let mut params = HashMap::new();
+		params.insert("mapmessage", "nil");
+		let response = client
+			.post(&format!(
+				"https://{}:{}/sender?address={}",
+				self.config.mwcmqs_domain(),
+				self.config.mwcmqs_port(),
+				str::replace(&self.address.stripped(), "@", "%40")
+			))
+			.form(&params)
+			.send();
 
+		let response_status = response.is_ok();
+		self.broker.stop();
+		return response_status;
+	}
 
-        let mut params = HashMap::new();
-        params.insert("mapmessage", "nil");
-        let response = client.post(&format!("https://{}:{}/sender?address={}",
-                                              self.config.mwcmqs_domain(),
-                                              self.config.mwcmqs_port(),
-                        str::replace(&self.address.stripped(), "@", "%40")))
-                        .form(&params)
-                        .send();
-
-        let response_status = response.is_ok();
-        self.broker.stop();
-        return response_status;
-
-    }
-
-    pub fn is_running(&self) -> bool {
-        self.broker.is_running()
-    }
+	pub fn is_running(&self) -> bool {
+		self.broker.is_running()
+	}
 }
 
 #[derive(Clone)]
@@ -298,7 +300,8 @@ impl MWCMQSBroker {
 	) -> () {
 		let index = 0;
 		let grinbox_address = GrinboxAddress::new(
-			crate::crypto::public_key_from_secret_key(&config.get_mwcmqs_secret_key().unwrap()).unwrap(),
+			crate::crypto::public_key_from_secret_key(&config.get_mwcmqs_secret_key().unwrap())
+				.unwrap(),
 			Some(config.mwcmqs_domain()),
 			Some(config.mwcmqs_port()),
 		);

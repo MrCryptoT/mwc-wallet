@@ -2,12 +2,12 @@ use grin_wallet_util::grin_util::secp::key::SecretKey;
 use grin_wallet_util::grin_util::secp::pedersen::Commitment;
 use grin_wallet_util::grin_util::secp::Signature;
 
+use super::types::{Address, GrinboxAddress};
 use crate::crypto::verify_signature;
 use crate::crypto::Hex;
+use crate::error_kind::ErrorKind;
 use crate::message::EncryptedMessage;
 use failure::Error;
-use crate::error_kind::ErrorKind;
-use super::types::{Address, GrinboxAddress};
 use grin_wallet_libwallet::Slate;
 use std::fs::File;
 use std::io::{Read, Write};
