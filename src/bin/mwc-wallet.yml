@@ -86,6 +86,10 @@ subcommands:
             help: Also run the Foreign API
             long: run_foreign
             takes_value: false
+        - run_mqs:
+            help: Also run the mwcmqs listener
+            long: run_mqs
+            takes_value: false
   - send:
       about: Builds a transaction to send coins and sends to the specified listener directly
       args:

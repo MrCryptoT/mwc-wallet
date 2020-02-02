@@ -183,6 +183,7 @@ where
 		g_args.api_secret.clone(),
 		g_args.tls_conf.clone(),
 		config.owner_api_include_foreign.clone(),
+		config.owner_api_include_mqs_listener.clone(),
 		Some(tor_config.clone()),
 	);
 	if let Err(e) = res {
