@@ -16,31 +16,34 @@
 //! invocations) as needed.
 
 use crate::api::{self, ApiServer, BasicAuthMiddleware, ResponseFuture, Router, TLSConfig};
-use crate::common::COLORED_PROMPT;
-use crate::config::TorConfig;
+use grin_wallet_common::COLORED_PROMPT;
+use grin_wallet_config::TorConfig;
 use crate::keychain::Keychain;
+use failure::Error;
 use crate::libwallet::{
-	address, Error, ErrorKind, NodeClient, NodeVersionInfo, Slate, WalletInst, WalletLCProvider,
+	address, ErrorKind, NodeClient, NodeVersionInfo, Slate, WalletInst, WalletLCProvider,
 	GRIN_BLOCK_HEADER_VERSION,
 };
-use crate::mwcmq::CloseReason;
-use crate::tx_proof::TxProof;
+use grin_wallet_common::mwcmq::CloseReason;
+use grin_wallet_common::tx_proof::TxProof;
 use grin_wallet_util::grin_core::core;
 use std::thread;
 
-use crate::contacts::types::Address;
-use crate::contacts::types::AddressBook;
-use crate::mwcmq::MWCMQPublisher;
-use crate::mwcmq::MWCMQSubscriber;
-use crate::mwcmq::Publisher;
-use crate::mwcmq::SubscriptionHandler;
+use grin_wallet_common::types::Address;
+use grin_wallet_common::types::GrinboxAddress;
+use grin_wallet_common::types::AddressType;
+use grin_wallet_common::types::AddressBook;
+use grin_wallet_common::mwcmq::MWCMQPublisher;
+use grin_wallet_common::mwcmq::MWCMQSubscriber;
+use grin_wallet_common::mwcmq::Publisher;
+use grin_wallet_common::mwcmq::SubscriptionHandler;
 use crate::util::secp::key::SecretKey;
 use crate::util::{from_hex, static_secp_instance, to_base64, Mutex};
 use colored::Colorize;
 use failure::ResultExt;
 use futures::future::{err, ok};
 use futures::{Future, Stream};
-use grin_wallet_config::WalletConfig;
+use grin_wallet_common::mwcmq::MQSConfig;
 use hyper::header::HeaderValue;
 use hyper::{Body, Request, Response, StatusCode};
 use serde::{Deserialize, Serialize};
@@ -68,7 +71,7 @@ fn check_middleware(
 	name: ForeignCheckMiddlewareFn,
 	node_version_info: Option<NodeVersionInfo>,
 	slate: Option<&Slate>,
-) -> Result<(), Error> {
+) -> Result<(), crate::libwallet::Error> {
 	match name {
 		// allow coinbases to be built regardless
 		ForeignCheckMiddlewareFn::BuildCoinbase => Ok(()),
@@ -96,7 +99,7 @@ fn init_tor_listener<L, C, K>(
 	wallet: Arc<Mutex<Box<dyn WalletInst<'static, L, C, K> + 'static>>>,
 	keychain_mask: Arc<Mutex<Option<SecretKey>>>,
 	addr: &str,
-) -> Result<tor_process::TorProcess, Error>
+) -> Result<tor_process::TorProcess, crate::libwallet::Error>
 where
 	L: WalletLCProvider<'static, C, K> + 'static,
 	C: NodeClient + 'static,
@@ -138,10 +141,10 @@ pub fn owner_single_use<L, F, C, K>(
 	wallet: Arc<Mutex<Box<dyn WalletInst<'static, L, C, K>>>>,
 	keychain_mask: Option<&SecretKey>,
 	f: F,
-) -> Result<(), Error>
+) -> Result<(), crate::libwallet::Error>
 where
 	L: WalletLCProvider<'static, C, K> + 'static,
-	F: FnOnce(&mut Owner<L, C, K>, Option<&SecretKey>) -> Result<(), Error>,
+	F: FnOnce(&mut Owner<L, C, K>, Option<&SecretKey>) -> Result<(), crate::libwallet::Error>,
 	C: NodeClient + 'static,
 	K: Keychain + 'static,
 {
@@ -155,10 +158,10 @@ pub fn foreign_single_use<'a, L, F, C, K>(
 	wallet: Arc<Mutex<Box<dyn WalletInst<'a, L, C, K>>>>,
 	keychain_mask: Option<SecretKey>,
 	f: F,
-) -> Result<(), Error>
+) -> Result<(), crate::libwallet::Error>
 where
 	L: WalletLCProvider<'a, C, K>,
-	F: FnOnce(&mut Foreign<'a, L, C, K>) -> Result<(), Error>,
+	F: FnOnce(&mut Foreign<'a, L, C, K>) -> Result<(), crate::libwallet::Error>,
 	C: NodeClient + 'a,
 	K: Keychain + 'a,
 {
@@ -170,23 +173,22 @@ where
 	Ok(())
 }
 
-struct Controller {
+struct Controller
+{
 	name: String,
-	wallet: Arc<Mutex<Wallet>>,
 	address_book: Arc<Mutex<AddressBook>>,
 	publisher: Box<dyn Publisher + Send>,
 }
 
-impl Controller {
+impl Controller
+{
 	pub fn new(
 		name: &str,
-		wallet: Arc<Mutex<Wallet>>,
 		address_book: Arc<Mutex<AddressBook>>,
 		publisher: Box<dyn Publisher + Send>,
-	) -> Result<Self, Error> {
+	) -> Result<Self, crate::libwallet::Error> {
 		Ok(Self {
 			name: name.to_string(),
-			wallet,
 			address_book,
 			publisher,
 		})
@@ -197,34 +199,41 @@ impl Controller {
 		address: Option<String>,
 		slate: &mut Slate,
 		tx_proof: Option<&mut TxProof>,
-		config: Option<WalletConfig>,
+		config: Option<MQSConfig>,
 		dest_acct_name: Option<&str>,
-	) -> Result<bool, Error> {
+	) -> Result<bool, crate::libwallet::Error> {
 		if slate.num_participants > slate.participant_data.len() {
 			//TODO: this needs to be changed to properly figure out if this slate is an invoice or a send
 			if slate.tx.inputs().len() == 0 {
+/*
 				self.wallet
 					.lock()
 					.process_receiver_initiated_slate(slate, address.clone())?;
+*/
 			} else {
+/*
 				let mut w = self.wallet.lock();
 				let old_account = w.active_account.clone();
 				w.process_sender_initiated_slate(address, slate, None, None, dest_acct_name)?;
+*/
 			}
 			Ok(false)
 		} else {
+/*
 			// Try both to finalize
 			let w = self.wallet.lock();
 			match w.finalize_slate(slate, tx_proof) {
 				Err(_) => w.finalize_invoice_slate(slate)?,
 				Ok(_) => (),
 			}
+*/
 			Ok(true)
 		}
 	}
 }
 
-impl SubscriptionHandler for Controller {
+impl SubscriptionHandler for Controller
+{
 	fn on_open(&self) {
 		println!("listener started for [{}]", self.name.bright_green());
 		print!("{}", COLORED_PROMPT);
@@ -235,7 +244,7 @@ impl SubscriptionHandler for Controller {
 		from: &dyn Address,
 		slate: &mut Slate,
 		tx_proof: Option<&mut TxProof>,
-		config: Option<WalletConfig>,
+		config: Option<MQSConfig>,
 	) {
 		let mut display_from = from.stripped();
 		if let Ok(contact) = self
@@ -279,8 +288,11 @@ impl SubscriptionHandler for Controller {
 
 		let account = {
 			// lock must be very local
+/*
 			let w = self.wallet.lock();
 			w.active_account.clone()
+*/
+""
 		};
 
 		let result = self
@@ -345,13 +357,19 @@ impl SubscriptionHandler for Controller {
 }
 
 /// Start the mqs listener
-fn start_mwcmqs_listener(
-	config: &WalletConfig,
-	wallet: Arc<Mutex<Wallet>>,
+fn start_mwcmqs_listener<L, C, K>(
+	config: &MQSConfig,
+	wallet: Arc<Mutex<Box<dyn WalletInst<'static, L, C, K> + 'static>>>,
 	address_book: Arc<Mutex<AddressBook>>,
-) -> Result<(MWCMQPublisher, MWCMQSubscriber), Error> {
+) -> Result<(MWCMQPublisher, MWCMQSubscriber), Error>
+where
+        L: WalletLCProvider<'static, C, K> + 'static,
+        C: NodeClient + 'static,
+        K: Keychain + 'static,
+	{
 	// make sure wallet is not locked, if it is try to unlock with no passphrase
 	{
+/*
 		let mut wallet = wallet.lock();
 		if wallet.is_locked() {
 			wallet.unlock(
@@ -360,6 +378,7 @@ fn start_mwcmqs_listener(
 				grin_wallet_util::grin_util::ZeroingString::from(""),
 			)?;
 		}
+*/
 	}
 
 	println!("starting mwcmqs listener...");
@@ -379,7 +398,7 @@ fn start_mwcmqs_listener(
 		.spawn(move || {
 			let controller = Controller::new(
 				&mwcmqs_address.stripped(),
-				wallet.clone(),
+				//wallet.clone(),
 				address_book.clone(),
 				Box::new(cloned_publisher),
 			)
@@ -405,7 +424,7 @@ pub fn owner_listener<L, C, K>(
 	owner_api_include_foreign: Option<bool>,
 	owner_api_include_mqs_listener: Option<bool>,
 	tor_config: Option<TorConfig>,
-) -> Result<(), Error>
+) -> Result<(), crate::libwallet::Error>
 where
 	L: WalletLCProvider<'static, C, K> + 'static,
 	C: NodeClient + 'static,
@@ -459,7 +478,6 @@ where
 
 	// If so configured, run mqs listener
 	if running_mqs {
-		let secret_key = keychain_mask.lock().unwrap();
 		warn!("Starting MWCMQS Listener");
 	}
 
@@ -485,7 +503,7 @@ pub fn foreign_listener<L, C, K>(
 	addr: &str,
 	tls_config: Option<TLSConfig>,
 	use_tor: bool,
-) -> Result<(), Error>
+) -> Result<(), crate::libwallet::Error>
 where
 	L: WalletLCProvider<'static, C, K> + 'static,
 	C: NodeClient + 'static,
@@ -528,7 +546,7 @@ where
 		.map_err(|e| ErrorKind::GenericError(format!("API thread panicked :{:?}", e)).into())
 }
 
-type WalletResponseFuture = Box<dyn Future<Item = Response<Body>, Error = Error> + Send>;
+type WalletResponseFuture = Box<dyn Future<Item = Response<Body>, Error = crate::libwallet::Error> + Send>;
 
 /// V2 API Handler/Wrapper for owner functions
 pub struct OwnerAPIHandlerV2<L, C, K>
@@ -558,7 +576,7 @@ where
 		&self,
 		req: Request<Body>,
 		api: Owner<L, C, K>,
-	) -> Box<dyn Future<Item = serde_json::Value, Error = Error> + Send> {
+	) -> Box<dyn Future<Item = serde_json::Value, Error = crate::libwallet::Error> + Send> {
 		Box::new(parse_body(req).and_then(move |val: serde_json::Value| {
 			let handler = move || -> serde_json::Value {
 				let owner_api = &api as &dyn OwnerRpc;
@@ -879,7 +897,7 @@ where
 		&self,
 		req: Request<Body>,
 		api: Arc<Owner<L, C, K>>,
-	) -> Box<dyn Future<Item = serde_json::Value, Error = Error> + Send> {
+	) -> Box<dyn Future<Item = serde_json::Value, Error = crate::libwallet::Error> + Send> {
 		let key = self.shared_key.clone();
 		let mask = self.keychain_mask.clone();
 		let running_foreign = self.running_foreign;
@@ -1022,7 +1040,7 @@ where
 		&self,
 		req: Request<Body>,
 		api: Foreign<'static, L, C, K>,
-	) -> Box<dyn Future<Item = serde_json::Value, Error = Error> + Send> {
+	) -> Box<dyn Future<Item = serde_json::Value, Error = crate::libwallet::Error> + Send> {
 		Box::new(parse_body(req).and_then(move |val: serde_json::Value| {
 			let handler = move || -> serde_json::Value {
 				let foreign_api = &api as &dyn ForeignRpc;
@@ -1094,7 +1112,7 @@ where
 	}
 }
 
-fn create_error_response(e: Error) -> Response<Body> {
+fn create_error_response(e: crate::libwallet::Error) -> Response<Body> {
 	Response::builder()
 		.status(StatusCode::INTERNAL_SERVER_ERROR)
 		.header("access-control-allow-origin", "*")
@@ -1141,7 +1159,7 @@ fn response<T: Into<Body>>(status: StatusCode, text: T) -> Response<Body> {
 	builder.body(text.into()).unwrap()
 }
 
-fn parse_body<T>(req: Request<Body>) -> Box<dyn Future<Item = T, Error = Error> + Send>
+fn parse_body<T>(req: Request<Body>) -> Box<dyn Future<Item = T, Error = crate::libwallet::Error> + Send>
 where
 	for<'de> T: Deserialize<'de> + Send + 'static,
 {

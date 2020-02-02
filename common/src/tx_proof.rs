@@ -2,12 +2,12 @@ use grin_wallet_util::grin_util::secp::key::SecretKey;
 use grin_wallet_util::grin_util::secp::pedersen::Commitment;
 use grin_wallet_util::grin_util::secp::Signature;
 
-use crate::common::crypto::verify_signature;
-use crate::common::crypto::Hex;
-use crate::common::message::EncryptedMessage;
-use crate::common::Error;
-use crate::common::ErrorKind;
-use crate::contacts::{Address, GrinboxAddress};
+use crate::crypto::verify_signature;
+use crate::crypto::Hex;
+use crate::message::EncryptedMessage;
+use failure::Error;
+use crate::error_kind::ErrorKind;
+use super::types::{Address, GrinboxAddress};
 use grin_wallet_libwallet::Slate;
 use std::fs::File;
 use std::io::{Read, Write};
@@ -134,7 +134,7 @@ impl TxProof {
 			.join(filename);
 		let tx_proof_file = Path::new(&path).to_path_buf();
 		if !tx_proof_file.exists() {
-			return Err(crate::common::ErrorKind::TransactionHasNoProof.into());
+			return Err(ErrorKind::TransactionHasNoProof.into());
 		}
 		let mut tx_proof_f = File::open(tx_proof_file)?;
 		let mut content = String::new();
