@@ -3,9 +3,9 @@ use grin_wallet_util::grin_util::secp::Secp256k1;
 use rand::{thread_rng, Rng};
 
 use crate::crypto::{from_hex, to_hex};
-use failure::Error;
 use crate::error_kind::ErrorKind;
 use crate::types::GrinboxAddress;
+use failure::Error;
 
 use crate::encrypt;
 use std::num::NonZeroU32;

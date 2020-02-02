@@ -16,27 +16,19 @@
 //! invocations) as needed.
 
 use crate::api::{self, ApiServer, BasicAuthMiddleware, ResponseFuture, Router, TLSConfig};
-use grin_wallet_common::COLORED_PROMPT;
-use grin_wallet_config::TorConfig;
 use crate::keychain::Keychain;
-use failure::Error;
 use crate::libwallet::{
 	address, ErrorKind, NodeClient, NodeVersionInfo, Slate, WalletInst, WalletLCProvider,
 	GRIN_BLOCK_HEADER_VERSION,
 };
+use failure::Error;
 use grin_wallet_common::mwcmq::CloseReason;
 use grin_wallet_common::tx_proof::TxProof;
+use grin_wallet_common::COLORED_PROMPT;
+use grin_wallet_config::TorConfig;
 use grin_wallet_util::grin_core::core;
 use std::thread;
 
-use grin_wallet_common::types::Address;
-use grin_wallet_common::types::GrinboxAddress;
-use grin_wallet_common::types::AddressType;
-use grin_wallet_common::types::AddressBook;
-use grin_wallet_common::mwcmq::MWCMQPublisher;
-use grin_wallet_common::mwcmq::MWCMQSubscriber;
-use grin_wallet_common::mwcmq::Publisher;
-use grin_wallet_common::mwcmq::SubscriptionHandler;
 use crate::util::secp::key::SecretKey;
 use crate::util::{from_hex, static_secp_instance, to_base64, Mutex};
 use colored::Colorize;
@@ -44,6 +36,14 @@ use failure::ResultExt;
 use futures::future::{err, ok};
 use futures::{Future, Stream};
 use grin_wallet_common::mwcmq::MQSConfig;
+use grin_wallet_common::mwcmq::MWCMQPublisher;
+use grin_wallet_common::mwcmq::MWCMQSubscriber;
+use grin_wallet_common::mwcmq::Publisher;
+use grin_wallet_common::mwcmq::SubscriptionHandler;
+use grin_wallet_common::types::Address;
+use grin_wallet_common::types::AddressBook;
+use grin_wallet_common::types::AddressType;
+use grin_wallet_common::types::GrinboxAddress;
 use hyper::header::HeaderValue;
 use hyper::{Body, Request, Response, StatusCode};
 use serde::{Deserialize, Serialize};
@@ -173,15 +173,13 @@ where
 	Ok(())
 }
 
-struct Controller
-{
+struct Controller {
 	name: String,
 	address_book: Arc<Mutex<AddressBook>>,
 	publisher: Box<dyn Publisher + Send>,
 }
 
-impl Controller
-{
+impl Controller {
 	pub fn new(
 		name: &str,
 		address_book: Arc<Mutex<AddressBook>>,
@@ -205,35 +203,34 @@ impl Controller
 		if slate.num_participants > slate.participant_data.len() {
 			//TODO: this needs to be changed to properly figure out if this slate is an invoice or a send
 			if slate.tx.inputs().len() == 0 {
-/*
-				self.wallet
-					.lock()
-					.process_receiver_initiated_slate(slate, address.clone())?;
-*/
+				/*
+								self.wallet
+									.lock()
+									.process_receiver_initiated_slate(slate, address.clone())?;
+				*/
 			} else {
-/*
-				let mut w = self.wallet.lock();
-				let old_account = w.active_account.clone();
-				w.process_sender_initiated_slate(address, slate, None, None, dest_acct_name)?;
-*/
+				/*
+								let mut w = self.wallet.lock();
+								let old_account = w.active_account.clone();
+								w.process_sender_initiated_slate(address, slate, None, None, dest_acct_name)?;
+				*/
 			}
 			Ok(false)
 		} else {
-/*
-			// Try both to finalize
-			let w = self.wallet.lock();
-			match w.finalize_slate(slate, tx_proof) {
-				Err(_) => w.finalize_invoice_slate(slate)?,
-				Ok(_) => (),
-			}
-*/
+			/*
+						// Try both to finalize
+						let w = self.wallet.lock();
+						match w.finalize_slate(slate, tx_proof) {
+							Err(_) => w.finalize_invoice_slate(slate)?,
+							Ok(_) => (),
+						}
+			*/
 			Ok(true)
 		}
 	}
 }
 
-impl SubscriptionHandler for Controller
-{
+impl SubscriptionHandler for Controller {
 	fn on_open(&self) {
 		println!("listener started for [{}]", self.name.bright_green());
 		print!("{}", COLORED_PROMPT);
@@ -288,11 +285,11 @@ impl SubscriptionHandler for Controller
 
 		let account = {
 			// lock must be very local
-/*
-			let w = self.wallet.lock();
-			w.active_account.clone()
-*/
-""
+			/*
+						let w = self.wallet.lock();
+						w.active_account.clone()
+			*/
+			""
 		};
 
 		let result = self
@@ -363,22 +360,22 @@ fn start_mwcmqs_listener<L, C, K>(
 	address_book: Arc<Mutex<AddressBook>>,
 ) -> Result<(MWCMQPublisher, MWCMQSubscriber), Error>
 where
-        L: WalletLCProvider<'static, C, K> + 'static,
-        C: NodeClient + 'static,
-        K: Keychain + 'static,
-	{
+	L: WalletLCProvider<'static, C, K> + 'static,
+	C: NodeClient + 'static,
+	K: Keychain + 'static,
+{
 	// make sure wallet is not locked, if it is try to unlock with no passphrase
 	{
-/*
-		let mut wallet = wallet.lock();
-		if wallet.is_locked() {
-			wallet.unlock(
-				config,
-				"default",
-				grin_wallet_util::grin_util::ZeroingString::from(""),
-			)?;
-		}
-*/
+		/*
+				let mut wallet = wallet.lock();
+				if wallet.is_locked() {
+					wallet.unlock(
+						config,
+						"default",
+						grin_wallet_util::grin_util::ZeroingString::from(""),
+					)?;
+				}
+		*/
 	}
 
 	println!("starting mwcmqs listener...");
@@ -546,7 +543,8 @@ where
 		.map_err(|e| ErrorKind::GenericError(format!("API thread panicked :{:?}", e)).into())
 }
 
-type WalletResponseFuture = Box<dyn Future<Item = Response<Body>, Error = crate::libwallet::Error> + Send>;
+type WalletResponseFuture =
+	Box<dyn Future<Item = Response<Body>, Error = crate::libwallet::Error> + Send>;
 
 /// V2 API Handler/Wrapper for owner functions
 pub struct OwnerAPIHandlerV2<L, C, K>
@@ -1159,7 +1157,9 @@ fn response<T: Into<Body>>(status: StatusCode, text: T) -> Response<Body> {
 	builder.body(text.into()).unwrap()
 }
 
-fn parse_body<T>(req: Request<Body>) -> Box<dyn Future<Item = T, Error = crate::libwallet::Error> + Send>
+fn parse_body<T>(
+	req: Request<Body>,
+) -> Box<dyn Future<Item = T, Error = crate::libwallet::Error> + Send>
 where
 	for<'de> T: Deserialize<'de> + Send + 'static,
 {

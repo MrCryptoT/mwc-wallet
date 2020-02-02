@@ -23,14 +23,14 @@
 #[macro_use]
 extern crate serde_derive;
 
-pub mod crypto;
 mod base58;
+pub mod crypto;
+mod encrypt;
+mod error_kind;
+pub mod message;
 pub mod mwcmq;
 pub mod tx_proof;
 pub mod types;
-mod error_kind;
-pub mod message;
-mod encrypt;
 
 pub const COLORED_PROMPT: &'static str = "\x1b[36mwallet713>\x1b[0m ";
 

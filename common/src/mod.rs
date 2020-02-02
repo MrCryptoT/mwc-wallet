@@ -2,8 +2,8 @@
 pub mod macros;
 pub mod base58;
 pub mod config;
-pub mod error_kind;
 pub mod crypto;
+pub mod error_kind;
 pub mod hasher;
 pub mod message;
 
