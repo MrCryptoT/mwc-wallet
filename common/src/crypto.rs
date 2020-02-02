@@ -5,9 +5,9 @@ use grin_wallet_util::grin_util::secp::Message;
 use grin_wallet_util::grin_util::secp::Secp256k1;
 use grin_wallet_util::grin_util::secp::Signature;
 
-use super::base58::{FromBase58, ToBase58};
-use crate::common::Error;
-use crate::common::ErrorKind;
+use crate::base58::{FromBase58, ToBase58};
+use failure::Error;
+use crate::error_kind::ErrorKind;
 use sha2::{Digest, Sha256};
 use std::fmt::Write;
 

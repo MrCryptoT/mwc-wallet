@@ -18,10 +18,8 @@ use std::fmt;
 use std::io;
 use std::path::PathBuf;
 
-use crate::controller::common::Error;
 use crate::core::global::ChainTypes;
 use crate::util::logger::LoggingConfig;
-use crate::util::secp::key::SecretKey;
 
 /// Command-line wallet configuration
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -62,8 +60,6 @@ pub struct WalletConfig {
 	pub keybase_notify_ttl: Option<u16>,
 	/// Wallet data directory. Default none is 'wallet_data'
 	pub wallet_data_dir: Option<String>,
-	/// Secret Key used for mwcmqs
-	pub key: Option<SecretKey>,
 }
 
 impl Default for WalletConfig {
@@ -85,7 +81,6 @@ impl Default for WalletConfig {
 			dark_background_color_scheme: Some(true),
 			keybase_notify_ttl: Some(1440),
 			wallet_data_dir: None,
-			key: None,
 		}
 	}
 }
@@ -110,29 +105,6 @@ impl WalletConfig {
 	/// Owner API listen address
 	pub fn owner_api_listen_addr(&self) -> String {
 		format!("127.0.0.1:{}", self.owner_api_listen_port())
-	}
-
-	/// get the mwcmqs port
-	pub fn mwcmqs_port(&self) -> u16 {
-		443
-	}
-
-	/// get the mwcmqs domain
-	pub fn mwcmqs_domain(&self) -> String {
-		format!("mqs.mwc.mw")
-	}
-
-	pub fn get_mwcmqs_address(&self) -> Result<MWCMQSAddress, Error> {
-		let public_key = self.get_grinbox_public_key()?;
-		Ok(MWCMQSAddress::new(
-			public_key,
-			Some(self.mwcmqs_domain()),
-			self.mwcmqs_port,
-		))
-	}
-
-	pub fn get_mwcmqs_secret_key(&self) -> Option<SecretKey> {
-		self.key.clone()
 	}
 }
 

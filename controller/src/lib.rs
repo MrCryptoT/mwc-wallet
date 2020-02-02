@@ -38,13 +38,9 @@ use grin_wallet_util::grin_keychain as keychain;
 use grin_wallet_util::grin_util as util;
 
 pub mod command;
-mod common;
-mod contacts;
 pub mod controller;
 pub mod display;
 mod error;
 mod executor;
-mod mwcmq;
-mod tx_proof;
 
 pub use crate::error::{Error, ErrorKind};

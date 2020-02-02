@@ -2,11 +2,12 @@ use grin_wallet_util::grin_util::secp::key::{PublicKey, SecretKey};
 use grin_wallet_util::grin_util::secp::Secp256k1;
 use rand::{thread_rng, Rng};
 
-use crate::common::crypto::{from_hex, to_hex};
-use crate::common::{Error, ErrorKind};
-use crate::contacts::GrinboxAddress;
+use crate::crypto::{from_hex, to_hex};
+use failure::Error;
+use crate::error_kind::ErrorKind;
+use crate::types::GrinboxAddress;
 
-use grin_wallet_impls::encrypt;
+use crate::encrypt;
 use std::num::NonZeroU32;
 
 #[derive(Debug, Serialize, Deserialize)]
