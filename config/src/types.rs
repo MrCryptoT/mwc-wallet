@@ -18,6 +18,8 @@ use std::fmt;
 use std::io;
 use std::path::PathBuf;
 
+use crate::controller::common::Error;
+use crate::util::secp::key::SecretKey;
 use crate::core::global::ChainTypes;
 use crate::util::logger::LoggingConfig;
 
@@ -42,6 +44,8 @@ pub struct WalletConfig {
 	pub check_node_api_http_addr: String,
 	/// Whether to include foreign API endpoints on the Owner API
 	pub owner_api_include_foreign: Option<bool>,
+	/// Whether to include the mwcmqs listener
+	pub owner_api_include_mqs_listener: Option<bool>,
 	/// The directory in which wallet files are stored
 	pub data_file_dir: String,
 	/// If Some(true), don't cache commits alongside output data
@@ -58,6 +62,8 @@ pub struct WalletConfig {
 	pub keybase_notify_ttl: Option<u16>,
 	/// Wallet data directory. Default none is 'wallet_data'
 	pub wallet_data_dir: Option<String>,
+	/// Secret Key used for mwcmqs
+	pub key: Option<SecretKey>,
 }
 
 impl Default for WalletConfig {
@@ -71,6 +77,7 @@ impl Default for WalletConfig {
 			node_api_secret_path: Some(".api_secret".to_string()),
 			check_node_api_http_addr: "http://127.0.0.1:3413".to_string(),
 			owner_api_include_foreign: Some(false),
+			owner_api_include_mqs_listener: Some(false),
 			data_file_dir: ".".to_string(),
 			no_commit_cache: Some(false),
 			tls_certificate_file: None,
@@ -78,6 +85,7 @@ impl Default for WalletConfig {
 			dark_background_color_scheme: Some(true),
 			keybase_notify_ttl: Some(1440),
 			wallet_data_dir: None,
+			key: None,
 		}
 	}
 }
@@ -103,7 +111,31 @@ impl WalletConfig {
 	pub fn owner_api_listen_addr(&self) -> String {
 		format!("127.0.0.1:{}", self.owner_api_listen_port())
 	}
+
+	/// get the mwcmqs port
+	pub fn mwcmqs_port(&self) -> u16 {
+		443
+	}
+
+        /// get the mwcmqs domain 
+        pub fn mwcmqs_domain(&self) -> String {
+                format!("mqs.mwc.mw")
+        }
+
+	pub fn get_mwcmqs_address(&self) -> Result<MWCMQSAddress, Error> {
+		let public_key = self.get_grinbox_public_key()?;
+		Ok(MWCMQSAddress::new(
+			public_key,
+			Some(self.mwcmqs_domain()),
+			self.mwcmqs_port,
+		))
+	}
+
+	pub fn get_mwcmqs_secret_key(&self) -> Option<SecretKey> {
+		self.key.clone()
+	}
 }
+
 /// Error type wrapping config errors.
 #[derive(Debug)]
 pub enum ConfigError {

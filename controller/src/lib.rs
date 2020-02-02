@@ -16,6 +16,12 @@
 
 #[macro_use]
 extern crate prettytable;
+#[macro_use]
+extern crate serde_json;
+#[macro_use]
+extern crate serde_derive;
+#[macro_use]
+extern crate gotham_derive;
 
 #[macro_use]
 extern crate log;
@@ -34,6 +40,10 @@ use grin_wallet_util::grin_util as util;
 pub mod command;
 pub mod controller;
 pub mod display;
+mod contacts;
+mod common;
+mod mwcmq;
+mod tx_proof;
 mod error;
 mod executor;
 
