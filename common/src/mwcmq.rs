@@ -21,12 +21,12 @@ use crate::types::{Address, GrinboxAddress, MWCMQSAddress, DEFAULT_MWCMQS_PORT};
 use colored::Colorize;
 use failure::Error;
 use grin_wallet_libwallet::Slate;
+use grin_wallet_util::grin_core::global::ChainTypes;
 use grin_wallet_util::grin_util::secp::key::PublicKey;
 use regex::Regex;
 use std::collections::HashMap;
 use std::time::Duration;
 use std::{thread, time};
-use grin_wallet_util::grin_core::global::ChainTypes;
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct MQSConfig {
@@ -49,56 +49,52 @@ impl MQSConfig {
 		443
 	}
 
-    pub fn mwc_node_uri(&self) -> String {
-        let chain_type = self.chain.clone();
-        self.mwc_node_uri.clone().unwrap_or(match chain_type {
-            ChainTypes::Mainnet => String::from("https://mwc713.mwc.mw"),
-            _ => String::from("https://mwc713.floonet.mwc.mw"),
-        })
-    }
+	pub fn mwc_node_uri(&self) -> String {
+		let chain_type = self.chain.clone();
+		self.mwc_node_uri.clone().unwrap_or(match chain_type {
+			ChainTypes::Mainnet => String::from("https://mwc713.mwc.mw"),
+			_ => String::from("https://mwc713.floonet.mwc.mw"),
+		})
+	}
 
-    pub fn mwc_node_secret(&self) -> Option<String> {
-        let chain_type = self.chain.clone();
-        match self.mwc_node_uri {
-            Some(_) => self.mwc_node_secret.clone(),
-            None => Some(String::from("11ne3EAUtOXVKwhxm84U")),
-        }
-    }
+	pub fn mwc_node_secret(&self) -> Option<String> {
+		let chain_type = self.chain.clone();
+		match self.mwc_node_uri {
+			Some(_) => self.mwc_node_secret.clone(),
+			None => Some(String::from("11ne3EAUtOXVKwhxm84U")),
+		}
+	}
 
-    // mwc-wallet using top level dir + data dir. We need to follow it
-    pub fn get_top_level_directory(&self) -> Result<String, Error> {
-        let dir = String::from( self.get_data_path()?.parent().unwrap().to_str().unwrap() );
-        Ok(dir)
-    }
+	// mwc-wallet using top level dir + data dir. We need to follow it
+	pub fn get_top_level_directory(&self) -> Result<String, Error> {
+		let dir = String::from(self.get_data_path()?.parent().unwrap().to_str().unwrap());
+		Ok(dir)
+	}
 
-    // mwc-wallet using top level dir + data dir. We need to follow it
-    pub fn get_wallet_data_directory(&self) -> Result<String, Error> {
-        let wallet_dir = String::from(self.get_data_path()?.file_name().unwrap().to_str().unwrap());
-        Ok(wallet_dir)
-    }
+	// mwc-wallet using top level dir + data dir. We need to follow it
+	pub fn get_wallet_data_directory(&self) -> Result<String, Error> {
+		let wallet_dir = String::from(self.get_data_path()?.file_name().unwrap().to_str().unwrap());
+		Ok(wallet_dir)
+	}
 
-    pub fn get_data_path_str(&self) -> Result<String, Error> {
-        let path_str = self.get_data_path()?.to_str().unwrap().to_owned();
-        Ok(path_str)
-    }
+	pub fn get_data_path_str(&self) -> Result<String, Error> {
+		let path_str = self.get_data_path()?.to_str().unwrap().to_owned();
+		Ok(path_str)
+	}
 
-    pub fn get_data_path(&self) -> Result<PathBuf, Error> {
-        let mut data_path = PathBuf::new();
-        data_path.push(self.wallet_data_path.clone());
-        if data_path.is_absolute() {
-            return Ok(data_path);
-        }
+	pub fn get_data_path(&self) -> Result<PathBuf, Error> {
+		let mut data_path = PathBuf::new();
+		data_path.push(self.wallet_data_path.clone());
+		if data_path.is_absolute() {
+			return Ok(data_path);
+		}
 
-        let mut data_path = PathBuf::new();
-        data_path.push(
-            self.config_home
-                .clone()
-                .unwrap(),
-        );
-        data_path.pop();
-        data_path.push(self.wallet_data_path.clone());
-        Ok(data_path)
-    }
+		let mut data_path = PathBuf::new();
+		data_path.push(self.config_home.clone().unwrap());
+		data_path.pop();
+		data_path.push(self.wallet_data_path.clone());
+		Ok(data_path)
+	}
 
 	pub fn get_mwcmqs_address(&self) -> Result<MWCMQSAddress, Error> {
 		let public_key = public_key_from_secret_key(&self.mwcmq_key)?;
