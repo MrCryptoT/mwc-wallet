@@ -101,7 +101,10 @@ where
 			},
 		};
 
-		let wallet_data_dir = wallet.wallet_data_dir.clone().unwrap_or(String::from(GRIN_WALLET_DIR));
+		let wallet_data_dir = wallet
+			.wallet_data_dir
+			.clone()
+			.unwrap_or(String::from(GRIN_WALLET_DIR));
 
 		default_config = GlobalWalletConfig {
 			members: Some(GlobalWalletConfigMembers {
@@ -141,7 +144,7 @@ where
 		let mut abs_path = std::env::current_dir()?;
 		abs_path.push(self.data_dir.clone());
 
-		default_config.update_paths(&PathBuf::from(abs_path), Some(wallet_data_dir.as_str()) );
+		default_config.update_paths(&PathBuf::from(abs_path), Some(wallet_data_dir.as_str()));
 		let res = default_config.write_to_file(config_file_name.to_str().unwrap());
 		if let Err(e) = res {
 			let msg = format!(
@@ -249,7 +252,11 @@ where
 		Ok(())
 	}
 
-	fn wallet_exists(&self, _name: Option<&str>, wallet_data_dir: Option<&str>) -> Result<bool, Error> {
+	fn wallet_exists(
+		&self,
+		_name: Option<&str>,
+		wallet_data_dir: Option<&str>,
+	) -> Result<bool, Error> {
 		let mut data_dir_name = PathBuf::from(self.data_dir.clone());
 		data_dir_name.push(wallet_data_dir.unwrap_or(GRIN_WALLET_DIR));
 		let data_dir_name = data_dir_name.to_str().unwrap();

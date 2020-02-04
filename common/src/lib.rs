@@ -28,10 +28,10 @@ pub mod crypto;
 mod encrypt;
 mod error_kind;
 pub mod message;
-pub mod wallet;
 pub mod mwcmq;
 pub mod tx_proof;
 pub mod types;
+pub mod wallet;
 
 pub const COLORED_PROMPT: &'static str = "\x1b[36mwallet713>\x1b[0m ";
 

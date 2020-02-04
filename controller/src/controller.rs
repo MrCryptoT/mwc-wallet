@@ -29,14 +29,12 @@ use grin_wallet_config::TorConfig;
 use grin_wallet_util::grin_core::core;
 use std::thread;
 
-use grin_wallet_common::wallet::Wallet;
 use crate::util::secp::key::SecretKey;
 use crate::util::{from_hex, static_secp_instance, to_base64, Mutex};
 use colored::Colorize;
 use failure::ResultExt;
 use futures::future::{err, ok};
 use futures::{Future, Stream};
-use grin_wallet_libwallet::wallet_lock;
 use grin_wallet_common::mwcmq::MQSConfig;
 use grin_wallet_common::mwcmq::MWCMQPublisher;
 use grin_wallet_common::mwcmq::MWCMQSubscriber;
@@ -46,6 +44,8 @@ use grin_wallet_common::types::Address;
 use grin_wallet_common::types::AddressBook;
 use grin_wallet_common::types::AddressType;
 use grin_wallet_common::types::GrinboxAddress;
+use grin_wallet_common::wallet::Wallet;
+use grin_wallet_libwallet::wallet_lock;
 use hyper::header::HeaderValue;
 use hyper::{Body, Request, Response, StatusCode};
 use serde::{Deserialize, Serialize};
@@ -214,27 +214,27 @@ impl Controller {
 				let mut w_lock = w.lock().unwrap();
 				let lc = w_lock.lc_provider().unwrap();
 				let w_inst = lc.wallet_inst().unwrap();
-/*
-								self.wallet
-									.lock()
-									.process_receiver_initiated_slate(slate, address.clone())?;
-*/
+			/*
+											self.wallet
+												.lock()
+												.process_receiver_initiated_slate(slate, address.clone())?;
+			*/
 			} else {
-/*
-								let mut w = self.wallet.lock();
-								w.process_sender_initiated_slate(address, slate, None, None, dest_acct_name)?;
-*/
+				/*
+												let mut w = self.wallet.lock();
+												w.process_sender_initiated_slate(address, slate, None, None, dest_acct_name)?;
+				*/
 			}
 			Ok(false)
 		} else {
-						// Try both to finalize
-						let w = self.wallet.lock();
-/*
-						match w.finalize_slate(slate, tx_proof) {
-							Err(_) => w.finalize_invoice_slate(slate)?,
-							Ok(_) => (),
-						}
-*/
+			// Try both to finalize
+			let w = self.wallet.lock();
+			/*
+									match w.finalize_slate(slate, tx_proof) {
+										Err(_) => w.finalize_invoice_slate(slate)?,
+										Ok(_) => (),
+									}
+			*/
 			Ok(true)
 		}
 	}
@@ -365,18 +365,17 @@ fn start_mwcmqs_listener<L, C, K>(
 	config: &MQSConfig,
 	wallet: Arc<Mutex<Wallet>>,
 	address_book: Arc<Mutex<AddressBook>>,
-) -> Result<(MWCMQPublisher, MWCMQSubscriber), Error>
-{
+) -> Result<(MWCMQPublisher, MWCMQSubscriber), Error> {
 	// make sure wallet is not locked, if it is try to unlock with no passphrase
 	{
-				let mut wallet = wallet.lock();
-				if wallet.is_locked() {
-					wallet.unlock(
-						config,
-						"default",
-						grin_wallet_util::grin_util::ZeroingString::from(""),
-					)?;
-				}
+		let mut wallet = wallet.lock();
+		if wallet.is_locked() {
+			wallet.unlock(
+				config,
+				"default",
+				grin_wallet_util::grin_util::ZeroingString::from(""),
+			)?;
+		}
 	}
 
 	println!("starting mwcmqs listener...");
