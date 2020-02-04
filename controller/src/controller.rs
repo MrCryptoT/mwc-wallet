@@ -29,12 +29,14 @@ use grin_wallet_config::TorConfig;
 use grin_wallet_util::grin_core::core;
 use std::thread;
 
+use grin_wallet_common::wallet::Wallet;
 use crate::util::secp::key::SecretKey;
 use crate::util::{from_hex, static_secp_instance, to_base64, Mutex};
 use colored::Colorize;
 use failure::ResultExt;
 use futures::future::{err, ok};
 use futures::{Future, Stream};
+use grin_wallet_libwallet::wallet_lock;
 use grin_wallet_common::mwcmq::MQSConfig;
 use grin_wallet_common::mwcmq::MWCMQPublisher;
 use grin_wallet_common::mwcmq::MWCMQSubscriber;
@@ -175,6 +177,7 @@ where
 
 struct Controller {
 	name: String,
+	wallet: Arc<Mutex<Wallet>>,
 	address_book: Arc<Mutex<AddressBook>>,
 	publisher: Box<dyn Publisher + Send>,
 }
@@ -182,11 +185,13 @@ struct Controller {
 impl Controller {
 	pub fn new(
 		name: &str,
+		wallet: Arc<Mutex<Wallet>>,
 		address_book: Arc<Mutex<AddressBook>>,
 		publisher: Box<dyn Publisher + Send>,
 	) -> Result<Self, crate::libwallet::Error> {
 		Ok(Self {
 			name: name.to_string(),
+			wallet,
 			address_book,
 			publisher,
 		})
@@ -199,32 +204,37 @@ impl Controller {
 		tx_proof: Option<&mut TxProof>,
 		config: Option<MQSConfig>,
 		dest_acct_name: Option<&str>,
-	) -> Result<bool, crate::libwallet::Error> {
+	) -> Result<bool, Error> {
 		if slate.num_participants > slate.participant_data.len() {
 			//TODO: this needs to be changed to properly figure out if this slate is an invoice or a send
 			if slate.tx.inputs().len() == 0 {
-				/*
+				let w = self.wallet.lock();
+				let w = w.get_wallet_instance().unwrap();
+
+				let mut w_lock = w.lock().unwrap();
+				let lc = w_lock.lc_provider().unwrap();
+				let w_inst = lc.wallet_inst().unwrap();
+/*
 								self.wallet
 									.lock()
 									.process_receiver_initiated_slate(slate, address.clone())?;
-				*/
+*/
 			} else {
-				/*
+/*
 								let mut w = self.wallet.lock();
-								let old_account = w.active_account.clone();
 								w.process_sender_initiated_slate(address, slate, None, None, dest_acct_name)?;
-				*/
+*/
 			}
 			Ok(false)
 		} else {
-			/*
 						// Try both to finalize
 						let w = self.wallet.lock();
+/*
 						match w.finalize_slate(slate, tx_proof) {
 							Err(_) => w.finalize_invoice_slate(slate)?,
 							Ok(_) => (),
 						}
-			*/
+*/
 			Ok(true)
 		}
 	}
@@ -285,11 +295,8 @@ impl SubscriptionHandler for Controller {
 
 		let account = {
 			// lock must be very local
-			/*
-						let w = self.wallet.lock();
-						w.active_account.clone()
-			*/
-			""
+			let w = self.wallet.lock();
+			w.active_account.clone()
 		};
 
 		let result = self
@@ -356,17 +363,12 @@ impl SubscriptionHandler for Controller {
 /// Start the mqs listener
 fn start_mwcmqs_listener<L, C, K>(
 	config: &MQSConfig,
-	wallet: Arc<Mutex<Box<dyn WalletInst<'static, L, C, K> + 'static>>>,
+	wallet: Arc<Mutex<Wallet>>,
 	address_book: Arc<Mutex<AddressBook>>,
 ) -> Result<(MWCMQPublisher, MWCMQSubscriber), Error>
-where
-	L: WalletLCProvider<'static, C, K> + 'static,
-	C: NodeClient + 'static,
-	K: Keychain + 'static,
 {
 	// make sure wallet is not locked, if it is try to unlock with no passphrase
 	{
-		/*
 				let mut wallet = wallet.lock();
 				if wallet.is_locked() {
 					wallet.unlock(
@@ -375,7 +377,6 @@ where
 						grin_wallet_util::grin_util::ZeroingString::from(""),
 					)?;
 				}
-		*/
 	}
 
 	println!("starting mwcmqs listener...");
@@ -395,7 +396,7 @@ where
 		.spawn(move || {
 			let controller = Controller::new(
 				&mwcmqs_address.stripped(),
-				//wallet.clone(),
+				wallet.clone(),
 				address_book.clone(),
 				Box::new(cloned_publisher),
 			)

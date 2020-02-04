@@ -28,6 +28,7 @@ pub mod crypto;
 mod encrypt;
 mod error_kind;
 pub mod message;
+pub mod wallet;
 pub mod mwcmq;
 pub mod tx_proof;
 pub mod types;
