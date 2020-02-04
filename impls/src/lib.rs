@@ -26,7 +26,7 @@ use grin_wallet_libwallet as libwallet;
 use grin_wallet_util::grin_api as api;
 use grin_wallet_util::grin_chain as chain;
 use grin_wallet_util::grin_core as core;
-use grin_wallet_util::grin_keychain as keychain;
+pub use grin_wallet_util::grin_keychain as keychain;
 use grin_wallet_util::grin_store as store;
 use grin_wallet_util::grin_util as util;
 
