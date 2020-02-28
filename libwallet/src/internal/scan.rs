@@ -778,7 +778,6 @@ where
 		&chain_outs,
 		&mut outputs,
 		status_send_channel,
-		show_progress,
 		&mut found_parents,
 	)?;
 
@@ -789,7 +788,6 @@ where
 		&mut transactions,
 		&outputs,
 		status_send_channel,
-		show_progress,
 	);
 
 	// Checking for output to transaction mapping. We don't want to see active outputs without trsansaction or with cancelled transactions
@@ -911,7 +909,6 @@ fn validate_outputs<'a, L, C, K>(
 	chain_outs: &Vec<OutputResult>,
 	outputs: &mut HashMap<String, WalletOutputInfo>,
 	status_send_channel: &Option<Sender<StatusMessage>>,
-	show_progress: bool,
 	found_parents: &mut HashMap<Identifier, u32>,
 ) -> Result<(), Error>
 where
@@ -955,8 +952,8 @@ where
 						// Very expected event. Output is at the chain and we get a confirmation.
 						if let Some(ref s) = status_send_channel {
 							let _ = match &w_out.output.commit {
-								Some(commit) => s.send(StatusMessage::Warning(format!("Changing status for output {} from Unconfirmed to Unspent", commit))),
-								None => s.send(StatusMessage::Warning(format!("Changing status for coin base output at height {} from Unconfirmed to Unspent", w_out.output.height))),
+								Some(commit) => s.send(StatusMessage::Info(format!("Changing status for output {} from Unconfirmed to Unspent", commit))),
+								None => s.send(StatusMessage::Info(format!("Changing status for coin base output at height {} from Unconfirmed to Unspent", w_out.output.height))),
 							};
 						}
 						w_out.updated = true;
@@ -1009,7 +1006,6 @@ where
 					// Locked is not on the chain is expected, It is mean that our send transaction was confirmed.
 					if let Some(ref s) = status_send_channel {
 						let _ = s.send(StatusMessage::Info(
-							show_progress,
 							format!(
 								"Changing status for output {} from Locked to Spent",
 								w_out.commit
@@ -1033,7 +1029,6 @@ fn validate_transactions(
 	transactions: &mut HashMap<String, WalletTxInfo>,
 	outputs: &HashMap<String, WalletOutputInfo>,
 	status_send_channel: &Option<Sender<StatusMessage>>,
-	show_progress: bool,
 ) {
 	for tx_info in transactions.values_mut() {
 		// Checking the kernel - the source of truth for transactions
@@ -1046,7 +1041,7 @@ fn validate_transactions(
 
 					if let Some(ref s) = status_send_channel {
 						let _ = s.send(StatusMessage::Warning(format!(
-							"Info: Changing transaction {} from Cancel to active",
+							"Changing transaction {} from Canceled to active and confirmed",
 							tx_info.tx_uuid.split('/').next().unwrap()
 						)));
 					}
@@ -1056,6 +1051,15 @@ fn validate_transactions(
 					tx_info.tx_log.confirmed = true;
 					tx_info.tx_log.update_confirmation_ts();
 					tx_info.updated = true;
+
+					if let Some(ref s) = status_send_channel {
+						let _ = s.send(StatusMessage::Info(
+							format!(
+								"Changing transaction {} state to confirmed",
+								tx_info.tx_uuid.split('/').next().unwrap()
+							),
+						));
+					}
 				}
 			} else {
 				if !tx_info.tx_log.is_cancelled() {
@@ -1064,9 +1068,8 @@ fn validate_transactions(
 						tx_info.updated = true;
 						if let Some(ref s) = status_send_channel {
 							let _ = s.send(StatusMessage::Info(
-								show_progress,
 								format!(
-									"Info: Changing transaction {} confirmation state to confirmed",
+									"Changing transaction {} state to NOT confirmed",
 									tx_info.tx_uuid.split('/').next().unwrap()
 								),
 							));

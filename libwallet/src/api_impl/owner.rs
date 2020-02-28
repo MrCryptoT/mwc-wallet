@@ -718,7 +718,7 @@ fn write_info(
 			let _ = write!(file, "{}\n", message);
 		}
 		None => {
-			let _ = status_send_channel.send(StatusMessage::Info(true, message));
+			let _ = status_send_channel.send(StatusMessage::Info(message));
 		}
 	};
 }
@@ -781,7 +781,6 @@ where
 
 	if let Some(f) = fn_copy {
 		let _ = status_send_channel.send(StatusMessage::Info(
-			true,
 			format!("Wallet dump is stored at  {}", f),
 		));
 	}
