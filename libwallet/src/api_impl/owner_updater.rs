@@ -55,10 +55,12 @@ pub enum StatusMessage {
 pub fn start_updater_log_thread(
 	rx: Receiver<StatusMessage>,
 	queue: Arc<Mutex<Vec<StatusMessage>>>,
-) -> Result<(), Error> {
-	let _ = thread::Builder::new()
+	running_state: Arc<AtomicBool>,
+) -> Result<JoinHandle<()>, Error> {
+	let handle = thread::Builder::new()
 		.name("wallet-updater-status".to_string())
 		.spawn(move || loop {
+			let running = running_state.load(Ordering::Relaxed);
 			while let Ok(m) = rx.try_recv() {
 				// save to our message queue to be read by other consumers
 				{
@@ -80,10 +82,14 @@ pub fn start_updater_log_thread(
 					StatusMessage::Info(s) => info!("{}", s),
 				}
 			}
-			thread::sleep(Duration::from_millis(500));
+			if !running {
+				// Need to check first, then read, and exit
+				break;
+			}
+			thread::sleep(Duration::from_millis(100));
 		})?;
 
-	Ok(())
+	Ok(handle)
 }
 
 /// Helper function that starts a simple console printing thread for updater messages
