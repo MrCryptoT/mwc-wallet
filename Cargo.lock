@@ -820,6 +820,7 @@ checksum = "9b919933a397b79c37e33b77bb2aa3dc8eb6e165ad809e58ff75bc7db2e34574"
 name = "grin_api"
 version = "3.1.0"
 source = "git+https://github.com/mwcproject/mwc-node#f74eaa825713f8b4e8e276f2783c43cc6ad9fd17"
+
 dependencies = [
  "easy-jsonrpc-mw",
  "failure",
@@ -854,6 +855,7 @@ dependencies = [
 name = "grin_chain"
 version = "3.1.0"
 source = "git+https://github.com/mwcproject/mwc-node#f74eaa825713f8b4e8e276f2783c43cc6ad9fd17"
+
 dependencies = [
  "bit-vec",
  "bitflags 1.2.1",
@@ -878,6 +880,7 @@ dependencies = [
 name = "grin_core"
 version = "3.1.0"
 source = "git+https://github.com/mwcproject/mwc-node#f74eaa825713f8b4e8e276f2783c43cc6ad9fd17"
+
 dependencies = [
  "blake2-rfc",
  "byteorder",
@@ -905,6 +908,7 @@ dependencies = [
 name = "grin_keychain"
 version = "3.1.0"
 source = "git+https://github.com/mwcproject/mwc-node#f74eaa825713f8b4e8e276f2783c43cc6ad9fd17"
+
 dependencies = [
  "blake2-rfc",
  "byteorder",
@@ -928,6 +932,7 @@ dependencies = [
 name = "grin_p2p"
 version = "3.1.0"
 source = "git+https://github.com/mwcproject/mwc-node#f74eaa825713f8b4e8e276f2783c43cc6ad9fd17"
+
 dependencies = [
  "bitflags 1.2.1",
  "bytes",
@@ -951,6 +956,7 @@ dependencies = [
 name = "grin_pool"
 version = "3.1.0"
 source = "git+https://github.com/mwcproject/mwc-node#f74eaa825713f8b4e8e276f2783c43cc6ad9fd17"
+
 dependencies = [
  "blake2-rfc",
  "chrono",
@@ -986,6 +992,7 @@ dependencies = [
 name = "grin_store"
 version = "3.1.0"
 source = "git+https://github.com/mwcproject/mwc-node#f74eaa825713f8b4e8e276f2783c43cc6ad9fd17"
+
 dependencies = [
  "bit-vec",
  "byteorder",
@@ -1008,6 +1015,7 @@ dependencies = [
 name = "grin_util"
 version = "3.1.0"
 source = "git+https://github.com/mwcproject/mwc-node#f74eaa825713f8b4e8e276f2783c43cc6ad9fd17"
+
 dependencies = [
  "backtrace",
  "base64 0.9.3",
@@ -1040,7 +1048,7 @@ dependencies = [
  "grin_wallet_libwallet",
  "grin_wallet_util",
  "log",
- "rand 0.5.6",
+ "rand 0.6.5",
  "ring",
  "serde",
  "serde_derive",
@@ -1115,7 +1123,7 @@ dependencies = [
  "hyper-rustls",
  "hyper-timeout",
  "log",
- "rand 0.5.6",
+ "rand 0.6.5",
  "regex",
  "ring",
  "semver 0.9.0",
@@ -1150,7 +1158,7 @@ dependencies = [
  "grin_wallet_util",
  "lazy_static",
  "log",
- "rand 0.5.6",
+ "rand 0.6.5",
  "serde",
  "serde_derive",
  "serde_json",
@@ -1172,7 +1180,7 @@ dependencies = [
  "grin_store",
  "grin_util",
  "pretty_assertions",
- "rand 0.5.6",
+ "rand 0.6.5",
  "serde",
  "serde_derive",
  "toml 0.4.10",

@@ -14,14 +14,14 @@ blake2-rfc = "0.2"
 failure = "0.1"
 failure_derive = "0.1"
 futures = "0.1"
-rand = "0.5"
+rand = "0.6"
 semver = "0.9"
 serde = "1"
 serde_derive = "1"
 serde_json = "1"
 log = "0.4"
 ring = "0.14"
-tokio = "= 0.1.22"
+tokio = "0.1.22"
 tokio-core = "0.1"
 tokio-retry = "0.2"
 uuid = { version = "0.7", features = ["serde", "v4"] }
@@ -62,3 +62,4 @@ grin_core = { git = "https://github.com/mwcproject/mwc-node", branch = "master" 
 # For local testing
 #grin_p2p = { path = "../../mwc-node/p2p", version= "3.1.2"}
 #grin_core = { path = "../../mwc-node/core", version= "3.1.2"}
+
