@@ -15,7 +15,7 @@
 //! Utilities to check the status of all the outputs we have stored in
 //! the wallet storage and update them.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 
 use crate::error::Error;
@@ -40,7 +40,7 @@ pub fn retrieve_outputs<'a, T: ?Sized, C, K>(
 	wallet: &mut T,
 	keychain_mask: Option<&SecretKey>,
 	show_spent: bool,
-	tx_id: Option<u32>,
+	tx: Option<&TxLogEntry>,
 	parent_key_id: Option<&Identifier>,
 	pagination_start: Option<u32>,
 	pagination_len: Option<u32>,
@@ -57,10 +57,21 @@ where
 		.collect::<Vec<_>>();
 
 	// only include outputs with a given tx_id if provided
-	if let Some(id) = tx_id {
+	if let Some(tx) = tx {
+		let mut tx_commits: HashSet<String> = HashSet::new();
+
+		tx_commits.extend(tx.input_commits.iter().map(|c| util::to_hex(c.0.to_vec())));
+		tx_commits.extend(tx.output_commits.iter().map(|c| util::to_hex(c.0.to_vec())));
+
 		outputs = outputs
 			.into_iter()
-			.filter(|out| out.tx_log_entry == Some(id))
+			.filter(|out| {
+				if tx_commits.is_empty() {
+					out.tx_log_entry == Some(tx.id)
+				} else {
+					tx_commits.contains(&out.commit.clone().unwrap_or(String::from("?")))
+				}
+			})
 			.collect::<Vec<_>>();
 	}
 

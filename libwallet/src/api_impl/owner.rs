@@ -146,13 +146,31 @@ where
 	wallet_lock!(wallet_inst, w);
 	let parent_key_id = w.parent_key_id();
 
+	let mut tx: Option<TxLogEntry> = None;
+	if tx_id.is_some() {
+		let mut txs = updater::retrieve_txs(
+			&mut **w,
+			keychain_mask,
+			tx_id,
+			None,
+			Some(&parent_key_id),
+			false,
+			None,
+			None,
+		)?;
+
+		if !txs.is_empty() {
+			tx = Some(txs.remove(0));
+		}
+	}
+
 	Ok((
 		validated,
 		updater::retrieve_outputs(
 			&mut **w,
 			keychain_mask,
 			include_spent,
-			tx_id,
+			tx.as_ref(),
 			Some(&parent_key_id),
 			None,
 			None,
@@ -780,9 +798,10 @@ where
 	}
 
 	if let Some(f) = fn_copy {
-		let _ = status_send_channel.send(StatusMessage::Info(
-			format!("Wallet dump is stored at  {}", f),
-		));
+		let _ = status_send_channel.send(StatusMessage::Info(format!(
+			"Wallet dump is stored at  {}",
+			f
+		)));
 	}
 
 	Ok(())

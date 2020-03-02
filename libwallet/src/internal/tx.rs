@@ -351,7 +351,7 @@ where
 		wallet,
 		keychain_mask,
 		false,
-		Some(tx.id),
+		Some(&tx),
 		Some(&parent_key_id),
 		None,
 		None,
