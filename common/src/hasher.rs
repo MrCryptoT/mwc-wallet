@@ -9,7 +9,7 @@ use grin_wallet_util::grin_keychain::Keychain;
 use grin_wallet_util::grin_keychain::SwitchCommitmentType;
 use grin_wallet_util::grin_util::secp::key::SecretKey;
 
-use crate::common::Error;
+use failure::Error;
 
 type HmacSha512 = Hmac<Sha512>;
 

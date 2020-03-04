@@ -33,6 +33,8 @@ use grin_wallet_util::grin_core as core;
 use grin_wallet_util::grin_core::core::amount_to_hr_string;
 use grin_wallet_util::grin_core::global;
 use grin_wallet_util::grin_keychain as keychain;
+use grin_wallet_common::backend::Backend;
+use grin_wallet_common::types::{Address, AddressBook};
 use linefeed::terminal::Signal;
 use linefeed::{Interface, ReadResult};
 use rpassword;
@@ -953,6 +955,16 @@ where
 
 	let km = (&keychain_mask).as_ref();
 
+	//mqs feature : add address book feature
+	let data_path_buf = wallet_config.get_data_path();
+	//let data_path = data_path_buf.to_str().unwrap();
+
+	let address_book_backend =
+		Backend::new(&data_path_buf).expect("could not create address book backend!");
+	let address_book = AddressBook::new(Box::new(address_book_backend))
+		.expect("could not create an address book!");
+	let address_book = Arc::new(Mutex::new(address_book));
+
 	let res = match wallet_args.subcommand() {
 		("init", Some(args)) => {
 			let a = arg_parse!(parse_init_args(
@@ -990,12 +1002,13 @@ where
 			let mut g = global_wallet_args.clone();
 			g.tls_conf = None;
 			arg_parse!(parse_owner_api_args(&mut c, &args));
-			command::owner_api(wallet, keychain_mask, &c, &tor_config, &g)
+			command::owner_api(wallet, keychain_mask, &c, address_book.clone(), &tor_config, &g)
 		}
 		("web", Some(_)) => command::owner_api(
 			wallet,
 			keychain_mask,
 			&wallet_config,
+			address_book,
 			&tor_config,
 			&global_wallet_args,
 		),
