@@ -18,6 +18,7 @@ use crate::crypto::SecretKey;
 use crate::message::EncryptedMessage;
 use crate::tx_proof::TxProof;
 use crate::types::{Address, GrinboxAddress, MWCMQSAddress, DEFAULT_MWCMQS_PORT};
+use grin_wallet_config::{TorConfig, WalletConfig};
 use colored::Colorize;
 use failure::Error;
 use grin_wallet_libwallet::Slate;
@@ -31,9 +32,9 @@ use std::{thread, time};
 #[derive(Deserialize, Debug, Clone)]
 pub struct MQSConfig {
 	pub wallet_data_path: String,
-	mwcmq_domain: String,
-	mwcmq_port: u16,
-	mwcmq_key: SecretKey,
+	mwcmqs_domain: String,
+	mwcmqs_port: u16,
+	pub mwcmqs_key: Option<SecretKey>,
 	mwc_node_uri: Option<String>,
 	mwc_node_secret: Option<String>,
 	config_home: Option<String>,
@@ -41,6 +42,25 @@ pub struct MQSConfig {
 }
 
 impl MQSConfig {
+
+	pub fn default(config: &WalletConfig) -> MQSConfig {
+		MQSConfig {
+			wallet_data_path: config.wallet_data_dir.clone().unwrap_or(".".to_string()),
+			mwcmqs_domain: config.mwcmqs_domain.clone().unwrap_or("mqs.mwc.mw".to_string()),
+			mwcmqs_port: config.mwcmqs_port.clone().unwrap_or(443),
+			mwcmqs_key: None,
+			mwc_node_uri: None,
+			mwc_node_secret: None,
+			config_home: None,
+			chain: config.chain_type.clone().unwrap_or(ChainTypes::Mainnet),
+		}
+	}
+
+//	fn default_secret_key (config: &WalletConfig) -> SecretKey {
+//		let index = config.grinbox_address_index;
+//		let key = wallet.lock().derive_address_key(index)?;
+//		return key;
+//	}
 	pub fn mwcmqs_domain(&self) -> String {
 		format!("mqs.mwc.mw")
 	}
@@ -97,7 +117,7 @@ impl MQSConfig {
 	}
 
 	pub fn get_mwcmqs_address(&self) -> Result<MWCMQSAddress, Error> {
-		let public_key = public_key_from_secret_key(&self.mwcmq_key)?;
+		let public_key = self.get_mwcmqs_public_key()?;
 		Ok(MWCMQSAddress::new(
 			public_key,
 			Some(self.mwcmqs_domain()),
@@ -105,8 +125,20 @@ impl MQSConfig {
 		))
 	}
 
+
+
+	pub fn get_mwcmqs_public_key(&self) -> Result<PublicKey, Error> {
+		public_key_from_secret_key(&self.get_mwcmqs_secret_key()?)
+	}
+
+//	pub fn get_mwcmqs_secret_key(&self) -> Result<SecretKey, Error> {
+//		self.grinbox_address_key
+//			.clone()
+//			.ok_or_else(|| ErrorKind::NoWallet.into())
+//	}
+
 	pub fn get_mwcmqs_secret_key(&self) -> Result<SecretKey, Error> {
-		Ok(self.mwcmq_key.clone())
+		self.mwcmqs_key.clone().ok_or_else(|| ErrorKind::NoWallet.into())
 	}
 }
 

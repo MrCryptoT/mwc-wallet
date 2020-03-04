@@ -8,7 +8,7 @@ use grin_wallet_util::grin_store::Store;
 use grin_wallet_util::grin_store::{self, option_to_not_found, to_key};
 
 use super::types::{Address, AddressBookBackend, AddressBookBatch, Contact};
-use crate::common::Error;
+use failure::Error;
 
 const DB_DIR: &'static str = "contacts";
 const CONTACT_PREFIX: u8 = 'X' as u8;
@@ -88,7 +88,7 @@ impl<'a> AddressBookBatch for Batch<'a> {
 
 impl Writeable for Contact {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), CoreError> {
-		let json = json!({
+		let json = serde_json::json!({
 			"name": self.get_name(),
 			"address": self.get_address().to_string(),
 		});

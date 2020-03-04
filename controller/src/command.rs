@@ -28,6 +28,10 @@ use crate::util::secp::key::SecretKey;
 use crate::util::{to_hex, Mutex, ZeroingString};
 use crate::{controller, display};
 use grin_wallet_libwallet::TxLogEntry;
+//use grin_wallet_common::types::Address;
+//use grin_wallet_common::types::AddressBook;
+//use grin_wallet_common::types::AddressType;
+//use grin_wallet_common::types::GrinboxAddress;
 use serde_json as json;
 use std::fs::File;
 use std::io::Write;
@@ -165,6 +169,7 @@ pub fn owner_api<L, C, K>(
 	wallet: Arc<Mutex<Box<dyn WalletInst<'static, L, C, K>>>>,
 	keychain_mask: Option<SecretKey>,
 	config: &WalletConfig,
+	address_book: Arc<Mutex<AddressBook>>,
 	tor_config: &TorConfig,
 	g_args: &GlobalArgs,
 ) -> Result<(), Error>
@@ -184,6 +189,8 @@ where
 		g_args.tls_conf.clone(),
 		config.owner_api_include_foreign.clone(),
 		config.owner_api_include_mqs_listener.clone(),
+		config.clone(),
+		address_book.clone(),
 		Some(tor_config.clone()),
 	);
 	if let Err(e) = res {

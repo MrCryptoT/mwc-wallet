@@ -16,7 +16,7 @@ name = "mwc-wallet"
 path = "src/bin/grin-wallet.rs"
 
 [workspace]
-members = ["api", "config", "controller", "impls", "libwallet", "util"]
+members = ["api", "config", "controller", "impls", "libwallet", "util", "common"]
 exclude = ["integration"]
 
 [dependencies]
@@ -36,7 +36,11 @@ grin_wallet_libwallet = { path = "./libwallet", version = "3.1.4" }
 grin_wallet_controller = { path = "./controller", version = "3.1.4" }
 grin_wallet_config = { path = "./config", version = "3.1.4" }
 
+
 grin_wallet_util = { path = "./util", version = "3.1.4" }
+
+grin_wallet_common = { path = "./common", version = "3.0.0-beta.1" }
+
 
 
 [build-dependencies]
