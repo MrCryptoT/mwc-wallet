@@ -19,8 +19,8 @@ use crate::util::{to_hex, Mutex, ZeroingString};
 /// Argument parsing and error handling for wallet commands
 use clap::ArgMatches;
 use failure::Fail;
-use grin_wallet_common::backend::Backend;
-use grin_wallet_common::types::AddressBook;
+use grin_wallet_mwcmqs::backend::Backend;
+use grin_wallet_mwcmqs::types::AddressBook;
 use grin_wallet_config::{TorConfig, WalletConfig};
 use grin_wallet_controller::command;
 use grin_wallet_controller::{Error, ErrorKind};
