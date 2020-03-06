@@ -28,6 +28,7 @@ use grin_wallet_util::grin_util as util;
 
 mod comments;
 pub mod config;
+#[allow(missing_docs)]
 pub mod types;
 
 pub use crate::config::{initial_setup_wallet, GRIN_WALLET_DIR, WALLET_CONFIG_FILE_NAME};

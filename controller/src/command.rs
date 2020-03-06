@@ -27,11 +27,8 @@ use crate::libwallet::{
 use crate::util::secp::key::SecretKey;
 use crate::util::{to_hex, Mutex, ZeroingString};
 use crate::{controller, display};
+use grin_wallet_common::types::AddressBook;
 use grin_wallet_libwallet::TxLogEntry;
-//use grin_wallet_common::types::Address;
-//use grin_wallet_common::types::AddressBook;
-//use grin_wallet_common::types::AddressType;
-//use grin_wallet_common::types::GrinboxAddress;
 use serde_json as json;
 use std::fs::File;
 use std::io::Write;

@@ -20,7 +20,6 @@
 #![deny(non_camel_case_types)]
 #![deny(non_snake_case)]
 #![deny(unused_mut)]
-#![warn(missing_docs)]
 
 use grin_wallet_config as config;
 use grin_wallet_util::grin_core as core;
@@ -44,6 +43,7 @@ mod owner;
 mod owner_rpc;
 mod owner_rpc_s;
 
+///added with mqs feature
 pub mod apis;
 
 mod types;

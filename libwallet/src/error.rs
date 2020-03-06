@@ -261,20 +261,26 @@ pub enum ErrorKind {
 	#[fail(display = "Generic error: {}", _0)]
 	GenericError(String),
 
+	///when invoice amount is too big(added with mqs feature)
 	#[fail(
-	display = "\x1b[31;1merror:\x1b[0m rejecting invoice as amount '{}' is too big!",
-	0
+		display = "\x1b[31;1merror:\x1b[0m rejecting invoice as amount '{}' is too big!",
+		0
 	)]
 	InvoiceAmountTooBig(u64),
 
+	///Receiving slate failed(added with mqs feature).
 	#[fail(display = "\x1b[31;1merror:\x1b[0m failed receiving slate!")]
 	GrinWalletReceiveError,
 
-
+	///Failed verifying slate message(added with mqs feature)
 	#[fail(display = "\x1b[31;1merror:\x1b[0m failed verifying slate messages!")]
 	GrinWalletVerifySlateMessagesError,
+
+	///added with mqs feature
 	#[fail(display = "\x1b[31;1merror:\x1b[0m failed finalizing slate!")]
 	GrinWalletFinalizeError,
+
+	///added with mqs feature
 	#[fail(display = "\x1b[31;1merror:\x1b[0m failed posting transaction!")]
 	GrinWalletPostError,
 }
