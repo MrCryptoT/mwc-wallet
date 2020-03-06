@@ -18,9 +18,9 @@ use std::fmt;
 use std::io;
 use std::path::PathBuf;
 
+use crate::config::GRIN_WALLET_DIR;
 use crate::core::global::ChainTypes;
 use crate::util::logger::LoggingConfig;
-use crate::config::GRIN_WALLET_DIR;
 
 /// Command-line wallet configuration
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -50,7 +50,7 @@ pub struct WalletConfig {
 	/// mwcmqs port
 	pub mwcmqs_port: Option<u16>,
 	//mqs address index
-	pub grinbox_address_index : Option<u32>,
+	pub grinbox_address_index: Option<u32>,
 	/// The directory in which wallet files are stored
 	pub data_file_dir: String,
 	/// If Some(true), don't cache commits alongside output data
@@ -118,10 +118,10 @@ impl WalletConfig {
 	}
 
 	pub fn get_data_path(&self) -> String {
-
 		//mqs feature
-		self.wallet_data_dir.clone().unwrap_or(GRIN_WALLET_DIR.to_string())
-
+		self.wallet_data_dir
+			.clone()
+			.unwrap_or(GRIN_WALLET_DIR.to_string())
 	}
 
 	pub fn grinbox_address_index(&self) -> u32 {

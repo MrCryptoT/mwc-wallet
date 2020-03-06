@@ -19,6 +19,8 @@ use crate::util::{to_hex, Mutex, ZeroingString};
 /// Argument parsing and error handling for wallet commands
 use clap::ArgMatches;
 use failure::Fail;
+use grin_wallet_common::backend::Backend;
+use grin_wallet_common::types::AddressBook;
 use grin_wallet_config::{TorConfig, WalletConfig};
 use grin_wallet_controller::command;
 use grin_wallet_controller::{Error, ErrorKind};
@@ -33,8 +35,6 @@ use grin_wallet_util::grin_core as core;
 use grin_wallet_util::grin_core::core::amount_to_hr_string;
 use grin_wallet_util::grin_core::global;
 use grin_wallet_util::grin_keychain as keychain;
-use grin_wallet_common::backend::Backend;
-use grin_wallet_common::types::{Address, AddressBook};
 use linefeed::terminal::Signal;
 use linefeed::{Interface, ReadResult};
 use rpassword;
@@ -1005,7 +1005,14 @@ where
 			let mut g = global_wallet_args.clone();
 			g.tls_conf = None;
 			arg_parse!(parse_owner_api_args(&mut c, &args));
-			command::owner_api(wallet, keychain_mask, &c, address_book.clone(), &tor_config, &g)
+			command::owner_api(
+				wallet,
+				keychain_mask,
+				&c,
+				address_book.clone(),
+				&tor_config,
+				&g,
+			)
 		}
 		("web", Some(_)) => command::owner_api(
 			wallet,

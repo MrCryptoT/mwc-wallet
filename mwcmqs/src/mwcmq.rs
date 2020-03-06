@@ -3,11 +3,8 @@ extern crate reqwest;
 
 use ws::{Error as WsError, ErrorKind as WsErrorKind};
 
-use std::fmt;
-use std::fs::File;
-use std::io;
-use std::io::{Read, Write};
-use std::path::{Path, PathBuf};
+use std::io::Read;
+use std::path::PathBuf;
 
 use super::COLORED_PROMPT;
 use super::{Arc, ErrorKind, Mutex};
@@ -18,9 +15,9 @@ use crate::crypto::SecretKey;
 use crate::message::EncryptedMessage;
 use crate::tx_proof::TxProof;
 use crate::types::{Address, GrinboxAddress, MWCMQSAddress, DEFAULT_MWCMQS_PORT};
-use grin_wallet_config::{TorConfig, WalletConfig};
 use colored::Colorize;
 use failure::Error;
+use grin_wallet_config::WalletConfig;
 use grin_wallet_libwallet::Slate;
 use grin_wallet_util::grin_core::global::ChainTypes;
 use grin_wallet_util::grin_util::secp::key::PublicKey;
@@ -42,11 +39,13 @@ pub struct MQSConfig {
 }
 
 impl MQSConfig {
-
 	pub fn default(config: &WalletConfig) -> MQSConfig {
 		MQSConfig {
 			wallet_data_path: config.wallet_data_dir.clone().unwrap_or(".".to_string()),
-			mwcmqs_domain: config.mwcmqs_domain.clone().unwrap_or("mqs.mwc.mw".to_string()),
+			mwcmqs_domain: config
+				.mwcmqs_domain
+				.clone()
+				.unwrap_or("mqs.mwc.mw".to_string()),
 			mwcmqs_port: config.mwcmqs_port.clone().unwrap_or(443),
 			mwcmqs_key: None,
 			mwc_node_uri: None,
@@ -56,11 +55,11 @@ impl MQSConfig {
 		}
 	}
 
-//	fn default_secret_key (config: &WalletConfig) -> SecretKey {
-//		let index = config.grinbox_address_index;
-//		let key = wallet.lock().derive_address_key(index)?;
-//		return key;
-//	}
+	//	fn default_secret_key (config: &WalletConfig) -> SecretKey {
+	//		let index = config.grinbox_address_index;
+	//		let key = wallet.lock().derive_address_key(index)?;
+	//		return key;
+	//	}
 	pub fn mwcmqs_domain(&self) -> String {
 		format!("mqs.mwc.mw")
 	}
@@ -78,7 +77,7 @@ impl MQSConfig {
 	}
 
 	pub fn mwc_node_secret(&self) -> Option<String> {
-		let chain_type = self.chain.clone();
+		let _chain_type = self.chain.clone();
 		match self.mwc_node_uri {
 			Some(_) => self.mwc_node_secret.clone(),
 			None => Some(String::from("11ne3EAUtOXVKwhxm84U")),
@@ -125,20 +124,20 @@ impl MQSConfig {
 		))
 	}
 
-
-
 	pub fn get_mwcmqs_public_key(&self) -> Result<PublicKey, Error> {
 		public_key_from_secret_key(&self.get_mwcmqs_secret_key()?)
 	}
 
-//	pub fn get_mwcmqs_secret_key(&self) -> Result<SecretKey, Error> {
-//		self.grinbox_address_key
-//			.clone()
-//			.ok_or_else(|| ErrorKind::NoWallet.into())
-//	}
+	//	pub fn get_mwcmqs_secret_key(&self) -> Result<SecretKey, Error> {
+	//		self.grinbox_address_key
+	//			.clone()
+	//			.ok_or_else(|| ErrorKind::NoWallet.into())
+	//	}
 
 	pub fn get_mwcmqs_secret_key(&self) -> Result<SecretKey, Error> {
-		self.mwcmqs_key.clone().ok_or_else(|| ErrorKind::NoWallet.into())
+		self.mwcmqs_key
+			.clone()
+			.ok_or_else(|| ErrorKind::NoWallet.into())
 	}
 }
 
@@ -388,7 +387,7 @@ impl MWCMQSBroker {
 		handler: Box<dyn SubscriptionHandler + Send>,
 		config: MQSConfig,
 	) -> () {
-		let index = 0;
+		let _index = 0;
 		let grinbox_address = GrinboxAddress::new(
 			crate::crypto::public_key_from_secret_key(&config.get_mwcmqs_secret_key().unwrap())
 				.unwrap(),

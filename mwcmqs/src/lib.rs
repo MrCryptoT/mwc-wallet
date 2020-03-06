@@ -24,23 +24,29 @@
 extern crate serde_derive;
 extern crate serde_json;
 
+#[allow(missing_docs)]
+pub mod backend;
 mod base58;
+#[allow(missing_docs)]
 pub mod crypto;
 mod encrypt;
+#[allow(missing_docs)]
 mod error_kind;
-pub mod message;
-pub mod mwcmq;
-pub mod tx_proof;
-pub mod types;
+#[allow(missing_docs)]
 pub mod hasher;
-pub mod backend;
+#[allow(missing_docs)]
+pub mod message;
+#[allow(missing_docs)]
+pub mod mwcmq;
+#[allow(missing_docs)]
+pub mod tx_proof;
+#[allow(missing_docs)]
+pub mod types;
 
+///
 pub const COLORED_PROMPT: &'static str = "\x1b[36mwallet713>\x1b[0m ";
 
 pub use self::error_kind::ErrorKind;
 pub use failure::Error;
-use grin_wallet_util::grin_api;
 pub use parking_lot::{Mutex, MutexGuard};
-use serde::Serialize;
-use std::result::Result as StdResult;
 pub use std::sync::Arc;
