@@ -4,7 +4,7 @@ use failure::Error;
 
 use crate::core::core::Transaction;
 use crate::util::Mutex;
-use grin_wallet_common::tx_proof::TxProof;
+use grin_wallet_mwcmqs::tx_proof::TxProof;
 use grin_wallet_libwallet::wallet_lock;
 
 use crate::keychain::Keychain;

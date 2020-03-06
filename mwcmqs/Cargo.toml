@@ -1,5 +1,5 @@
 [package]
-name = "grin_wallet_common"
+name = "grin_wallet_mwcmqs"
 version = "3.0.0-beta.1"
 authors = ["Grin Developers <mimblewimble@lists.launchpad.net>"]
 description = "Common libraries for grin wallet , a simple, private and scalable cryptocurrency implementation based on the MimbleWimble chain format."
