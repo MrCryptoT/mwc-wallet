@@ -115,6 +115,8 @@ pub struct InitTxSendArgs {
 	pub method: String,
 	/// The destination, contents will depend on the particular method
 	pub dest: String,
+	/// receiver wallet apisecret. Applicable to http/https address only
+	pub apisecret: Option<String>,
 	/// Whether to finalize the result immediately if the send was successful
 	pub finalize: bool,
 	/// Whether to post the transasction if the send and finalize were successful

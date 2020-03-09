@@ -115,7 +115,7 @@ impl Client {
 	where
 		for<'de> T: Deserialize<'de>,
 	{
-		self.handle_request(self.build_request(url, "GET", api_secret, None)?)
+		self.handle_request(self.build_request(url, "GET", None, api_secret, None)?)
 	}
 
 	/// Helper function to easily issue an async HTTP GET request against a given
@@ -129,7 +129,7 @@ impl Client {
 	where
 		for<'de> T: Deserialize<'de> + Send + 'static,
 	{
-		match self.build_request(url, "GET", api_secret, None) {
+		match self.build_request(url, "GET", None, api_secret, None) {
 			Ok(req) => Box::new(self.handle_request_async(req)),
 			Err(e) => Box::new(err(e)),
 		}
@@ -139,7 +139,7 @@ impl Client {
 	/// on a given URL that returns nothing. Handles request
 	/// building and response code checking.
 	pub fn _get_no_ret(&self, url: &str, api_secret: Option<String>) -> Result<(), Error> {
-		let req = self.build_request(url, "GET", api_secret, None)?;
+		let req = self.build_request(url, "GET", None, api_secret, None)?;
 		self.send_request(req)?;
 		Ok(())
 	}
@@ -158,7 +158,7 @@ impl Client {
 		IN: Serialize,
 		for<'de> OUT: Deserialize<'de>,
 	{
-		let req = self.create_post_request(url, api_secret, input)?;
+		let req = self.create_post_request(url, None, api_secret, input)?;
 		self.handle_request(req)
 	}
 
@@ -177,7 +177,7 @@ impl Client {
 		OUT: Send + 'static,
 		for<'de> OUT: Deserialize<'de>,
 	{
-		match self.create_post_request(url, api_secret, input) {
+		match self.create_post_request(url, None, api_secret, input) {
 			Ok(req) => Box::new(self.handle_request_async(req)),
 			Err(e) => Box::new(err(e)),
 		}
@@ -196,7 +196,7 @@ impl Client {
 	where
 		IN: Serialize,
 	{
-		let req = self.create_post_request(url, api_secret, input)?;
+		let req = self.create_post_request(url, None, api_secret, input)?;
 		self.send_request(req)?;
 		Ok(())
 	}
@@ -214,7 +214,7 @@ impl Client {
 	where
 		IN: Serialize,
 	{
-		match self.create_post_request(url, api_secret, input) {
+		match self.create_post_request(url, None, api_secret, input) {
 			Ok(req) => Box::new(self.send_request_async(req).and_then(|_| ok(()))),
 			Err(e) => Box::new(err(e)),
 		}
@@ -224,16 +224,17 @@ impl Client {
 		&self,
 		url: &str,
 		method: &str,
+		basic_auth_key: Option<String>, // In Node will be generated. Specify None if talk to the Node. Another wallet wants 'mwc'
 		api_secret: Option<String>,
 		body: Option<String>,
 	) -> Result<Request<Body>, Error> {
-		let basic_auth_key = if global::is_mainnet() {
-			"mwcmain"
+		let basic_auth_key = basic_auth_key.unwrap_or(if global::is_mainnet() {
+			"mwcmain".to_string()
 		} else if global::is_floonet() {
-			"mwcfloo"
+			"mwcfloo".to_string()
 		} else {
-			"mwc"
-		};
+			"mwc".to_string()
+		});
 
 		self.build_request_ex(
 			url,
@@ -284,6 +285,7 @@ impl Client {
 	pub fn create_post_request<IN>(
 		&self,
 		url: &str,
+		basic_auth_key: Option<String>, // Specify None if talk to the Node. Another wallet wants 'mwc'
 		api_secret: Option<String>,
 		input: &IN,
 	) -> Result<Request<Body>, Error>
@@ -293,7 +295,7 @@ impl Client {
 		let json = serde_json::to_string(input).context(ErrorKind::Internal(
 			"Could not serialize data to JSON".to_owned(),
 		))?;
-		self.build_request(url, "POST", api_secret, Some(json))
+		self.build_request(url, "POST", basic_auth_key, api_secret, Some(json))
 	}
 
 	pub fn _create_post_request_ex<IN>(

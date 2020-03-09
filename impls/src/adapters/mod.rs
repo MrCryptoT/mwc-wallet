@@ -61,6 +61,7 @@ pub trait SlateGetter {
 pub fn create_sender(
 	method: &str,
 	dest: &str,
+	apisecret: &Option<String>,
 	tor_config: Option<TorConfig>,
 ) -> Result<Box<dyn SlateSender>, Error> {
 	let invalid = || {
@@ -83,7 +84,7 @@ pub fn create_sender(
 	};
 
 	Ok(match method {
-		"http" => Box::new(HttpSlateSender::new(&dest).map_err(|_| invalid())?),
+		"http" => Box::new(HttpSlateSender::new(&dest, apisecret.clone()).map_err(|_| invalid())?),
 		"tor" => match tor_config {
 			None => {
 				return Err(
@@ -91,8 +92,13 @@ pub fn create_sender(
 				);
 			}
 			Some(tc) => Box::new(
-				HttpSlateSender::with_socks_proxy(&dest, &tc.socks_proxy_addr, &tc.send_config_dir)
-					.map_err(|_| invalid())?,
+				HttpSlateSender::with_socks_proxy(
+					&dest,
+					apisecret.clone(),
+					&tc.socks_proxy_addr,
+					&tc.send_config_dir,
+				)
+				.map_err(|_| invalid())?,
 			),
 		},
 		"keybase" => Box::new(KeybaseChannel::new(dest.to_owned())?),

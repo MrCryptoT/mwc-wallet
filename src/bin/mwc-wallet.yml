@@ -133,6 +133,11 @@ subcommands:
             short: d
             long: dest
             takes_value: true
+        - apisecret:
+            help: receiver wallet apisecret. Applicable to http/https address only. Default is none
+            short: a
+            long: apisecret
+            takes_value: true
         - request_payment_proof:
             help: Request a payment proof from the recipient. If sending to a tor address, the address will be filled automatically.
             short: y

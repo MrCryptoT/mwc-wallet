@@ -37,8 +37,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{channel, Sender};
 use std::sync::Arc;
 use std::thread;
-use std::time::Duration;
 use std::thread::JoinHandle;
+use std::time::Duration;
 
 /// Main interface into all wallet API functions.
 /// Wallet APIs are split into two seperate blocks of functionality
@@ -87,10 +87,10 @@ where
 
 // Owner need to release the resources. We have a thread that is running in background
 impl<L, C, K> Drop for Owner<L, C, K>
-	where
-		L: WalletLCProvider<'static, C, K> + 'static,
-		C: NodeClient,
-		K: Keychain,
+where
+	L: WalletLCProvider<'static, C, K> + 'static,
+	C: NodeClient,
+	K: Keychain,
 {
 	/// We have a start_updater_log_thread running in the background.
 	/// We neeed to stop it on the exit. Note, we don't like this design but it is how
@@ -98,7 +98,8 @@ impl<L, C, K> Drop for Owner<L, C, K>
 	/// really hope to get a better solution with a next fix
 	fn drop(&mut self) {
 		if let Some(thr_info) = self.updater_log_thread.take() {
-			self.updater_log_running_state.store(false, Ordering::Relaxed);
+			self.updater_log_running_state
+				.store(false, Ordering::Relaxed);
 			let _ = thr_info.join();
 		}
 	}
@@ -195,8 +196,9 @@ where
 		)));
 
 		let updater_messages = Arc::new(Mutex::new(vec![]));
-		let running = Arc::new( AtomicBool::new(true) );
-		let handle = start_updater_log_thread(rx, updater_messages.clone(), running.clone()).unwrap();
+		let running = Arc::new(AtomicBool::new(true));
+		let handle =
+			start_updater_log_thread(rx, updater_messages.clone(), running.clone()).unwrap();
 
 		Owner {
 			wallet_inst,
@@ -208,7 +210,7 @@ where
 			updater_messages,
 			tor_config: Mutex::new(None),
 			updater_log_thread: Some(handle),
-			updater_log_running_state: running
+			updater_log_running_state: running,
 		}
 	}
 
@@ -695,8 +697,9 @@ where
 					}
 				};
 				let tor_config_lock = self.tor_config.lock();
-				let comm_adapter = create_sender(&sa.method, &sa.dest, tor_config_lock.clone())
-					.map_err(|e| ErrorKind::GenericError(format!("{}", e)))?;
+				let comm_adapter =
+					create_sender(&sa.method, &sa.dest, &sa.apisecret, tor_config_lock.clone())
+						.map_err(|e| ErrorKind::GenericError(format!("{}", e)))?;
 				slate = comm_adapter.send_tx(&slate)?;
 				self.tx_lock_outputs(keychain_mask, &slate, address, 0)?;
 				let slate = match sa.finalize {

@@ -244,6 +244,7 @@ pub struct SendArgs {
 	pub estimate_selection_strategies: bool,
 	pub method: String,
 	pub dest: String,
+	pub apisecret: Option<String>,
 	pub change_outputs: usize,
 	pub fluff: bool,
 	pub max_outputs: usize,
@@ -343,7 +344,7 @@ where
 					})?;
 				}
 				method => {
-					let sender = create_sender(method, &args.dest, tor_config)?;
+					let sender = create_sender(method, &args.dest, &args.apisecret, tor_config)?;
 					slate = sender.send_tx(&slate)?;
 					api.tx_lock_outputs(m, &slate, Some(args.dest.clone()), 0)?;
 				}
@@ -613,7 +614,7 @@ where
 					})?;
 				}
 				method => {
-					let sender = create_sender(method, &args.dest, tor_config)?;
+					let sender = create_sender(method, &args.dest, &None, tor_config)?;
 					slate = sender.send_tx(&slate)?;
 					api.tx_lock_outputs(m, &slate, Some(args.dest.clone()), 1)?;
 				}

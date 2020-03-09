@@ -463,6 +463,8 @@ pub fn parse_send_args(args: &ArgMatches) -> Result<command::SendArgs, ParseErro
 		}
 	};
 
+	let apisecret = args.value_of("apisecret").map(|s| String::from(s));
+
 	if !estimate_selection_strategies
 		&& method == "http"
 		&& !dest.starts_with("http://")
@@ -522,6 +524,7 @@ pub fn parse_send_args(args: &ArgMatches) -> Result<command::SendArgs, ParseErro
 		estimate_selection_strategies,
 		method: method.to_owned(),
 		dest: dest.to_owned(),
+		apisecret: apisecret,
 		change_outputs: change_outputs,
 		fluff: fluff,
 		max_outputs: max_outputs,

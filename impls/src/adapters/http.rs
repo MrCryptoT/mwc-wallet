@@ -30,6 +30,7 @@ const TOR_CONFIG_PATH: &'static str = "tor/sender";
 #[derive(Clone)]
 pub struct HttpSlateSender {
 	base_url: String,
+	apisecret: Option<String>,
 	use_socks: bool,
 	socks_proxy_addr: Option<SocketAddr>,
 	tor_config_dir: String,
@@ -37,12 +38,16 @@ pub struct HttpSlateSender {
 
 impl HttpSlateSender {
 	/// Create, return Err if scheme is not "http"
-	pub fn new(base_url: &str) -> Result<HttpSlateSender, SchemeNotHttp> {
+	pub fn new(
+		base_url: &str,
+		apisecret: Option<String>,
+	) -> Result<HttpSlateSender, SchemeNotHttp> {
 		if !base_url.starts_with("http") && !base_url.starts_with("https") {
 			Err(SchemeNotHttp)
 		} else {
 			Ok(HttpSlateSender {
 				base_url: base_url.to_owned(),
+				apisecret,
 				use_socks: false,
 				socks_proxy_addr: None,
 				tor_config_dir: String::from(""),
@@ -53,10 +58,11 @@ impl HttpSlateSender {
 	/// Switch to using socks proxy
 	pub fn with_socks_proxy(
 		base_url: &str,
+		apisecret: Option<String>,
 		proxy_addr: &str,
 		tor_config_dir: &str,
 	) -> Result<HttpSlateSender, SchemeNotHttp> {
-		let mut ret = Self::new(base_url)?;
+		let mut ret = Self::new(base_url, apisecret)?;
 		ret.use_socks = true;
 		//TODO: Unwrap
 		ret.socks_proxy_addr = Some(SocketAddr::V4(proxy_addr.parse().unwrap()));
@@ -73,7 +79,7 @@ impl HttpSlateSender {
 			"params": []
 		});
 
-		let res: String = self.post(url, None, req).map_err(|e| {
+		let res: String = self.post(url, self.apisecret.clone(), req).map_err(|e| {
 			let mut report = format!("Performing version check (is recipient listening?): {}", e);
 			let err_string = format!("{}", e);
 			if err_string.contains("404") {
@@ -139,7 +145,7 @@ impl HttpSlateSender {
 			client.socks_proxy_addr = self.socks_proxy_addr.clone();
 		}
 
-		let req = client.create_post_request(url, api_secret, &input)?;
+		let req = client.create_post_request(url, Some("mwc".to_string()), api_secret, &input)?;
 		let res = client.send_request(req)?;
 		Ok(res)
 	}
@@ -206,11 +212,13 @@ impl SlateSender for HttpSlateSender {
 		});
 		trace!("Sending receive_tx request: {}", req);
 
-		let res: String = self.post(&url_str, None, req).map_err(|e| {
-			let report = format!("Posting transaction slate (is recipient listening?): {}", e);
-			error!("{}", report);
-			ErrorKind::ClientCallback(report)
-		})?;
+		let res: String = self
+			.post(&url_str, self.apisecret.clone(), req)
+			.map_err(|e| {
+				let report = format!("Posting transaction slate (is recipient listening?): {}", e);
+				error!("{}", report);
+				ErrorKind::ClientCallback(report)
+			})?;
 
 		let res: Value = serde_json::from_str(&res).unwrap();
 		trace!("Response: {}", res);
