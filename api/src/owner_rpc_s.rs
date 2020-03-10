@@ -378,6 +378,8 @@ pub trait OwnerRpcS {
 					"target_slate_version": null,
 					"payment_proof_recipient_address": "d03c09e9c19bb74aa9ea44e0fe5ae237a9bf40bddf0941064a80913a4459c8bb",
 					"ttl_blocks": null,
+					"address": null,
+					"estimate_only": false,
 					"send_args": null
 				}
 			},

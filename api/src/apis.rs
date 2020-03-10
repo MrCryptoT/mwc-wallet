@@ -4,8 +4,8 @@ use failure::Error;
 
 use crate::core::core::Transaction;
 use crate::util::Mutex;
-use grin_wallet_mwcmqs::tx_proof::TxProof;
 use grin_wallet_libwallet::wallet_lock;
+use grin_wallet_mwcmqs::tx_proof::TxProof;
 
 use crate::keychain::Keychain;
 use crate::libwallet::{ErrorKind, NodeClient, Slate, WalletInst, WalletLCProvider};
