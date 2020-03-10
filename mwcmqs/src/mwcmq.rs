@@ -568,7 +568,7 @@ impl MWCMQSBroker {
 				} else {
 					if count == 1 {
 						println!(
-							"\nmwcmqs listener started for: [{}] tid=[{}]",
+							"\nmwcmqs listener started for [{}] tid=[{}]",
 							cloned_cloned_address.stripped().bright_green(),
 							nanoid
 						);

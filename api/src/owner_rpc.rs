@@ -349,6 +349,8 @@ pub trait OwnerRpc: Sync + Send {
 					"target_slate_version": null,
 					"payment_proof_recipient_address": null,
 					"ttl_blocks": null,
+					"address": null,
+					"estimate_only": false,
 					"send_args": null
 				}
 			},
