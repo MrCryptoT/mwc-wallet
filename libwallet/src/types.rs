@@ -909,6 +909,57 @@ impl TxLogEntry {
 		}
 	}
 
+	/// Build a new instance from the data. Needed for
+	pub fn new_from_data(
+		parent_key_id: Identifier,
+		id: u32,
+		tx_slate_id: Option<Uuid>,
+		tx_type: TxLogEntryType,
+		address: Option<String>,
+		creation_ts: DateTime<Utc>,
+		confirmation_ts: Option<DateTime<Utc>>,
+		confirmed: bool,
+		output_height: u64,
+		num_inputs: usize,
+		num_outputs: usize,
+		amount_credited: u64,
+		amount_debited: u64,
+		fee: Option<u64>,
+		ttl_cutoff_height: Option<u64>,
+		messages: Option<ParticipantMessages>,
+		stored_tx: Option<String>,
+		kernel_excess: Option<pedersen::Commitment>,
+		kernel_lookup_min_height: Option<u64>,
+		payment_proof: Option<StoredProofInfo>,
+		input_commits: Vec<pedersen::Commitment>,
+		output_commits: Vec<pedersen::Commitment>,
+	) -> Self {
+		TxLogEntry {
+			parent_key_id,
+			tx_type,
+			address,
+			id,
+			tx_slate_id,
+			creation_ts,
+			confirmation_ts,
+			confirmed,
+			output_height,
+			amount_credited,
+			amount_debited,
+			num_inputs,
+			num_outputs,
+			fee,
+			ttl_cutoff_height,
+			messages,
+			stored_tx,
+			kernel_excess,
+			kernel_lookup_min_height,
+			payment_proof,
+			input_commits,
+			output_commits,
+		}
+	}
+
 	/// Given a vec of TX log entries, return credited + debited sums
 	pub fn sum_confirmed(txs: &Vec<TxLogEntry>) -> (u64, u64) {
 		txs.iter().fold((0, 0), |acc, tx| match tx.confirmed {

@@ -784,11 +784,7 @@ where
 	// Processing slate based transactions. Just need to update 'confirmed flag' and height
 	// We don't want to cancel the transactions. Let's user do that.
 	// We can uncancel transactions if it is confirmed
-	validate_transactions(
-		&mut transactions,
-		&outputs,
-		status_send_channel,
-	);
+	validate_transactions(&mut transactions, &outputs, status_send_channel);
 
 	// Checking for output to transaction mapping. We don't want to see active outputs without trsansaction or with cancelled transactions
 	// we might unCancel transaction if output was found but all mapped transactions are cancelled (user just a cheater)
@@ -1005,12 +1001,10 @@ where
 				OutputStatus::Locked => {
 					// Locked is not on the chain is expected, It is mean that our send transaction was confirmed.
 					if let Some(ref s) = status_send_channel {
-						let _ = s.send(StatusMessage::Info(
-							format!(
-								"Changing status for output {} from Locked to Spent",
-								w_out.commit
-							),
-						));
+						let _ = s.send(StatusMessage::Info(format!(
+							"Changing status for output {} from Locked to Spent",
+							w_out.commit
+						)));
 					}
 					w_out.updated = true;
 					w_out.output.status = OutputStatus::Spent;
@@ -1053,12 +1047,10 @@ fn validate_transactions(
 					tx_info.updated = true;
 
 					if let Some(ref s) = status_send_channel {
-						let _ = s.send(StatusMessage::Info(
-							format!(
-								"Changing transaction {} state to confirmed",
-								tx_info.tx_uuid.split('/').next().unwrap()
-							),
-						));
+						let _ = s.send(StatusMessage::Info(format!(
+							"Changing transaction {} state to confirmed",
+							tx_info.tx_uuid.split('/').next().unwrap()
+						)));
 					}
 				}
 			} else {
@@ -1067,12 +1059,10 @@ fn validate_transactions(
 						tx_info.tx_log.confirmed = false;
 						tx_info.updated = true;
 						if let Some(ref s) = status_send_channel {
-							let _ = s.send(StatusMessage::Info(
-								format!(
-									"Changing transaction {} state to NOT confirmed",
-									tx_info.tx_uuid.split('/').next().unwrap()
-								),
-							));
+							let _ = s.send(StatusMessage::Info(format!(
+								"Changing transaction {} state to NOT confirmed",
+								tx_info.tx_uuid.split('/').next().unwrap()
+							)));
 						}
 					}
 				}

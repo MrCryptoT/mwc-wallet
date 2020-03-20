@@ -12,19 +12,24 @@
 // limitations under the License.
 
 use crate::core::libtx::secp_ser;
+use crate::keychain::Identifier;
 use crate::libwallet::dalek_ser;
 use crate::libwallet::{Error, ErrorKind};
+use crate::libwallet::{ParticipantMessages, StoredProofInfo, TxLogEntry, TxLogEntryType};
 use crate::util::secp::key::{PublicKey, SecretKey};
+use crate::util::secp::pedersen;
 use crate::util::{from_hex, to_hex};
 use failure::ResultExt;
 
 use base64;
+use chrono::{DateTime, Utc};
 use ed25519_dalek::PublicKey as DalekPublicKey;
 use grin_wallet_impls::encrypt;
 use rand::{thread_rng, Rng};
 use ring::aead;
 use serde_json::{self, Value};
 use std::collections::HashMap;
+use uuid::Uuid;
 
 /// Wrapper for API Tokens
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -290,6 +295,109 @@ impl EncryptionErrorResponse {
 				}
 			),
 		}
+	}
+}
+
+/// TxLogEntry has commits  as pedersen::Commitment.  It is not user friendly,
+/// And we can't change TxLogEntry because of relased version. We can only convert for API
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct TxLogEntryAPI {
+	#[serde(default = "TxLogEntryAPI::default_parent_key_id")]
+	pub parent_key_id: Identifier,
+	#[serde(default)]
+	pub id: u32,
+	#[serde(default)]
+	pub tx_slate_id: Option<Uuid>,
+	pub tx_type: TxLogEntryType,
+	#[serde(default)]
+	pub address: Option<String>,
+	/// #[serde(with = "tx_date_format")]
+	#[serde(default = "TxLogEntryAPI::default_creation_ts")]
+	pub creation_ts: DateTime<Utc>,
+	/// Time this tx was confirmed (by this wallet)
+	/// #[serde(default, with = "opt_tx_date_format")]
+	#[serde(default)]
+	pub confirmation_ts: Option<DateTime<Utc>>,
+	#[serde(default)]
+	pub confirmed: bool,
+	#[serde(default = "TxLogEntry::default_output_height")]
+	pub output_height: u64,
+	#[serde(default)]
+	pub num_inputs: usize,
+	#[serde(default)]
+	pub num_outputs: usize,
+	#[serde(with = "secp_ser::string_or_u64")]
+	#[serde(default)]
+	pub amount_credited: u64,
+	#[serde(with = "secp_ser::string_or_u64")]
+	#[serde(default)]
+	pub amount_debited: u64,
+	#[serde(with = "secp_ser::opt_string_or_u64")]
+	#[serde(default)]
+	pub fee: Option<u64>,
+	#[serde(with = "secp_ser::opt_string_or_u64")]
+	#[serde(default)]
+	pub ttl_cutoff_height: Option<u64>,
+	#[serde(default)]
+	pub messages: Option<ParticipantMessages>,
+	#[serde(default)]
+	pub stored_tx: Option<String>,
+	#[serde(with = "secp_ser::option_commitment_serde")]
+	#[serde(default)]
+	pub kernel_excess: Option<pedersen::Commitment>,
+	#[serde(default)]
+	pub kernel_lookup_min_height: Option<u64>,
+	#[serde(default)]
+	pub payment_proof: Option<StoredProofInfo>,
+	#[serde(default)]
+	pub input_commits: Vec<String>,
+	/// Output commits as Strings, defined for send & recieve
+	#[serde(default)]
+	pub output_commits: Vec<String>,
+}
+
+impl TxLogEntryAPI {
+	/// Return a new blank with TS initialised with next entry
+	pub fn from_txlogemtry(tle: &TxLogEntry) -> Self {
+		TxLogEntryAPI {
+			parent_key_id: tle.parent_key_id.clone(),
+			tx_type: tle.tx_type.clone(),
+			address: tle.address.clone(),
+			id: tle.id.clone(),
+			tx_slate_id: tle.tx_slate_id.clone(),
+			creation_ts: tle.creation_ts.clone(),
+			confirmation_ts: tle.confirmation_ts.clone(),
+			confirmed: tle.confirmed.clone(),
+			output_height: tle.output_height.clone(),
+			amount_credited: tle.amount_credited.clone(),
+			amount_debited: tle.amount_debited.clone(),
+			num_inputs: tle.num_inputs.clone(),
+			num_outputs: tle.num_outputs.clone(),
+			fee: tle.fee.clone(),
+			ttl_cutoff_height: tle.ttl_cutoff_height.clone(),
+			messages: tle.messages.clone(),
+			stored_tx: tle.stored_tx.clone(),
+			kernel_excess: tle.kernel_excess.clone(),
+			kernel_lookup_min_height: tle.kernel_lookup_min_height.clone(),
+			payment_proof: tle.payment_proof.clone(),
+			input_commits: tle
+				.input_commits
+				.iter()
+				.map(|c| to_hex(c.0.to_vec()))
+				.collect(),
+			output_commits: tle
+				.output_commits
+				.iter()
+				.map(|c| to_hex(c.0.to_vec()))
+				.collect(),
+		}
+	}
+
+	fn default_parent_key_id() -> Identifier {
+		Identifier::zero()
+	}
+	fn default_creation_ts() -> DateTime<Utc> {
+		Utc::now()
 	}
 }
 

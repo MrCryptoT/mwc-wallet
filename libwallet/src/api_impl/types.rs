@@ -54,6 +54,8 @@ pub struct InitTxArgs {
 	/// The human readable account name from which to draw outputs
 	/// for the transaction, overriding whatever the active account is as set via the
 	/// [`set_active_account`](../grin_wallet_api/owner/struct.Owner.html#method.set_active_account) method.
+	///
+	#[serde(default)]
 	pub src_acct_name: Option<String>,
 	#[serde(with = "secp_ser::string_or_u64")]
 	/// The amount to send, in nanogrins. (`1 G = 1_000_000_000nG`)
@@ -61,15 +63,18 @@ pub struct InitTxArgs {
 	#[serde(with = "secp_ser::string_or_u64")]
 	/// The minimum number of confirmations an output
 	/// should have in order to be included in the transaction.
+	#[serde(default = "InitTxArgs::default_minimum_confirmations")]
 	pub minimum_confirmations: u64,
 	/// By default, the wallet selects as many inputs as possible in a
 	/// transaction, to reduce the Output set and the fees. The wallet will attempt to spend
 	/// include up to `max_outputs` in a transaction, however if this is not enough to cover
 	/// the whole amount, the wallet will include more outputs. This parameter should be considered
 	/// a soft limit.
+	#[serde(default = "InitTxArgs::default_max_outputs")]
 	pub max_outputs: u32,
 	/// The target number of change outputs to create in the transaction.
 	/// The actual number created will be `num_change_outputs` + whatever remainder is needed.
+	#[serde(default = "InitTxArgs::default_num_change_outputs")]
 	pub num_change_outputs: u32,
 	/// If `true`, attempt to use up as many outputs as
 	/// possible to create the transaction, up the 'soft limit' of `max_outputs`. This helps
@@ -78,32 +83,40 @@ pub struct InitTxArgs {
 	/// usually much larger than the amount being sent. If `false`, the transaction will include
 	/// as many outputs as are needed to meet the amount, (and no more) starting with the smallest
 	/// value outputs.
+	#[serde(default = "InitTxArgs::default_selection_strategy_is_use_all")]
 	pub selection_strategy_is_use_all: bool,
 	/// An optional participant message to include alongside the sender's public
 	/// ParticipantData within the slate. This message will include a signature created with the
 	/// sender's private excess value, and will be publically verifiable. Note this message is for
 	/// the convenience of the participants during the exchange; it is not included in the final
 	/// transaction sent to the chain. The message will be truncated to 256 characters.
+	#[serde(default)]
 	pub message: Option<String>,
 	/// Optionally set the output target slate version (acceptable
 	/// down to the minimum slate version compatible with the current. If `None` the slate
 	/// is generated with the latest version.
+	#[serde(default)]
 	pub target_slate_version: Option<u16>,
 	/// Number of blocks from current after which TX should be ignored
 	#[serde(with = "secp_ser::opt_string_or_u64")]
+	#[serde(default)]
 	pub ttl_blocks: Option<u64>,
 	/// If set, require a payment proof for the particular recipient
 	#[serde(with = "dalek_ser::option_dalek_pubkey_serde")]
+	#[serde(default)]
 	pub payment_proof_recipient_address: Option<DalekPublicKey>,
-	/// address of another party
+	/// address of another party to store in tx history.
+	#[serde(default)]
 	pub address: Option<String>,
 	/// If true, just return an estimate of the resulting slate, containing fees and amounts
 	/// locked without actually locking outputs or creating the transaction. Note if this is set to
 	/// 'true', the amount field in the slate will contain the total amount locked, not the provided
 	/// transaction amount
+	#[serde(default)]
 	pub estimate_only: Option<bool>,
 	/// Sender arguments. If present, the underlying function will also attempt to send the
 	/// transaction to a destination and optionally finalize the result
+	#[serde(default)]
 	pub send_args: Option<InitTxSendArgs>,
 }
 
@@ -116,12 +129,16 @@ pub struct InitTxSendArgs {
 	/// The destination, contents will depend on the particular method
 	pub dest: String,
 	/// receiver wallet apisecret. Applicable to http/https address only
+	#[serde(default)]
 	pub apisecret: Option<String>,
 	/// Whether to finalize the result immediately if the send was successful
+	#[serde(default = "InitTxSendArgs::default_finalize")]
 	pub finalize: bool,
 	/// Whether to post the transasction if the send and finalize were successful
+	#[serde(default = "InitTxSendArgs::default_post_tx")]
 	pub post_tx: bool,
 	/// Whether to use dandelion when posting. If false, skip the dandelion relay
+	#[serde(default = "InitTxSendArgs::default_fluff")]
 	pub fluff: bool,
 }
 
@@ -145,23 +162,54 @@ impl Default for InitTxArgs {
 	}
 }
 
+impl InitTxArgs {
+	fn default_minimum_confirmations() -> u64 {
+		10
+	}
+	fn default_max_outputs() -> u32 {
+		500
+	}
+	fn default_num_change_outputs() -> u32 {
+		1
+	}
+	fn default_selection_strategy_is_use_all() -> bool {
+		false
+	}
+}
+
+impl InitTxSendArgs {
+	fn default_finalize() -> bool {
+		true
+	}
+	fn default_post_tx() -> bool {
+		true
+	}
+	fn default_fluff() -> bool {
+		true
+	}
+}
+
 /// V2 Issue Invoice Tx Args
 #[derive(Clone, Serialize, Deserialize)]
 pub struct IssueInvoiceTxArgs {
 	/// The human readable account name to which the received funds should be added
 	/// overriding whatever the active account is as set via the
 	/// [`set_active_account`](../grin_wallet_api/owner/struct.Owner.html#method.set_active_account) method.
+	#[serde(default)]
 	pub dest_acct_name: Option<String>,
 	/// The invoice amount in nanogrins. (`1 G = 1_000_000_000nG`)
 	#[serde(with = "secp_ser::string_or_u64")]
 	pub amount: u64,
 	/// Optional message, that will be signed
+	#[serde(default)]
 	pub message: Option<String>,
 	/// Optionally set the output target slate version (acceptable
 	/// down to the minimum slate version compatible with the current. If `None` the slate
 	/// is generated with the latest version.
+	#[serde(default)]
 	pub target_slate_version: Option<u16>,
 	/// recipient address
+	#[serde(default)]
 	pub address: Option<String>,
 }
 
