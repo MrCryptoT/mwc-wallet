@@ -40,7 +40,7 @@ grin_wallet_config = { path = "./config", version = "3.1.4" }
 grin_wallet_util = { path = "./util", version = "3.1.4" }
 
 
-grin_wallet_mwcmqs = { path = "./mwcmqs", version = "3.0.0-beta.1" }
+grin_wallet_mwcmqs = { path = "./mwcmqs", version = "3.1.4" }
 
 
 

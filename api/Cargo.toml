@@ -26,6 +26,7 @@ ed25519-dalek = "1.0.0-pre.1"
 
 
 
+
 grin_wallet_libwallet = { path = "../libwallet", version = "3.1.4" }
 grin_wallet_config = { path = "../config", version = "3.1.4" }
 grin_wallet_impls = { path = "../impls", version = "3.1.4" }
@@ -33,7 +34,8 @@ grin_wallet_util = { path = "../util", version = "3.1.4" }
 
 
 
-grin_wallet_mwcmqs = { path = "../mwcmqs", version = "3.0.0-beta.1" }
+grin_wallet_mwcmqs = { path = "../mwcmqs", version = "3.1.4" }
+
 
 
 

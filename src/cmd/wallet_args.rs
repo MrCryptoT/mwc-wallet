@@ -30,6 +30,7 @@ use grin_wallet_libwallet::{
 	address, IssueInvoiceTxArgs, NodeClient, WalletInst, WalletLCProvider,
 };
 use grin_wallet_mwcmqs::backend::Backend;
+use grin_wallet_mwcmqs::tx_proof::TxProof;
 use grin_wallet_mwcmqs::types::AddressBook;
 use grin_wallet_util::grin_core as core;
 use grin_wallet_util::grin_core::core::amount_to_hr_string;
@@ -917,6 +918,9 @@ where
 		let lc = wallet_lock.lc_provider().unwrap();
 		let _ = lc.set_top_level_directory(&wallet_config.data_file_dir);
 	}
+	TxProof::init_proof_backend(&wallet_config.data_file_dir).unwrap_or_else(|e| {
+		println!("Unable to init proof_backend{}", e);
+	});
 
 	// provide wallet instance back to the caller (handy for testing with
 	// local wallet proxy, etc)

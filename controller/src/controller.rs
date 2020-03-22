@@ -52,6 +52,7 @@ use serde::{Deserialize, Serialize};
 use serde_json;
 use std::collections::HashMap;
 use std::net::SocketAddr;
+use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::Arc;
 
 use crate::impls::tor::config as tor_config;
@@ -203,6 +204,7 @@ where
 	pub wallet: Arc<Mutex<Box<dyn WalletInst<'static, L, C, K> + 'static>>>,
 	pub address_book: Arc<Mutex<AddressBook>>,
 	pub publisher: Box<dyn Publisher + Send>,
+	pub slate_send_channel: Option<Sender<Box<Slate>>>,
 }
 
 impl<L, C, K> Controller<L, C, K>
@@ -216,6 +218,7 @@ where
 		wallet: Arc<Mutex<Box<dyn WalletInst<'static, L, C, K>>>>,
 		address_book: Arc<Mutex<AddressBook>>,
 		publisher: Box<dyn Publisher + Send>,
+		slate_send_channel: Option<Sender<Box<Slate>>>,
 	) -> Result<Self, crate::libwallet::Error>
 	where
 		L: WalletLCProvider<'static, C, K>,
@@ -227,6 +230,7 @@ where
 			wallet,
 			address_book,
 			publisher,
+			slate_send_channel,
 		})
 	}
 
@@ -261,6 +265,14 @@ where
 			match apis::finalize_slate(self.wallet.clone(), slate, tx_proof) {
 				Err(_) => apis::finalize_invoice_slate(self.wallet.clone(), slate)?,
 				Ok(_) => (),
+			}
+
+			//send the slate to owner Api.
+			let result_string = String::from("finalized");
+			if let Some(s) = &self.slate_send_channel {
+				//let _ = s.send(result_string);
+				let slate_immutable = slate.clone();
+				let _ = s.send(Box::new(slate_immutable));
 			}
 
 			Ok(true)
@@ -366,6 +378,8 @@ where
 				Ok(())
 			});
 
+		//send the message back
+
 		match result {
 			Ok(()) => {}
 			Err(e) => println!("{}", e),
@@ -401,6 +415,7 @@ fn start_mwcmqs_listener<L, C, K>(
 	config: &MQSConfig,
 	wallet: Arc<Mutex<Box<dyn WalletInst<'static, L, C, K>>>>,
 	address_book: Arc<Mutex<AddressBook>>,
+	slate_send_channel: Option<Sender<Box<Slate>>>,
 ) -> Result<(MWCMQPublisher, MWCMQSubscriber), Error>
 where
 	L: WalletLCProvider<'static, C, K> + 'static,
@@ -429,6 +444,7 @@ where
 				wallet,
 				address_book.clone(),
 				Box::new(cloned_publisher),
+				slate_send_channel,
 			)
 			.expect("could not start mwcmqs controller!");
 			cloned_subscriber
@@ -482,33 +498,11 @@ where
 		running_foreign = true;
 	}
 
-	let api_handler_v2 = OwnerAPIHandlerV2::new(wallet.clone());
-	let api_handler_v3 = OwnerAPIHandlerV3::new(
-		wallet.clone(),
-		keychain_mask.clone(),
-		tor_config,
-		running_foreign,
-	);
-
-	router
-		.add_route("/v2/owner", Arc::new(api_handler_v2))
-		.map_err(|_| ErrorKind::GenericError("Router failed to add route".to_string()))?;
-
-	router
-		.add_route("/v3/owner", Arc::new(api_handler_v3))
-		.map_err(|_| ErrorKind::GenericError("Router failed to add route".to_string()))?;
-
-	// If so configured, add the foreign API to the same port
-	if running_foreign {
-		warn!("Starting HTTP Foreign API on Owner server at {}.", addr);
-		let foreign_api_handler_v2 = ForeignAPIHandlerV2::new(wallet.clone(), keychain_mask);
-		router
-			.add_route("/v2/foreign", Arc::new(foreign_api_handler_v2))
-			.map_err(|_| ErrorKind::GenericError("Router failed to add route".to_string()))?;
-	}
+	let (tx, rx) = channel();
 
 	// If so configured, run mqs listener
 	//mqs feature
+	let mut mwcmqs_broker: Option<(MWCMQPublisher, MWCMQSubscriber)> = None;
 	if running_mqs {
 		warn!("Starting MWCMQS Listener");
 		//create MQSConifg from the WalletConfig.
@@ -524,10 +518,8 @@ where
 			_ => {}
 		}
 
-		let mut mwcmqs_broker: Option<(MWCMQPublisher, MWCMQSubscriber)> = None;
-
 		//start mwcmqs listener
-		let result = start_mwcmqs_listener(&mqs_config, wallet, address_book);
+		let result = start_mwcmqs_listener(&mqs_config, wallet.clone(), address_book, Some(tx));
 		match result {
 			Err(e) => {
 				warn!("Error starting MWCMQS listener: {}", e);
@@ -536,6 +528,39 @@ where
 				mwcmqs_broker = Some((publisher, subscriber));
 			}
 		}
+	}
+	let mwcmqs_broker_withlock = Arc::new(Mutex::new(mwcmqs_broker));
+	let rx_withlock = Arc::new(Mutex::new(Some(rx)));
+
+	let api_handler_v2 = OwnerAPIHandlerV2::new(
+		wallet.clone(),
+		mwcmqs_broker_withlock.clone(),
+		rx_withlock.clone(),
+	);
+	let api_handler_v3 = OwnerAPIHandlerV3::new(
+		wallet.clone(),
+		keychain_mask.clone(),
+		tor_config,
+		running_foreign,
+		mwcmqs_broker_withlock,
+		rx_withlock,
+	);
+
+	router
+		.add_route("/v2/owner", Arc::new(api_handler_v2))
+		.map_err(|_| ErrorKind::GenericError("Router failed to add route".to_string()))?;
+
+	router
+		.add_route("/v3/owner", Arc::new(api_handler_v3))
+		.map_err(|_| ErrorKind::GenericError("Router failed to add route".to_string()))?;
+
+	// If so configured, add the foreign API to the same port
+	if running_foreign {
+		warn!("Starting HTTP Foreign API on Owner server at {}.", addr);
+		let foreign_api_handler_v2 = ForeignAPIHandlerV2::new(wallet, keychain_mask);
+		router
+			.add_route("/v2/foreign", Arc::new(foreign_api_handler_v2))
+			.map_err(|_| ErrorKind::GenericError("Router failed to add route".to_string()))?;
 	}
 
 	let mut apis = ApiServer::new();
@@ -615,6 +640,8 @@ where
 {
 	/// Wallet instance
 	pub wallet: Arc<Mutex<Box<dyn WalletInst<'static, L, C, K> + 'static>>>,
+	mwcmqs_broker: Arc<Mutex<Option<(MWCMQPublisher, MWCMQSubscriber)>>>,
+	rx_withlock: Arc<Mutex<Option<Receiver<Box<Slate>>>>>,
 }
 
 impl<L, C, K> OwnerAPIHandlerV2<L, C, K>
@@ -626,8 +653,14 @@ where
 	/// Create a new owner API handler for GET methods
 	pub fn new(
 		wallet: Arc<Mutex<Box<dyn WalletInst<'static, L, C, K> + 'static>>>,
+		mwcmqs_broker: Arc<Mutex<Option<(MWCMQPublisher, MWCMQSubscriber)>>>,
+		rx_withlock: Arc<Mutex<Option<Receiver<Box<Slate>>>>>,
 	) -> OwnerAPIHandlerV2<L, C, K> {
-		OwnerAPIHandlerV2 { wallet }
+		OwnerAPIHandlerV2 {
+			wallet,
+			mwcmqs_broker,
+			rx_withlock,
+		}
 	}
 
 	fn call_api(
@@ -652,7 +685,9 @@ where
 	}
 
 	fn handle_post_request(&self, req: Request<Body>) -> WalletResponseFuture {
-		let api = Owner::new(self.wallet.clone());
+		let mut api = Owner::new(self.wallet.clone());
+		//check to see if mqs listener is started, if it is started, pass it to Owner.rs
+		api.set_mqs_broker(self.mwcmqs_broker.clone(), self.rx_withlock.clone());
 		Box::new(
 			self.call_api(req, api)
 				.and_then(|resp| ok(json_response_pretty(&resp))),
@@ -926,9 +961,12 @@ where
 		keychain_mask: Arc<Mutex<Option<SecretKey>>>,
 		tor_config: Option<TorConfig>,
 		running_foreign: bool,
+		mwcmqs_broker: Arc<Mutex<Option<(MWCMQPublisher, MWCMQSubscriber)>>>,
+		rx_withlock: Arc<Mutex<Option<Receiver<Box<Slate>>>>>,
 	) -> OwnerAPIHandlerV3<L, C, K> {
-		let owner_api = Owner::new(wallet.clone());
+		let mut owner_api = Owner::new(wallet.clone());
 		owner_api.set_tor_config(tor_config);
+		owner_api.set_mqs_broker(mwcmqs_broker, rx_withlock);
 		let owner_api = Arc::new(owner_api);
 		OwnerAPIHandlerV3 {
 			wallet,

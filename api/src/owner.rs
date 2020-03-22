@@ -33,8 +33,13 @@ use crate::libwallet::{
 use crate::util::logger::LoggingConfig;
 use crate::util::secp::key::SecretKey;
 use crate::util::{from_hex, static_secp_instance, Mutex, ZeroingString};
+use grin_wallet_mwcmqs::mwcmq::MWCMQPublisher;
+use grin_wallet_mwcmqs::mwcmq::MWCMQSubscriber;
+use grin_wallet_mwcmqs::mwcmq::Publisher;
+use grin_wallet_mwcmqs::types::Address;
+use grin_wallet_mwcmqs::types::MWCMQSAddress;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::{channel, Sender};
+use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::Arc;
 use std::thread;
 use std::thread::JoinHandle;
@@ -83,6 +88,8 @@ where
 	updater_log_thread: Option<JoinHandle<()>>,
 	// Atomic to stop the thread
 	updater_log_running_state: Arc<AtomicBool>,
+	mwcmqs_broker: Arc<Mutex<Option<(MWCMQPublisher, MWCMQSubscriber)>>>,
+	rx_withlock: Arc<Mutex<Option<Receiver<Box<Slate>>>>>,
 }
 
 // Owner need to release the resources. We have a thread that is running in background
@@ -211,6 +218,8 @@ where
 			tor_config: Mutex::new(None),
 			updater_log_thread: Some(handle),
 			updater_log_running_state: running,
+			mwcmqs_broker: Arc::new(Mutex::new(None)),
+			rx_withlock: Arc::new(Mutex::new(None)),
 		}
 	}
 
@@ -225,6 +234,25 @@ where
 	pub fn set_tor_config(&self, tor_config: Option<TorConfig>) {
 		let mut lock = self.tor_config.lock();
 		*lock = tor_config;
+	}
+
+	/// Set mqs_broker for this instance of the OwnerAPI, used during
+	/// `init_send_tx` when send args are present and a mqs address is specified
+	///
+	/// # Arguments
+	/// * `mwcmqs_broker`
+	/// # Returns
+	/// * Nothing
+
+	pub fn set_mqs_broker(
+		&mut self,
+		mwcmqs_broker: Arc<Mutex<Option<(MWCMQPublisher, MWCMQSubscriber)>>>,
+		rx_withlock: Arc<Mutex<Option<Receiver<Box<Slate>>>>>,
+	) {
+		//		let mut lock = self.mwcmqs_broker.lock();
+		//		*lock = mwcmqs_broker;
+		self.mwcmqs_broker = mwcmqs_broker;
+		self.rx_withlock = rx_withlock;
 	}
 
 	/// Returns a list of accounts stored in the wallet (i.e. mappings between
@@ -687,7 +715,50 @@ where
 			Some(sa) => {
 				//TODO: in case of keybase, the response might take 60s and leave the service hanging
 				match sa.method.as_ref() {
-					"http" | "keybase" => {}
+					"mwcmqs" => {
+						//to do the implementation here;
+						let mwcmqs_broker_lock = self.mwcmqs_broker.lock();
+						if let Some(i) = &*mwcmqs_broker_lock {
+							//let mwcmqs_publisher  = *mwcmqs_broker_lock.map(|(p, _)| p);
+							let mwcmqs_publisher = &i.0;
+							let des_address = MWCMQSAddress::from_str(sa.dest.as_str());
+							if des_address.is_ok() {
+								let des_address = des_address.unwrap();
+								let _res = mwcmqs_publisher.post_slate(&slate, &des_address);
+							}
+						}
+						self.tx_lock_outputs(keychain_mask, &slate, address, 0)?;
+						//here the workflow has some problem, the finalization and post of transaction will be automatically done
+						//from the mqs subscription handler thread started in controller.rs
+
+						//expect to get the ok message
+						let rx_withlock = self.rx_withlock.lock();
+						if let Some(i) = &*rx_withlock {
+							let rx = &i;
+							//yang todo move to config later
+							let slate_returned = rx.recv_timeout(Duration::from_secs(30)).unwrap();
+							//let slate_returned = rx.recv().unwrap();
+							println!("got the message from the mqs handler ");
+							return Ok(*slate_returned);
+						}
+
+						return Err(ErrorKind::ClientCallback(
+							"request timeout, please use txs api to check the status".to_owned(),
+						)
+						.into());
+					}
+
+					"http" | "keybase" => {
+						let tor_config_lock = self.tor_config.lock();
+						let comm_adapter = create_sender(
+							&sa.method,
+							&sa.dest,
+							&sa.apisecret,
+							tor_config_lock.clone(),
+						)
+						.map_err(|e| ErrorKind::GenericError(format!("{}", e)))?;
+						slate = comm_adapter.send_tx(&slate)?;
+					}
 					_ => {
 						error!("unsupported payment method: {}", sa.method);
 						return Err(ErrorKind::ClientCallback(
@@ -696,11 +767,6 @@ where
 						.into());
 					}
 				};
-				let tor_config_lock = self.tor_config.lock();
-				let comm_adapter =
-					create_sender(&sa.method, &sa.dest, &sa.apisecret, tor_config_lock.clone())
-						.map_err(|e| ErrorKind::GenericError(format!("{}", e)))?;
-				slate = comm_adapter.send_tx(&slate)?;
 				self.tx_lock_outputs(keychain_mask, &slate, address, 0)?;
 				let slate = match sa.finalize {
 					true => self.finalize_tx(keychain_mask, &slate)?,

@@ -1,6 +1,6 @@
 [package]
 name = "grin_wallet_mwcmqs"
-version = "3.0.0-beta.1"
+version = "3.1.4"
 authors = ["Grin Developers <mimblewimble@lists.launchpad.net>"]
 description = "Common libraries for grin wallet , a simple, private and scalable cryptocurrency implementation based on the MimbleWimble chain format."
 license = "Apache-2.0"
@@ -32,10 +32,10 @@ sha2 = "0.7"
 serde_derive = "1"
 
 
-grin_wallet_util = { path = "../util", version = "3.0.0-beta.1" }
-grin_wallet_libwallet = { path = "../libwallet", version = "3.0.0-beta.1" }
-grin_wallet_impls = { path = "../impls", version = "3.0.0-beta.1" }
-grin_wallet_config = { path = "../config", version = "3.0.0-beta.1" }
+grin_wallet_util = { path = "../util", version = "3.1.4" }
+grin_wallet_libwallet = { path = "../libwallet", version = "3.1.4" }
+grin_wallet_impls = { path = "../impls", version = "3.1.4" }
+grin_wallet_config = { path = "../config", version = "3.1.4" }
 
 [dev-dependencies]
 pretty_assertions = "0.5.1"

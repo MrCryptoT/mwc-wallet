@@ -30,8 +30,8 @@ pub fn is_cli() -> bool {
 	unsafe { RUNTIME_MODE == RuntimeMode::Cli }
 }
 
-pub const COLORED_PROMPT: &'static str = "\x1b[36mwallet713>\x1b[0m ";
-pub const PROMPT: &'static str = "wallet713> ";
+pub const COLORED_PROMPT: &'static str = "\x1b[36mmwc-wallet>\x1b[0m ";
+pub const PROMPT: &'static str = "mwc-wallet> ";
 
 pub fn post<IN>(
 	url: &str,
