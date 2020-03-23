@@ -726,8 +726,13 @@ where
 								let des_address = des_address.unwrap();
 								let _res = mwcmqs_publisher.post_slate(&slate, &des_address);
 							}
+						} else {
+							return Err(ErrorKind::ClientCallback(
+								"mqs is not started, not able to send the request".to_owned(),
+							)
+							.into());
 						}
-						self.tx_lock_outputs(keychain_mask, &slate, address, 0)?;
+						self.tx_lock_outputs(keychain_mask, &slate, address.clone(), 0)?;
 						//here the workflow has some problem, the finalization and post of transaction will be automatically done
 						//from the mqs subscription handler thread started in controller.rs
 
@@ -736,16 +741,27 @@ where
 						if let Some(i) = &*rx_withlock {
 							let rx = &i;
 							//yang todo move to config later
-							let slate_returned = rx.recv_timeout(Duration::from_secs(30)).unwrap();
-							//let slate_returned = rx.recv().unwrap();
-							println!("got the message from the mqs handler ");
-							return Ok(*slate_returned);
+							let slate_returned = rx.recv_timeout(Duration::from_secs(30));
+							println!("got the message or error from the mqs handler ");
+							match slate_returned {
+								Ok(s) => return Ok(*s),
+								_ => {
+									return Err(ErrorKind::ClientCallback(
+										"request timeout, please use txs api to check the status"
+											.to_owned(),
+									)
+									.into())
+								}
+							}
+							//							//let slate_returned = rx.recv().unwrap();
+							//							println!("got the message from the mqs handler ");
+							//							return Ok(*slate_returned);
 						}
 
-						return Err(ErrorKind::ClientCallback(
-							"request timeout, please use txs api to check the status".to_owned(),
-						)
-						.into());
+						//						return Err(ErrorKind::ClientCallback(
+						//							"request timeout, please use txs api to check the status".to_owned(),
+						//						)
+						//						.into());
 					}
 
 					"http" | "keybase" => {
