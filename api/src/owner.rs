@@ -742,7 +742,6 @@ where
 							let rx = &i;
 							//yang todo move to config later
 							let slate_returned = rx.recv_timeout(Duration::from_secs(30));
-							println!("got the message or error from the mqs handler ");
 							match slate_returned {
 								Ok(s) => return Ok(*s),
 								_ => {

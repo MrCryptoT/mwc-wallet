@@ -205,6 +205,7 @@ where
 	pub address_book: Arc<Mutex<AddressBook>>,
 	pub publisher: Box<dyn Publisher + Send>,
 	pub slate_send_channel: Option<Sender<Box<Slate>>>,
+	pub max_auto_accept_invoice: Option<u64>,
 }
 
 impl<L, C, K> Controller<L, C, K>
@@ -231,7 +232,11 @@ where
 			address_book,
 			publisher,
 			slate_send_channel,
+			max_auto_accept_invoice: None,
 		})
+	}
+	fn set_max_auto_accept_invoice(&mut self, max_auto_accept_invoice: Option<u64>) {
+		self.max_auto_accept_invoice = max_auto_accept_invoice;
 	}
 
 	fn process_incoming_slate(
@@ -240,6 +245,7 @@ where
 		slate: &mut Slate,
 		tx_proof: Option<&mut TxProof>,
 		_config: Option<MQSConfig>,
+		max_auto_accept_invoice: Option<u64>,
 		dest_acct_name: Option<&str>,
 	) -> Result<bool, Error> {
 		if slate.num_participants > slate.participant_data.len() {
@@ -248,6 +254,7 @@ where
 				apis::process_receiver_initiated_slate(
 					self.wallet.clone(),
 					slate,
+					self.max_auto_accept_invoice,
 					address.clone(),
 				)?;
 			} else {
@@ -353,6 +360,7 @@ where
 				slate,
 				tx_proof,
 				config,
+				self.max_auto_accept_invoice,
 				Some(&account),
 			)
 			.and_then(|is_finalized| {
@@ -415,6 +423,7 @@ fn start_mwcmqs_listener<L, C, K>(
 	config: &MQSConfig,
 	wallet: Arc<Mutex<Box<dyn WalletInst<'static, L, C, K>>>>,
 	address_book: Arc<Mutex<AddressBook>>,
+	max_auto_accept_invoice: Option<u64>,
 	slate_send_channel: Option<Sender<Box<Slate>>>,
 ) -> Result<(MWCMQPublisher, MWCMQSubscriber), Error>
 where
@@ -439,7 +448,7 @@ where
 	let _ = thread::Builder::new()
 		.name("mwcmqs-broker".to_string())
 		.spawn(move || {
-			let controller = Controller::new(
+			let mut controller = Controller::new(
 				&mwcmqs_address.stripped(),
 				wallet,
 				address_book.clone(),
@@ -447,6 +456,7 @@ where
 				slate_send_channel,
 			)
 			.expect("could not start mwcmqs controller!");
+			controller.set_max_auto_accept_invoice(max_auto_accept_invoice);
 			cloned_subscriber
 				.start(Box::new(controller))
 				.expect("something went wrong!");
@@ -519,7 +529,13 @@ where
 		}
 
 		//start mwcmqs listener
-		let result = start_mwcmqs_listener(&mqs_config, wallet.clone(), address_book, Some(tx));
+		let result = start_mwcmqs_listener(
+			&mqs_config,
+			wallet.clone(),
+			address_book,
+			config.max_auto_accept_invoice,
+			Some(tx),
+		);
 		match result {
 			Err(e) => {
 				warn!("Error starting MWCMQS listener: {}", e);

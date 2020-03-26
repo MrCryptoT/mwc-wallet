@@ -123,7 +123,7 @@ pub fn initial_setup_wallet(
 ) -> Result<GlobalWalletConfig, ConfigError> {
 	check_api_secret_file(chain_type, data_path.clone(), OWNER_API_SECRET_FILE_NAME)?;
 	check_api_secret_file(chain_type, data_path.clone(), API_SECRET_FILE_NAME)?;
-	// Use config file if current directory if it exists, .grin home otherwise
+	// Use config file in current directory if it exists, .grin home otherwise
 	if let Some(p) = check_config_current_dir(WALLET_CONFIG_FILE_NAME) {
 		GlobalWalletConfig::new(p.to_str().unwrap())
 	} else {

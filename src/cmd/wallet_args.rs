@@ -882,6 +882,11 @@ where
 	node_client.set_node_url(&wallet_config.check_node_api_http_addr);
 	node_client.set_node_api_secret(global_wallet_args.node_api_secret.clone());
 
+	//create the tx_proof dir inside the wallet_data folder.
+	TxProof::init_proof_backend(&wallet_config.data_file_dir).unwrap_or_else(|e| {
+		println!("Unable to init proof_backend{}", e);
+	});
+
 	// legacy hack to avoid the need for changes in existing mwc-wallet.toml files
 	// remove `wallet_data` from end of path as
 	// new lifecycle provider assumes mwc_wallet.toml is in root of data directory
@@ -918,9 +923,6 @@ where
 		let lc = wallet_lock.lc_provider().unwrap();
 		let _ = lc.set_top_level_directory(&wallet_config.data_file_dir);
 	}
-	TxProof::init_proof_backend(&wallet_config.data_file_dir).unwrap_or_else(|e| {
-		println!("Unable to init proof_backend{}", e);
-	});
 
 	// provide wallet instance back to the caller (handy for testing with
 	// local wallet proxy, etc)

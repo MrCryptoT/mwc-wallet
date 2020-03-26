@@ -283,6 +283,10 @@ pub enum ErrorKind {
 	///added with mqs feature
 	#[fail(display = "\x1b[31;1merror:\x1b[0m failed posting transaction!")]
 	GrinWalletPostError,
+
+	///rejecting invoice as auto invoice acceptance is turned off
+	#[fail(display = "rejecting invoice as auto invoice acceptance is turned off!")]
+	DoesNotAcceptInvoices,
 }
 
 impl Display for Error {

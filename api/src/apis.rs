@@ -14,6 +14,7 @@ use crate::libwallet::{ErrorKind, NodeClient, Slate, WalletInst, WalletLCProvide
 pub fn process_receiver_initiated_slate<'a, L, C, K>(
 	wallet: Arc<Mutex<Box<dyn WalletInst<'a, L, C, K>>>>,
 	slate: &mut Slate,
+	max_auto_accept_invoice: Option<u64>,
 	address: Option<String>,
 ) -> Result<(), Error>
 where
@@ -22,13 +23,9 @@ where
 	K: Keychain + 'a,
 {
 	// reject by default unless wallet is set to auto accept invoices under a certain threshold
-	//lock the wallet
-	//	let max_auto_accept_invoice = self
-	//		.max_auto_accept_invoice
-	//		.ok_or(ErrorKind::DoesNotAcceptInvoices)?;
 
-	//yang todo get this number from some config file.
-	let max_auto_accept_invoice = 50000000000;
+	let max_auto_accept_invoice =
+		max_auto_accept_invoice.ok_or(ErrorKind::DoesNotAcceptInvoices)?;
 
 	if slate.amount > max_auto_accept_invoice {
 		Err(ErrorKind::InvoiceAmountTooBig(slate.amount))?;
@@ -195,6 +192,7 @@ where
 	C: NodeClient + 'a,
 	K: Keychain + 'a,
 {
+	//println!("slate = {:?}", slate);
 	verify_slate_messages(&slate).map_err(|_| ErrorKind::GrinWalletVerifySlateMessagesError)?;
 
 	let should_post = finalize_tx(wallet.clone(), slate, tx_proof)

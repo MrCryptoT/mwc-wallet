@@ -45,6 +45,8 @@ pub struct WalletConfig {
 	pub owner_api_include_foreign: Option<bool>,
 	/// Whether to include the mwcmqs listener
 	pub owner_api_include_mqs_listener: Option<bool>,
+	///To enable this amount for an invoice amount, for example if the value is 50000000000 that is 50 mwc or less,
+	pub max_auto_accept_invoice: Option<u64>,
 	/// mwcmqs domain
 	pub mwcmqs_domain: Option<String>,
 	/// mwcmqs port
@@ -83,6 +85,7 @@ impl Default for WalletConfig {
 			owner_api_include_mqs_listener: Some(false),
 			mwcmqs_domain: None,
 			mwcmqs_port: None,
+			max_auto_accept_invoice: Some(50000000000),
 			data_file_dir: ".".to_string(),
 			grinbox_address_index: None,
 			no_commit_cache: Some(false),
