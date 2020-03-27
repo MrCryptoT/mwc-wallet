@@ -698,6 +698,19 @@ where
 	) -> Result<Slate, Error> {
 		let send_args = args.send_args.clone();
 		let address = args.address.clone();
+		//minimum_confirmations cannot be zero.
+		let minimum_confirmations = args.minimum_confirmations.clone();
+		println!(
+			"minimum_confirmations = args.minimum_confirmations.clone(); {}",
+			minimum_confirmations
+		);
+		if minimum_confirmations == 0 {
+			return Err(ErrorKind::ClientCallback(
+				"minimum_confirmations can not be zero".to_owned(),
+			)
+			.into());
+		}
+
 		let mut slate = {
 			let mut w_lock = self.wallet_inst.lock();
 			let w = w_lock.lc_provider()?.wallet_inst()?;
@@ -903,6 +916,14 @@ where
 		slate: &Slate,
 		args: InitTxArgs,
 	) -> Result<Slate, Error> {
+		//minimum_confirmations cannot be zero.
+		let minimum_confirmations = args.minimum_confirmations.clone();
+		if minimum_confirmations == 0 {
+			return Err(ErrorKind::ClientCallback(
+				"minimum_confirmations can not be zero".to_owned(),
+			)
+			.into());
+		}
 		let mut w_lock = self.wallet_inst.lock();
 		let w = w_lock.lc_provider()?.wallet_inst()?;
 		owner::process_invoice_tx(&mut **w, keychain_mask, slate, args, self.doctest_mode)
