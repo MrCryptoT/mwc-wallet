@@ -127,6 +127,7 @@ pub fn listen<L, C, K>(
 	tor_config: &TorConfig,
 	args: &ListenArgs,
 	g_args: &GlobalArgs,
+	address_book: Arc<Mutex<AddressBook>>,
 ) -> Result<(), Error>
 where
 	L: WalletLCProvider<'static, C, K> + 'static,
@@ -147,6 +148,9 @@ where
 			&g_args.account,
 			g_args.node_api_secret.clone(),
 		),
+		"mwcmqs" => {
+			controller::init_start_mwcmqs_listener(config.clone(), wallet.clone(), address_book)
+		}
 		method => {
 			return Err(ErrorKind::ArgumentError(format!(
 				"No listener for method \"{}\".",
@@ -264,6 +268,7 @@ pub fn send<L, C, K>(
 	tor_config: Option<TorConfig>,
 	args: SendArgs,
 	dark_scheme: bool,
+	address_book: Arc<Mutex<AddressBook>>,
 ) -> Result<(), Error>
 where
 	L: WalletLCProvider<'static, C, K> + 'static,

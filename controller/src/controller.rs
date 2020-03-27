@@ -245,7 +245,6 @@ where
 		slate: &mut Slate,
 		tx_proof: Option<&mut TxProof>,
 		_config: Option<MQSConfig>,
-		max_auto_accept_invoice: Option<u64>,
 		dest_acct_name: Option<&str>,
 	) -> Result<bool, Error> {
 		if slate.num_participants > slate.participant_data.len() {
@@ -275,7 +274,6 @@ where
 			}
 
 			//send the slate to owner Api.
-			let result_string = String::from("finalized");
 			if let Some(s) = &self.slate_send_channel {
 				//let _ = s.send(result_string);
 				let slate_immutable = slate.clone();
@@ -360,7 +358,6 @@ where
 				slate,
 				tx_proof,
 				config,
-				self.max_auto_accept_invoice,
 				Some(&account),
 			)
 			.and_then(|is_finalized| {
@@ -418,6 +415,43 @@ where
 	}
 }
 
+pub fn init_start_mwcmqs_listener<L, C, K>(
+	config: WalletConfig,
+	wallet: Arc<Mutex<Box<dyn WalletInst<'static, L, C, K>>>>,
+	address_book: Arc<Mutex<AddressBook>>,
+) -> Result<(), crate::libwallet::Error>
+where
+	L: WalletLCProvider<'static, C, K> + 'static,
+	C: NodeClient + 'static,
+	K: Keychain + 'static,
+{
+	warn!("Starting MWCMQS Listener");
+	//create MQSConifg from the WalletConfig.
+	let mut mqs_config: MQSConfig = MQSConfig::default(&config);
+
+	let index = config.grinbox_address_index();
+	//update the mqsConfig.
+	let key = controller_derive_address_key(wallet.clone(), index);
+	match key {
+		Ok(s_key) => {
+			mqs_config.mwcmqs_key = Some(s_key);
+		}
+		_ => {}
+	}
+
+	//start mwcmqs listener
+	start_mwcmqs_listener(
+		&mqs_config,
+		wallet.clone(),
+		address_book,
+		config.max_auto_accept_invoice,
+		None,
+		true,
+	)
+	.map_err(|_| ErrorKind::GenericError("cannot start mqs listener".to_string()))?;
+	Ok(())
+}
+
 /// Start the mqs listener
 fn start_mwcmqs_listener<L, C, K>(
 	config: &MQSConfig,
@@ -425,6 +459,7 @@ fn start_mwcmqs_listener<L, C, K>(
 	address_book: Arc<Mutex<AddressBook>>,
 	max_auto_accept_invoice: Option<u64>,
 	slate_send_channel: Option<Sender<Box<Slate>>>,
+	wait_for_thread: bool,
 ) -> Result<(MWCMQPublisher, MWCMQSubscriber), Error>
 where
 	L: WalletLCProvider<'static, C, K> + 'static,
@@ -445,7 +480,7 @@ where
 	let cloned_publisher = mwcmqs_publisher.clone();
 	let mut cloned_subscriber = mwcmqs_subscriber.clone();
 
-	let _ = thread::Builder::new()
+	let thread = thread::Builder::new()
 		.name("mwcmqs-broker".to_string())
 		.spawn(move || {
 			let mut controller = Controller::new(
@@ -461,6 +496,9 @@ where
 				.start(Box::new(controller))
 				.expect("something went wrong!");
 		})?;
+	if wait_for_thread {
+		thread.join();
+	}
 
 	Ok((mwcmqs_publisher, mwcmqs_subscriber))
 }
@@ -535,7 +573,9 @@ where
 			address_book,
 			config.max_auto_accept_invoice,
 			Some(tx),
+			false,
 		);
+		//let result = init_start_mwcmqs_listener(config.clone(), wallet.clone(),address_book);
 		match result {
 			Err(e) => {
 				warn!("Error starting MWCMQS listener: {}", e);

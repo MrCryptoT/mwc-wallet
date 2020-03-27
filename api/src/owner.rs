@@ -704,9 +704,9 @@ where
 			"minimum_confirmations = args.minimum_confirmations.clone(); {}",
 			minimum_confirmations
 		);
-		if minimum_confirmations == 0 {
+		if minimum_confirmations < 1 {
 			return Err(ErrorKind::ClientCallback(
-				"minimum_confirmations can not be zero".to_owned(),
+				"minimum_confirmations can not be smaller than 1".to_owned(),
 			)
 			.into());
 		}
@@ -918,9 +918,9 @@ where
 	) -> Result<Slate, Error> {
 		//minimum_confirmations cannot be zero.
 		let minimum_confirmations = args.minimum_confirmations.clone();
-		if minimum_confirmations == 0 {
+		if minimum_confirmations < 1 {
 			return Err(ErrorKind::ClientCallback(
-				"minimum_confirmations can not be zero".to_owned(),
+				"minimum_confirmations can not smaller than 1".to_owned(),
 			)
 			.into());
 		}

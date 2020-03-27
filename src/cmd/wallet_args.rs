@@ -1004,6 +1004,7 @@ where
 				&t,
 				&a,
 				&global_wallet_args.clone(),
+				address_book.clone(),
 			)
 		}
 		("owner_api", Some(args)) => {
@@ -1040,6 +1041,7 @@ where
 				Some(tor_config),
 				a,
 				wallet_config.dark_background_color_scheme.unwrap_or(true),
+				address_book.clone(),
 			)
 		}
 		("receive", Some(args)) => {

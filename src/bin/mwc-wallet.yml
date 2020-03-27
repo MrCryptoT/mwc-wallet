@@ -67,6 +67,7 @@ subcommands:
             possible_values:
               - http
               - keybase
+              - mwcmqs
             default_value: http
             takes_value: true
         - no_tor:
