@@ -98,7 +98,7 @@ fn updater_thread_test_impl(test_dir: &'static str) -> Result<(), libwallet::Err
 	thread::sleep(Duration::from_secs(10));
 
 	let messages = owner_api.get_updater_messages(1000)?;
-	assert!(messages.len() >= 25); // grin has 32 lines, mwc has 25 lines.  We don't want ot validate content, it will change. Just checking that it alive.
+	assert!(messages.len() >= 15); // grin has 32 lines, mwc has 25 lines.  We don't want ot validate content, it will change. Just checking that it alive.
 
 	owner_api.stop_updater()?;
 	thread::sleep(Duration::from_secs(2));
