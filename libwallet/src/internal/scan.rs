@@ -604,8 +604,30 @@ where
 		let client = w.w2n_client().clone();
 		let keychain = w.keychain(keychain_mask)?.clone();
 
-		let blocks: Vec<grin_api::BlockPrintable> =
-			client.get_blocks_by_height(start_height, end_height, SYNC_BLOCKS_THREADS, true)?;
+		let mut blocks: Vec<grin_api::BlockPrintable> = Vec::new();
+
+		let mut cur_height = start_height;
+		while cur_height<=end_height {
+			// next block to request the data
+			let next_h = cmp::min(end_height, cur_height + (SYNC_BLOCKS_THREADS*SYNC_BLOCKS_THREADS-1) as u64 );
+
+			// printing the progress
+			if let Some(ref s) = status_send_channel {
+				let msg = format!(
+					"Checking {} blocks, Height: {} - {}",
+					next_h-cur_height+1,
+					cur_height,
+					next_h,
+				);
+				// 10 - 90 %
+				let perc_complete =  ((next_h+cur_height)/2 - start_height) * 80 / (end_height - start_height+1) + 10;
+				let _ = s.send(StatusMessage::Scanning(show_progress, msg, perc_complete as u8));
+			}
+
+			blocks.extend(client.get_blocks_by_height(cur_height, next_h, SYNC_BLOCKS_THREADS, true)?);
+			cur_height = next_h+1;
+		}
+		assert!(blocks.len() as u64 == end_height - start_height + 1);
 
 		// commit, range_proof, is_coinbase, block_height, mmr_index,
 		let mut node_outputs: Vec<(pedersen::Commitment, pedersen::RangeProof, bool, u64, u64)> =

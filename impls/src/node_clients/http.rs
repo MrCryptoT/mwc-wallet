@@ -25,6 +25,7 @@ use crate::libwallet::{NodeClient, NodeVersionInfo, TxWrapper};
 use semver::Version;
 use std::collections::HashMap;
 use tokio::runtime::Builder;
+use tokio::runtime::Runtime;
 
 use crate::client_utils::Client;
 use crate::libwallet;
@@ -400,35 +401,43 @@ impl NodeClient for HTTPNodeClient {
 		assert!(threads_number>0 && threads_number<20, "Please use a sane positive number for the wallet that can be connected to the shareable node");
 		assert!(start_height <= end_height);
 
-		let mut tasks = Vec::new();
 		let client = Client::new();
 		let addr = self.node_url();
 
 		let query = if include_proof { "?include_proof" } else { "" };
 
-		for height in start_height..=end_height {
-			let url = format!("{}/v1/blocks/{}{}", addr, height, query);
-			tasks.push(
-				client.get_async::<api::BlockPrintable>(url.as_str(), self.node_api_secret()),
-			);
-		}
+		let mut result_blocks: Vec<api::BlockPrintable> = Vec::new();
+		let mut rt = Runtime::new().unwrap();
 
-		let task = stream::futures_unordered(tasks).collect();
+		let mut height = start_height;
 
-		let mut rt = Builder::new().core_threads(threads_number).build().unwrap();
-		let res = rt.block_on(task);
-		let _ = rt.shutdown_now().wait();
-
-		match res {
-			Ok(blocks) => Ok(blocks),
-			Err(e) => {
-				let report = format!(
-					"get_blocks_by_height: error contacting {}. Error: {}",
-					addr, e
+		while height <= end_height {
+			let mut tasks = Vec::new();
+			while tasks.len()<threads_number && height <= end_height {
+				let url = format!("{}/v1/blocks/{}{}", addr, height, query);
+				tasks.push(
+					client.get_async::<api::BlockPrintable>(url.as_str(), self.node_api_secret())
 				);
-				error!("{}", report);
-				Err(libwallet::ErrorKind::ClientCallback(report).into())
+				height+=1;
+			}
+
+			let task = stream::futures_unordered(tasks).collect();
+			let res = rt.block_on(task);
+			match res {
+					Ok(blocks) => result_blocks.extend(blocks),
+					Err(e) => {
+						let report = format!(
+							"get_blocks_by_height: error contacting {}. Error: {}",
+							addr, e
+						);
+						error!("{}", report);
+						return Err(libwallet::ErrorKind::ClientCallback(report).into())
+					}
 			}
 		}
+
+		let _ = rt.shutdown_now().wait();
+
+		Ok(result_blocks)
 	}
 }
