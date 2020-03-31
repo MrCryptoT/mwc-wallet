@@ -17,12 +17,12 @@ toml = "0.4"
 dirs = "1.0.3"
 
 # For Release
-grin_core = { git = "https://github.com/mwcproject/mwc-node", tag = "3.1.1" }
-grin_keychain = { git = "https://github.com/mwcproject/mwc-node", tag = "3.1.1" }
-grin_chain = { git = "https://github.com/mwcproject/mwc-node", tag = "3.1.1" }
-grin_util = { git = "https://github.com/mwcproject/mwc-node", tag = "3.1.1" }
-grin_api = { git = "https://github.com/mwcproject/mwc-node", tag = "3.1.1" }
-grin_store = { git = "https://github.com/mwcproject/mwc-node", tag = "3.1.1" }
+#grin_core = { git = "https://github.com/mwcproject/mwc-node", tag = "3.1.1" }
+#grin_keychain = { git = "https://github.com/mwcproject/mwc-node", tag = "3.1.1" }
+#grin_chain = { git = "https://github.com/mwcproject/mwc-node", tag = "3.1.1" }
+#grin_util = { git = "https://github.com/mwcproject/mwc-node", tag = "3.1.1" }
+#grin_api = { git = "https://github.com/mwcproject/mwc-node", tag = "3.1.1" }
+#grin_store = { git = "https://github.com/mwcproject/mwc-node", tag = "3.1.1" }
 
 # For beta release
 # grin_core = { git = "https://github.com/mwcproject/mwc-node", tag = "2.4.0" }
@@ -33,20 +33,20 @@ grin_store = { git = "https://github.com/mwcproject/mwc-node", tag = "3.1.1" }
 # grin_store = { git = "https://github.com/mwcproject/mwc-node", tag = "2.4.0" }
 
 # For bleeding edge
-#grin_core = { git = "https://github.com/mwcproject/mwc-node", branch = "master" }
-#grin_keychain = { git = "https://github.com/mwcproject/mwc-node", branch = "master" }
-#grin_chain = { git = "https://github.com/mwcproject/mwc-node", branch = "master" }
-#grin_util = { git = "https://github.com/mwcproject/mwc-node", branch = "master" }
-#grin_api = { git = "https://github.com/mwcproject/mwc-node", branch = "master" }
-#grin_store = { git = "https://github.com/mwcproject/mwc-node", branch = "master" }
+grin_core = { git = "https://github.com/mwcproject/mwc-node", branch = "master" }
+grin_keychain = { git = "https://github.com/mwcproject/mwc-node", branch = "master" }
+grin_chain = { git = "https://github.com/mwcproject/mwc-node", branch = "master" }
+grin_util = { git = "https://github.com/mwcproject/mwc-node", branch = "master" }
+grin_api = { git = "https://github.com/mwcproject/mwc-node", branch = "master" }
+grin_store = { git = "https://github.com/mwcproject/mwc-node", branch = "master" }
 
 # For local testing
-#grin_core = { path = "../../mwc-node/core", version= "3.1.0"}
-#grin_keychain = { path = "../../mwc-node/keychain", version= "3.1.0"}
-#grin_chain = { path = "../../mwc-node/chain", version= "3.1.0"}
-#grin_util = { path = "../../mwc-node/util", version= "3.1.0"}
-#grin_api = { path = "../../mwc-node/api", version= "3.1.0"}
-#grin_store = { path = "../../mwc-node/store", version= "3.1.0"}
+#grin_core = { path = "../../mwc-node/core", version= "3.1.2"}
+#grin_keychain = { path = "../../mwc-node/keychain", version= "3.1.2"}
+#grin_chain = { path = "../../mwc-node/chain", version= "3.1.2"}
+#grin_util = { path = "../../mwc-node/util", version= "3.1.2"}
+#grin_api = { path = "../../mwc-node/api", version= "3.1.2"}
+#grin_store = { path = "../../mwc-node/store", version= "3.1.2"}
 
 [dev-dependencies]
 pretty_assertions = "0.5.1"

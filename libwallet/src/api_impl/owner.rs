@@ -108,16 +108,10 @@ where
 	C: NodeClient + 'a,
 	K: Keychain + 'a,
 {
-	let parent_key_id = {
-		wallet_lock!(wallet_inst, w);
-		w.parent_key_id()
-	};
-
 	let validated = update_wallet_state(
 		wallet_inst.clone(),
 		keychain_mask,
-		status_send_channel,
-		Some(&parent_key_id),
+		status_send_channel
 	)?;
 
 	Ok(validated)
@@ -240,6 +234,7 @@ where
 }
 
 /// Initiate tx as sender
+/// Caller is responsible for wallet refresh
 pub fn init_send_tx<'a, T: ?Sized, C, K>(
 	w: &mut T,
 	keychain_mask: Option<&SecretKey>,
@@ -279,7 +274,6 @@ where
 	if let Some(true) = args.estimate_only {
 		let (total, fee) = tx::estimate_send_tx(
 			&mut *w,
-			keychain_mask,
 			args.amount,
 			args.minimum_confirmations,
 			args.max_outputs as usize,
@@ -420,6 +414,7 @@ where
 
 /// Receive an invoice tx, essentially adding inputs to whatever
 /// output was specified
+/// Caller is responsible for wallet refresh
 pub fn process_invoice_tx<'a, T: ?Sized, C, K>(
 	w: &mut T,
 	keychain_mask: Option<&SecretKey>,
@@ -639,6 +634,7 @@ pub fn scan<'a, L, C, K>(
 	start_height: Option<u64>,
 	delete_unconfirmed: bool,
 	status_send_channel: &Option<Sender<StatusMessage>>,
+	do_full_outputs_refresh: bool,
 ) -> Result<(), Error>
 where
 	L: WalletLCProvider<'a, C, K>,
@@ -680,6 +676,7 @@ where
 		tip_height,
 		status_send_channel,
 		true,
+		do_full_outputs_refresh,
 	)?;
 
 	wallet_lock!(wallet_inst, w);
@@ -812,14 +809,13 @@ pub fn update_wallet_state<'a, L, C, K>(
 	wallet_inst: Arc<Mutex<Box<dyn WalletInst<'a, L, C, K>>>>,
 	keychain_mask: Option<&SecretKey>,
 	status_send_channel: &Option<Sender<StatusMessage>>,
-	parent_key_id: Option<&Identifier>, // None - Update all Accounts
 ) -> Result<bool, Error>
 where
 	L: WalletLCProvider<'a, C, K>,
 	C: NodeClient + 'a,
 	K: Keychain + 'a,
 {
-	// Wallet update logic doesn't handle trancating of the blockchain. That happen when node in sync or in reorg-sync
+	// Wallet update logic doesn't handle truncating of the blockchain. That happen when node in sync or in reorg-sync
 	// In this case better to inform user and do nothing. Sync is useless in any case.
 	let (tip_height, tip_hash) = {
 		wallet_lock!(wallet_inst, w);
@@ -843,7 +839,7 @@ where
 	};
 
 	// Check if this is a restored wallet that needs a full scan
-	let last_scanned_block = {
+	let (last_scanned_block, has_reorg) = {
 		wallet_lock!(wallet_inst, w);
 
 		let blocks = w.last_scanned_blocks()?;
@@ -860,6 +856,7 @@ where
 		}
 
 		let mut res_bl = ScannedBlockInfo::empty();
+		let head_height = blocks.first().map(|b| b.height).unwrap_or(0);
 		for bl in blocks {
 			// check if that block is not changed
 			if let Ok(hdr_info) = w.w2n_client().get_header_info(bl.height) {
@@ -870,8 +867,13 @@ where
 			}
 		}
 
-		res_bl
+		let has_reorg = res_bl.height != head_height;
+		(res_bl, has_reorg)
 	};
+
+	if has_reorg {
+		info!("Wallet update will do full outputs checking because since last update reorg happend");
+	}
 
 	debug!(
 		"Preparing to update the wallet from height {} to {}",
@@ -918,6 +920,7 @@ where
 		tip_height,
 		status_send_channel,
 		show_progress,
+		has_reorg,
 	)?;
 
 	// Checking if tip was changed. In this case we need to retry. Retry will be handles naturally optimal
@@ -947,7 +950,6 @@ where
 			wallet_inst,
 			keychain_mask,
 			&status_send_channel,
-			parent_key_id, // None - Update all Accounts
 		);
 	}
 

@@ -156,6 +156,7 @@ where
 				"send_tx_slate" => self.send_tx_slate(m)?,
 				"post_tx" => self.post_tx(m)?,
 				"get_kernel" => self.get_kernel(m)?,
+				"get_blocks_by_height" => self.get_blocks_by_height(m)?,
 				_ => panic!("Unknown Wallet Proxy Message"),
 			};
 
@@ -365,6 +366,26 @@ where
 		};
 		let ol =
 			super::height_range_to_pmmr_indices_local(self.chain.clone(), start_index, end_index);
+		Ok(WalletProxyMessage {
+			sender_id: "node".to_owned(),
+			dest: m.sender_id,
+			method: m.method,
+			body: serde_json::to_string(&ol).unwrap(),
+		})
+	}
+
+	/// Get blocks by range of heights
+	fn get_blocks_by_height(
+		&mut self,
+		m: WalletProxyMessage,
+	) -> Result<WalletProxyMessage, libwallet::Error> {
+		let split = m.body.split(",").collect::<Vec<&str>>();
+		let start_height = split[0].parse::<u64>().unwrap();
+		let end_height = split[1].parse::<u64>().unwrap();
+		assert!(start_height <= end_height);
+
+		let ol =
+			super::get_blocks_by_height_local(self.chain.clone(), start_height, end_height);
 		Ok(WalletProxyMessage {
 			sender_id: "node".to_owned(),
 			dest: m.sender_id,
@@ -722,6 +743,33 @@ impl NodeClient for LocalWalletClient {
 		let o: api::OutputListing = serde_json::from_str(&m.body).unwrap();
 		Ok((o.last_retrieved_index, o.highest_index))
 	}
+
+	fn get_blocks_by_height(
+		&self,
+		start_height: u64,
+		end_height: u64,
+		_threads_number: usize,
+		_include_proof: bool,
+	) -> Result< Vec<api::BlockPrintable>, libwallet::Error> {
+		let m = WalletProxyMessage {
+			sender_id: self.id.clone(),
+			dest: self.node_url().to_owned(),
+			method: "get_blocks_by_height".to_owned(),
+			body: format!("{},{}", start_height, end_height),
+		};
+		{
+			let p = self.proxy_tx.lock();
+			p.send(m).context(libwallet::ErrorKind::ClientCallback(
+				"Get blocks by height range send".to_owned(),
+			))?;
+		}
+
+		let r = self.rx.lock();
+		let m = r.recv().unwrap();
+		let o: Vec<api::BlockPrintable> = serde_json::from_str(&m.body).unwrap();
+		Ok(o)
+	}
+
 }
 unsafe impl<'a, L, C, K> Send for WalletProxy<'a, L, C, K>
 where

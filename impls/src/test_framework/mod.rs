@@ -30,6 +30,7 @@ use crate::util::Mutex;
 use chrono::Duration;
 use std::sync::Arc;
 use std::thread;
+use grin_core::core::hash::Hashed;
 
 mod testclient;
 
@@ -107,6 +108,24 @@ fn height_range_to_pmmr_indices_local(
 		outputs: vec![],
 	}
 }
+
+/// Get blocks by heights
+fn get_blocks_by_height_local(
+	chain: Arc<chain::Chain>,
+	start_index: u64,
+	end_index: u64,
+) -> Vec< grin_api::BlockPrintable > {
+
+	let mut res: Vec< grin_api::BlockPrintable > = Vec::new();
+
+	for height in start_index..=end_index {
+		let hash = chain.get_header_by_height(height).unwrap().hash();
+		let block = chain.get_block(&hash).unwrap();
+		res.push( grin_api::BlockPrintable::from_block(&block, chain.clone(), true, false).unwrap() );
+	}
+	res
+}
+
 
 /// Adds a block with a given reward to the chain and mines it
 pub fn add_block_with_reward(
@@ -208,6 +227,9 @@ where
 	C: NodeClient + 'a,
 	K: keychain::Keychain + 'a,
 {
+	// Caller need to update the wallet first
+	owner::update_wallet_state(wallet.clone(), keychain_mask, &None)?;
+
 	let slate = {
 		let mut w_lock = wallet.lock();
 		let w = w_lock.lc_provider()?.wallet_inst()?;

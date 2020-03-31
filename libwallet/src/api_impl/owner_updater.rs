@@ -74,7 +74,7 @@ pub fn start_updater_log_thread(
 					StatusMessage::UpdatingOutputs(_show_progress, s) => debug!("{}", s),
 					StatusMessage::FullScanWarn(s) => warn!("{}", s),
 					StatusMessage::Scanning(_show_progress, s, m) => {
-						debug!("{}", s);
+						info!("{}", s);
 						warn!("Scanning - {}% complete", m);
 					}
 					StatusMessage::ScanningComplete(_show_progress, s) => warn!("{}", s),
@@ -179,8 +179,7 @@ where
 			owner::update_wallet_state(
 				self.wallet_inst.clone(),
 				(&keychain_mask).as_ref(),
-				status_send_channel,
-				None, // In background make sense to update all accounts
+				status_send_channel
 			)?;
 
 			let sec = frequency.as_secs();

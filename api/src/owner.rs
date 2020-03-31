@@ -670,6 +670,9 @@ where
 	) -> Result<Slate, Error> {
 		let send_args = args.send_args.clone();
 		let address = args.address.clone();
+
+		owner::update_wallet_state(self.wallet_inst.clone(), keychain_mask, &None)?;
+
 		let mut slate = {
 			let mut w_lock = self.wallet_inst.lock();
 			let w = w_lock.lc_provider()?.wallet_inst()?;
@@ -822,6 +825,8 @@ where
 		slate: &Slate,
 		args: InitTxArgs,
 	) -> Result<Slate, Error> {
+		owner::update_wallet_state(self.wallet_inst.clone(), keychain_mask, &None)?;
+
 		let mut w_lock = self.wallet_inst.lock();
 		let w = w_lock.lc_provider()?.wallet_inst()?;
 		owner::process_invoice_tx(&mut **w, keychain_mask, slate, args, self.doctest_mode)
@@ -1298,6 +1303,7 @@ where
 			start_height,
 			delete_unconfirmed,
 			&tx,
+			true,
 		)
 	}
 

@@ -88,9 +88,9 @@ where
 }
 
 /// Estimates locked amount and fee for the transaction without creating one
+/// Caller is responsible for data refresh!!!!
 pub fn estimate_send_tx<'a, T: ?Sized, C, K>(
 	wallet: &mut T,
-	keychain_mask: Option<&SecretKey>,
 	amount: u64,
 	minimum_confirmations: u64,
 	max_outputs: usize,
@@ -114,14 +114,6 @@ where
 	// Get lock height
 	let current_height = wallet.w2n_client().get_chain_tip()?.0;
 	// ensure outputs we're selecting are up to date
-	updater::refresh_outputs(
-		wallet,
-		keychain_mask,
-		Some(parent_key_id),
-		false,
-		None,
-		None,
-	)?;
 
 	// Sender selects outputs into a new slate and save our corresponding keys in
 	// a transaction context. The secret key in our transaction context will be
@@ -146,6 +138,7 @@ where
 }
 
 /// Add inputs to the slate (effectively becoming the sender)
+/// Caller is responsible for wallet refresh
 pub fn add_inputs_to_slate<'a, T: ?Sized, C, K>(
 	wallet: &mut T,
 	keychain_mask: Option<&SecretKey>,
@@ -167,16 +160,6 @@ where
 	C: NodeClient + 'a,
 	K: Keychain + 'a,
 {
-	// sender should always refresh outputs
-	updater::refresh_outputs(
-		wallet,
-		keychain_mask,
-		Some(parent_key_id),
-		false,
-		None,
-		None,
-	)?;
-
 	// Sender selects outputs into a new slate and save our corresponding keys in
 	// a transaction context. The secret key in our transaction context will be
 	// randomly selected. This returns the public slate, and a closure that locks

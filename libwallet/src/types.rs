@@ -414,6 +414,17 @@ pub trait NodeClient: Send + Sync + Clone {
 		start_height: u64,
 		end_height: Option<u64>,
 	) -> Result<(u64, u64), Error>;
+
+	/// Get blocks for height range. end_height is included.
+	/// Note, single block required singe request. Don't abuse it much because mwc713 wallets using the same node
+	/// threads_number - how many requests to do in parallel
+	fn get_blocks_by_height(
+		&self,
+		start_height: u64,
+		end_height: u64,
+		threads_number: usize,
+		include_proof: bool,
+	) -> Result< Vec<grin_api::BlockPrintable>, Error>;
 }
 
 /// Node version info

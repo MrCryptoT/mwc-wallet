@@ -1681,6 +1681,8 @@ pub fn run_doctest_owner(
 	//let proof_address = api_impl::owner::get_public_proof_address(wallet2.clone(), (&mask2).as_ref(), 0).unwrap();
 
 	if perform_tx {
+		api_impl::owner::update_wallet_state(wallet1.clone(), (&mask1).as_ref(), &None).unwrap();
+
 		let amount = 2_000_000_000;
 		let mut w_lock = wallet1.lock();
 		let w = w_lock.lc_provider().unwrap().wallet_inst().unwrap();
