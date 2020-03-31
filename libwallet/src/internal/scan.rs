@@ -48,7 +48,6 @@ const OUTPUT_TO_BLOCK: usize = 100;
 // of the node load. 4 is a reasonable number
 const SYNC_BLOCKS_THREADS: usize = 4;
 
-
 /// Utility struct for return values from below
 #[derive(Debug, Clone)]
 pub struct OutputResult {
@@ -131,8 +130,10 @@ where
 			*height
 		};
 
-		debug!("Output found: {:?}, amount: {:?}, key_id: {:?}, mmr_index: {},",
-			commit, amount, key_id, mmr_index);
+		debug!(
+			"Output found: {:?}, amount: {:?}, key_id: {:?}, mmr_index: {},",
+			commit, amount, key_id, mmr_index
+		);
 
 		if switch != SwitchCommitmentType::Regular {
 			warn!("Unexpected switch commitment type {:?}", switch);
@@ -187,10 +188,7 @@ where
 			let _ = s.send(StatusMessage::Scanning(show_progress, msg, perc_complete));
 		}
 
-		result_vec.append(&mut identify_utxo_outputs(
-			keychain,
-			outputs,
-		)?);
+		result_vec.append(&mut identify_utxo_outputs(keychain, outputs)?);
 
 		if highest_index <= last_retrieved_index {
 			break;
@@ -423,7 +421,7 @@ fn get_wallet_and_chain_data<'a, L, C, K>(
 		HashMap<String, WalletOutputInfo>, // Outputs. Key: Commit
 		Vec<OutputResult>,                 // Chain outputs
 		HashMap<String, WalletTxInfo>,     // Slate based Transaction. Key: tx uuid
-		String,							   // Commit of the last output in the sequence
+		String,                            // Commit of the last output in the sequence
 	),
 	Error,
 >
@@ -477,7 +475,7 @@ where
 	// transaction is non complete and can be ignored.
 	for tx in w.tx_log_iter() {
 		if !tx.confirmed {
-			not_confirmed_txs+=1;
+			not_confirmed_txs += 1;
 		}
 
 		// For transactions without uuid generating temp uuid just for mapping
@@ -578,28 +576,40 @@ where
 	// Wallet - node sync up strategy. We can request blocks from the node and analyze them. 1 week of blocks can be requested in theory.
 	// Or we can validate tx kernels, outputs e.t.c
 
-	let height_deep_limit = SYNC_BLOCKS_DEEPNESS + not_confirmed_txs/2 + spendable_outputs/OUTPUT_TO_BLOCK;
+	let height_deep_limit =
+		SYNC_BLOCKS_DEEPNESS + not_confirmed_txs / 2 + spendable_outputs / OUTPUT_TO_BLOCK;
 
 	// We need to choose a strategy. If there are few blocks, it is really make sense request those blocks
 	if !do_full_outputs_refresh && (end_height - start_height <= height_deep_limit as u64) {
 		debug!("get_wallet_and_chain_data using block base strategy");
 
 		// Validate kernels from transaction. Kernel are a source of truth
-		let txkernel_to_txuuid: HashMap<String,String> = transactions.values_mut()
-			.filter( |tx|  tx.tx_log.kernel_excess.is_some() &&
-				( !(tx.tx_log.confirmed || tx.tx_log.is_cancelled())
-				|| tx.tx_log.output_height >= start_height ) )
+		let txkernel_to_txuuid: HashMap<String, String> = transactions
+			.values_mut()
+			.filter(|tx| {
+				tx.tx_log.kernel_excess.is_some()
+					&& (!(tx.tx_log.confirmed || tx.tx_log.is_cancelled())
+						|| tx.tx_log.output_height >= start_height)
+			})
 			// !!!! Changing tx.kernel_validation flag at map !!!
-			.map( |tx| { tx.kernel_validation = Some(false); ( util::to_hex(tx.tx_log.kernel_excess.clone().unwrap().0.to_vec()) , tx.tx_uuid.clone() )} )
+			.map(|tx| {
+				tx.kernel_validation = Some(false);
+				(
+					util::to_hex(tx.tx_log.kernel_excess.clone().unwrap().0.to_vec()),
+					tx.tx_uuid.clone(),
+				)
+			})
 			.collect();
 
 		let client = w.w2n_client().clone();
 		let keychain = w.keychain(keychain_mask)?.clone();
 
-		let blocks: Vec<grin_api::BlockPrintable> = client.get_blocks_by_height( start_height,end_height,SYNC_BLOCKS_THREADS, true )?;
+		let blocks: Vec<grin_api::BlockPrintable> =
+			client.get_blocks_by_height(start_height, end_height, SYNC_BLOCKS_THREADS, true)?;
 
 		// commit, range_proof, is_coinbase, block_height, mmr_index,
-		let mut node_outputs: Vec<(pedersen::Commitment, pedersen::RangeProof, bool, u64, u64)> = Vec::new();
+		let mut node_outputs: Vec<(pedersen::Commitment, pedersen::RangeProof, bool, u64, u64)> =
+			Vec::new();
 		// iputs - it is outputs that are gone
 		let mut inputs: HashSet<String> = HashSet::new();
 
@@ -619,45 +629,45 @@ where
 			}
 
 			for out in b.outputs {
-                if !out.spent {
-                    node_outputs.push((
-                        out.commit,
-                        out.range_proof()?,
-                        match out.output_type {
-                            grin_api::OutputType::Coinbase => true,
-                            grin_api::OutputType::Transaction => false,
-                        },
-                        height,
-                        out.mmr_index
-                    ));
-                }
+				if !out.spent {
+					node_outputs.push((
+						out.commit,
+						out.range_proof()?,
+						match out.output_type {
+							grin_api::OutputType::Coinbase => true,
+							grin_api::OutputType::Transaction => false,
+						},
+						height,
+						out.mmr_index,
+					));
+				}
 			}
 		}
 
 		// Parse all node_outputs from the blocks and check ours the new ones...
-		let chain_outs = identify_utxo_outputs( &keychain,
-			node_outputs)?;
+		let chain_outs = identify_utxo_outputs(&keychain, node_outputs)?;
 
 		// Reporting user what outputs we found
 		if let Some(ref s) = status_send_channel {
 			let mut msg = format!(
 				"For height: {} - {} Identified {} wallet_outputs as belonging to this wallet [",
-				start_height, end_height,
+				start_height,
+				end_height,
 				chain_outs.len(),
 			);
 			let mut cnt = 8;
 			for ch_out in &chain_outs {
 				msg.push_str(&util::to_hex(ch_out.commit.0.to_vec()));
 				msg.push_str(",");
-				cnt-=1;
-				if cnt==0 {
+				cnt -= 1;
+				if cnt == 0 {
 					break;
 				}
 			}
 			if !chain_outs.is_empty() {
 				msg.pop();
 			}
-			if cnt==0 {
+			if cnt == 0 {
 				msg.push_str("...");
 			}
 			msg.push_str("]");
@@ -668,7 +678,7 @@ where
 		// Apply inputs - outputs that are spent (they are inputs now)
 		for out in outputs
 			.values_mut()
-			.filter(|out|  inputs.contains(&out.commit ) )
+			.filter(|out| inputs.contains(&out.commit))
 		{
 			// Commit is input now, so it is spent
 			out.output.status = OutputStatus::Spent;
@@ -676,10 +686,9 @@ where
 		}
 
 		Ok((outputs, chain_outs, transactions, last_output))
-	}
-	else {
+	} else {
 		debug!("get_wallet_and_chain_data using check whatever needed strategy");
-        // Full data update.
+		// Full data update.
 		let client = w.w2n_client().clone();
 		let keychain = w.keychain(keychain_mask)?.clone();
 
@@ -768,7 +777,8 @@ where
 			}
 
 			// processing them by groups becuase we want to shouw the progress
-			let slices: Vec<&[pedersen::Commitment]> = wallet_outputs_to_check.chunks(100).collect();
+			let slices: Vec<&[pedersen::Commitment]> =
+				wallet_outputs_to_check.chunks(100).collect();
 
 			let mut chunk_num = 0;
 
@@ -805,32 +815,30 @@ where
 		for out in outputs
 			.values_mut()
 			.filter(|out| out.output.is_spendable() && out.output.commit.is_some())
-			{
-				if let Some(height) = node_commits.get(&out.commit) {
-					if out.output.height != *height {
-						out.output.height = *height;
-						out.updated = true;
-					}
-				} else {
-					// Commit is gone. Probably it is spent
-					// Initial state 'Unspent' is possible if user playing with cancellations. So just ignore it
-					// Next workflow will take case about the transaction state as well as Spent/Unconfirmed uncertainty
-					out.output.status = match &out.output.status {
-						OutputStatus::Locked => OutputStatus::Spent,
-						OutputStatus::Unspent => OutputStatus::Unconfirmed,
-						a => {
-							debug_assert!(false);
-							a.clone()
-						}
-					};
+		{
+			if let Some(height) = node_commits.get(&out.commit) {
+				if out.output.height != *height {
+					out.output.height = *height;
 					out.updated = true;
 				}
+			} else {
+				// Commit is gone. Probably it is spent
+				// Initial state 'Unspent' is possible if user playing with cancellations. So just ignore it
+				// Next workflow will take case about the transaction state as well as Spent/Unconfirmed uncertainty
+				out.output.status = match &out.output.status {
+					OutputStatus::Locked => OutputStatus::Spent,
+					OutputStatus::Unspent => OutputStatus::Unconfirmed,
+					a => {
+						debug_assert!(false);
+						a.clone()
+					}
+				};
+				out.updated = true;
 			}
+		}
 
 		Ok((outputs, chain_outs, transactions, last_output))
 	}
-
-
 }
 
 /// Check / repair wallet contents by scanning against chain
@@ -861,7 +869,7 @@ where
 	}
 
 	// Collect the data form the chain and from the wallet
-	let (mut outputs, chain_outs, mut transactions,last_output) = get_wallet_and_chain_data(
+	let (mut outputs, chain_outs, mut transactions, last_output) = get_wallet_and_chain_data(
 		wallet_inst.clone(),
 		keychain_mask.clone(),
 		start_height,
@@ -872,7 +880,7 @@ where
 	)?;
 
 	// Printing values for debug...
-/*	{
+	/*	{
 		println!("Chain range: Heights: {} to {}", start_height, tip_height );
 		// Dump chain outputs...
 		for ch_out in &chain_outs {
@@ -925,30 +933,33 @@ where
 	// Note, unknown new outputs are not here because we handle them in the beginning by 'restore'.
 
 	// Cancel any cancellable transactions with an expired TTL
-	for tx in transactions.values().filter(|tx| !(tx.tx_log.confirmed || tx.tx_log.is_cancelled()) ) {
-			if let Some(h) = tx.tx_log.ttl_cutoff_height {
-				if tip_height >= h {
-					wallet_lock!(wallet_inst, w);
-					match tx::cancel_tx(
-						&mut **w,
-						keychain_mask,
-						&tx.tx_log.parent_key_id,
-						Some(tx.tx_log.id),
-						None,
-					) {
-						Err(e) => {
-							if let Some(ref s) = status_send_channel {
-								let _ = s.send(StatusMessage::Warning(format!(
-									"Unable to cancel TTL expired transaction {} because of error: {}",
-									tx.tx_uuid.split('/').next().unwrap(),
-									e
-								)));
-							}
+	for tx in transactions
+		.values()
+		.filter(|tx| !(tx.tx_log.confirmed || tx.tx_log.is_cancelled()))
+	{
+		if let Some(h) = tx.tx_log.ttl_cutoff_height {
+			if tip_height >= h {
+				wallet_lock!(wallet_inst, w);
+				match tx::cancel_tx(
+					&mut **w,
+					keychain_mask,
+					&tx.tx_log.parent_key_id,
+					Some(tx.tx_log.id),
+					None,
+				) {
+					Err(e) => {
+						if let Some(ref s) = status_send_channel {
+							let _ = s.send(StatusMessage::Warning(format!(
+								"Unable to cancel TTL expired transaction {} because of error: {}",
+								tx.tx_uuid.split('/').next().unwrap(),
+								e
+							)));
 						}
-						_ => (),
 					}
+					_ => (),
 				}
 			}
+		}
 	}
 
 	// Apply last data updates and saving the data into DB.
@@ -1515,7 +1526,10 @@ where
 	// See what updater::apply_api_outputs does
 	for w_out in outputs.values_mut() {
 		// coinbase non spendable MUST be ignored for mining case. For every coinbase call new commit is created.
-		if w_out.output.is_coinbase && w_out.output.is_spendable() && w_out.tx_output_uuid.is_empty() {
+		if w_out.output.is_coinbase
+			&& w_out.output.is_spendable()
+			&& w_out.tx_output_uuid.is_empty()
+		{
 			let parent_key_id = &w_out.output.root_key_id; // it is Account Key ID.
 
 			let log_id = batch.next_tx_log_id(parent_key_id)?;

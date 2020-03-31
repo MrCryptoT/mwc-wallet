@@ -384,8 +384,7 @@ where
 		let end_height = split[1].parse::<u64>().unwrap();
 		assert!(start_height <= end_height);
 
-		let ol =
-			super::get_blocks_by_height_local(self.chain.clone(), start_height, end_height);
+		let ol = super::get_blocks_by_height_local(self.chain.clone(), start_height, end_height);
 		Ok(WalletProxyMessage {
 			sender_id: "node".to_owned(),
 			dest: m.sender_id,
@@ -750,7 +749,7 @@ impl NodeClient for LocalWalletClient {
 		end_height: u64,
 		_threads_number: usize,
 		_include_proof: bool,
-	) -> Result< Vec<api::BlockPrintable>, libwallet::Error> {
+	) -> Result<Vec<api::BlockPrintable>, libwallet::Error> {
 		let m = WalletProxyMessage {
 			sender_id: self.id.clone(),
 			dest: self.node_url().to_owned(),
@@ -769,7 +768,6 @@ impl NodeClient for LocalWalletClient {
 		let o: Vec<api::BlockPrintable> = serde_json::from_str(&m.body).unwrap();
 		Ok(o)
 	}
-
 }
 unsafe impl<'a, L, C, K> Send for WalletProxy<'a, L, C, K>
 where

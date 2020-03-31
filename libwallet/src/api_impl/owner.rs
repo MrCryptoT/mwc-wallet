@@ -108,11 +108,7 @@ where
 	C: NodeClient + 'a,
 	K: Keychain + 'a,
 {
-	let validated = update_wallet_state(
-		wallet_inst.clone(),
-		keychain_mask,
-		status_send_channel
-	)?;
+	let validated = update_wallet_state(wallet_inst.clone(), keychain_mask, status_send_channel)?;
 
 	Ok(validated)
 }
@@ -872,7 +868,9 @@ where
 	};
 
 	if has_reorg {
-		info!("Wallet update will do full outputs checking because since last update reorg happend");
+		info!(
+			"Wallet update will do full outputs checking because since last update reorg happend"
+		);
 	}
 
 	debug!(
@@ -946,11 +944,7 @@ where
 
 	if tip_was_changed {
 		// Since head was chaged, we need to update it
-		return update_wallet_state(
-			wallet_inst,
-			keychain_mask,
-			&status_send_channel,
-		);
+		return update_wallet_state(wallet_inst, keychain_mask, &status_send_channel);
 	}
 
 	// wasn't be able to confirm the tip. Scan is failed, scan height not updated.

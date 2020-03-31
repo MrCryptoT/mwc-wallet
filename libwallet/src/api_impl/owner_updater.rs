@@ -179,7 +179,7 @@ where
 			owner::update_wallet_state(
 				self.wallet_inst.clone(),
 				(&keychain_mask).as_ref(),
-				status_send_channel
+				status_send_channel,
 			)?;
 
 			let sec = frequency.as_secs();

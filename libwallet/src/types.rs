@@ -424,7 +424,7 @@ pub trait NodeClient: Send + Sync + Clone {
 		end_height: u64,
 		threads_number: usize,
 		include_proof: bool,
-	) -> Result< Vec<grin_api::BlockPrintable>, Error>;
+	) -> Result<Vec<grin_api::BlockPrintable>, Error>;
 }
 
 /// Node version info

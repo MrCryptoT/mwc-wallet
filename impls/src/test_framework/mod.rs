@@ -28,9 +28,9 @@ use crate::util::secp::key::SecretKey;
 use crate::util::secp::pedersen;
 use crate::util::Mutex;
 use chrono::Duration;
+use grin_core::core::hash::Hashed;
 use std::sync::Arc;
 use std::thread;
-use grin_core::core::hash::Hashed;
 
 mod testclient;
 
@@ -114,18 +114,16 @@ fn get_blocks_by_height_local(
 	chain: Arc<chain::Chain>,
 	start_index: u64,
 	end_index: u64,
-) -> Vec< grin_api::BlockPrintable > {
-
-	let mut res: Vec< grin_api::BlockPrintable > = Vec::new();
+) -> Vec<grin_api::BlockPrintable> {
+	let mut res: Vec<grin_api::BlockPrintable> = Vec::new();
 
 	for height in start_index..=end_index {
 		let hash = chain.get_header_by_height(height).unwrap().hash();
 		let block = chain.get_block(&hash).unwrap();
-		res.push( grin_api::BlockPrintable::from_block(&block, chain.clone(), true, false).unwrap() );
+		res.push(grin_api::BlockPrintable::from_block(&block, chain.clone(), true, false).unwrap());
 	}
 	res
 }
-
 
 /// Adds a block with a given reward to the chain and mines it
 pub fn add_block_with_reward(

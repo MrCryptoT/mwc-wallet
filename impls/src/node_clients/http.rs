@@ -392,25 +392,25 @@ impl NodeClient for HTTPNodeClient {
 		end_height: u64,
 		threads_number: usize,
 		include_proof: bool,
-	) -> Result< Vec<api::BlockPrintable>, libwallet::Error> {
-		debug!("Requesting blocks from heights {}-{}", start_height, end_height);
+	) -> Result<Vec<api::BlockPrintable>, libwallet::Error> {
+		debug!(
+			"Requesting blocks from heights {}-{}",
+			start_height, end_height
+		);
 		assert!(threads_number>0 && threads_number<20, "Please use a sane positive number for the wallet that can be connected to the shareable node");
-		assert!(start_height<=end_height);
+		assert!(start_height <= end_height);
 
 		let mut tasks = Vec::new();
 		let client = Client::new();
 		let addr = self.node_url();
 
-		let query = if include_proof {
-			"?include_proof"
-		}
-		else {
-			""
-		};
+		let query = if include_proof { "?include_proof" } else { "" };
 
 		for height in start_height..=end_height {
-			let url = format!("{}/v1/blocks/{}{}", addr,height,query);
-			tasks.push(client.get_async::<api::BlockPrintable>(url.as_str(), self.node_api_secret()));
+			let url = format!("{}/v1/blocks/{}{}", addr, height, query);
+			tasks.push(
+				client.get_async::<api::BlockPrintable>(url.as_str(), self.node_api_secret()),
+			);
 		}
 
 		let task = stream::futures_unordered(tasks).collect();
@@ -422,11 +422,13 @@ impl NodeClient for HTTPNodeClient {
 		match res {
 			Ok(blocks) => Ok(blocks),
 			Err(e) => {
-				let report = format!("get_blocks_by_height: error contacting {}. Error: {}", addr, e);
+				let report = format!(
+					"get_blocks_by_height: error contacting {}. Error: {}",
+					addr, e
+				);
 				error!("{}", report);
 				Err(libwallet::ErrorKind::ClientCallback(report).into())
 			}
 		}
 	}
-
 }
