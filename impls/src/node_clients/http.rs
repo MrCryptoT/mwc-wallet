@@ -413,26 +413,26 @@ impl NodeClient for HTTPNodeClient {
 
 		while height <= end_height {
 			let mut tasks = Vec::new();
-			while tasks.len()<threads_number && height <= end_height {
+			while tasks.len() < threads_number && height <= end_height {
 				let url = format!("{}/v1/blocks/{}{}", addr, height, query);
 				tasks.push(
-					client.get_async::<api::BlockPrintable>(url.as_str(), self.node_api_secret())
+					client.get_async::<api::BlockPrintable>(url.as_str(), self.node_api_secret()),
 				);
-				height+=1;
+				height += 1;
 			}
 
 			let task = stream::futures_unordered(tasks).collect();
 			let res = rt.block_on(task);
 			match res {
-					Ok(blocks) => result_blocks.extend(blocks),
-					Err(e) => {
-						let report = format!(
-							"get_blocks_by_height: error contacting {}. Error: {}",
-							addr, e
-						);
-						error!("{}", report);
-						return Err(libwallet::ErrorKind::ClientCallback(report).into())
-					}
+				Ok(blocks) => result_blocks.extend(blocks),
+				Err(e) => {
+					let report = format!(
+						"get_blocks_by_height: error contacting {}. Error: {}",
+						addr, e
+					);
+					error!("{}", report);
+					return Err(libwallet::ErrorKind::ClientCallback(report).into());
+				}
 			}
 		}
 

@@ -584,22 +584,24 @@ where
 		debug!("get_wallet_and_chain_data using block base strategy");
 
 		// Validate kernels from transaction. Kernel are a source of truth
-		let txkernel_to_txuuid: HashMap<String, String> = transactions
-			.values_mut()
-			.filter(|tx| {
-				tx.tx_log.kernel_excess.is_some()
-					&& (!(tx.tx_log.confirmed || tx.tx_log.is_cancelled())
-						|| tx.tx_log.output_height >= start_height)
-			})
-			// !!!! Changing tx.kernel_validation flag at map !!!
-			.map(|tx| {
+		// Because of account transfer we might have 2 transactions with same ketmel from the both sides.
+		let mut txkernel_to_txuuid: HashMap<String, Vec<String>> = HashMap::new();
+
+		for (tx_uuid, tx) in &mut transactions {
+			if tx.tx_log.kernel_excess.is_some()
+				&& (!(tx.tx_log.confirmed || tx.tx_log.is_cancelled())
+					|| tx.tx_log.output_height >= start_height)
+			{
 				tx.kernel_validation = Some(false);
-				(
-					util::to_hex(tx.tx_log.kernel_excess.clone().unwrap().0.to_vec()),
-					tx.tx_uuid.clone(),
-				)
-			})
-			.collect();
+				let kernel = util::to_hex(tx.tx_log.kernel_excess.clone().unwrap().0.to_vec());
+
+				if let Some(v) = txkernel_to_txuuid.get_mut(&kernel) {
+					v.push(tx_uuid.clone());
+				} else {
+					txkernel_to_txuuid.insert(kernel, vec![tx_uuid.clone()]);
+				}
+			}
+		}
 
 		let client = w.w2n_client().clone();
 		let keychain = w.keychain(keychain_mask)?.clone();
@@ -607,25 +609,39 @@ where
 		let mut blocks: Vec<grin_api::BlockPrintable> = Vec::new();
 
 		let mut cur_height = start_height;
-		while cur_height<=end_height {
+		while cur_height <= end_height {
 			// next block to request the data
-			let next_h = cmp::min(end_height, cur_height + (SYNC_BLOCKS_THREADS*SYNC_BLOCKS_THREADS-1) as u64 );
+			let next_h = cmp::min(
+				end_height,
+				cur_height + (SYNC_BLOCKS_THREADS * SYNC_BLOCKS_THREADS - 1) as u64,
+			);
 
 			// printing the progress
 			if let Some(ref s) = status_send_channel {
 				let msg = format!(
 					"Checking {} blocks, Height: {} - {}",
-					next_h-cur_height+1,
+					next_h - cur_height + 1,
 					cur_height,
 					next_h,
 				);
 				// 10 - 90 %
-				let perc_complete =  ((next_h+cur_height)/2 - start_height) * 80 / (end_height - start_height+1) + 10;
-				let _ = s.send(StatusMessage::Scanning(show_progress, msg, perc_complete as u8));
+				let perc_complete = ((next_h + cur_height) / 2 - start_height) * 80
+					/ (end_height - start_height + 1)
+					+ 10;
+				let _ = s.send(StatusMessage::Scanning(
+					show_progress,
+					msg,
+					perc_complete as u8,
+				));
 			}
 
-			blocks.extend(client.get_blocks_by_height(cur_height, next_h, SYNC_BLOCKS_THREADS, true)?);
-			cur_height = next_h+1;
+			blocks.extend(client.get_blocks_by_height(
+				cur_height,
+				next_h,
+				SYNC_BLOCKS_THREADS,
+				true,
+			)?);
+			cur_height = next_h + 1;
 		}
 		assert!(blocks.len() as u64 == end_height - start_height + 1);
 
@@ -642,11 +658,13 @@ where
 
 			// Update transaction confirmation state, if kernel is found
 			for tx_kernel in b.kernels {
-				if let Some(tx_uuid) = txkernel_to_txuuid.get(&tx_kernel.excess) {
-					let tx = transactions.get_mut(tx_uuid).unwrap();
-					tx.kernel_validation = Some(true);
-					tx.tx_log.output_height = height; // Height must come from kernel and will match heights of outputs
-					tx.updated = true;
+				if let Some(tx_uuid_vec) = txkernel_to_txuuid.get(&tx_kernel.excess) {
+					for tx_uuid in tx_uuid_vec {
+						let tx = transactions.get_mut(tx_uuid).unwrap();
+						tx.kernel_validation = Some(true);
+						tx.tx_log.output_height = height; // Height must come from kernel and will match heights of outputs
+						tx.updated = true;
+					}
 				}
 			}
 
