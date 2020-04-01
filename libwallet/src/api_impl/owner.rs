@@ -37,6 +37,7 @@ use crate::{
 use crate::{Error, ErrorKind};
 use ed25519_dalek::PublicKey as DalekPublicKey;
 
+use std::cmp;
 use std::fs::File;
 use std::io::Write;
 use std::sync::mpsc::Sender;
@@ -637,14 +638,30 @@ where
 	C: NodeClient + 'a,
 	K: Keychain + 'a,
 {
-	//update_outputs(wallet_inst.clone(), keychain_mask, true, height, None)?;
-	let (tip_height, tip_hash, _) = {
-		wallet_lock!(wallet_inst, w);
-		w.w2n_client().get_chain_tip()?
-	};
+	// Checking from what point we should start scanning
+	let (tip_height, tip_hash, last_scanned_block, has_reorg) = get_last_detect_last_scanned_block(
+		wallet_inst.clone(),
+		keychain_mask,
+		status_send_channel,
+	)?;
+
+	if tip_height == 0 {
+		return Err(ErrorKind::NodeNotReady)?;
+	}
+
+	if has_reorg {
+		info!(
+			"Wallet update will do full outputs checking because since last update reorg happend"
+		);
+	}
+
+	debug!(
+		"Preparing to update the wallet from height {} to {}",
+		last_scanned_block.height, tip_height
+	);
 
 	let start_height = match start_height {
-		Some(h) => h,
+		Some(h) => cmp::min(last_scanned_block.height, h),
 		None => 1,
 	};
 
@@ -800,6 +817,70 @@ where
 	Ok(())
 }
 
+// Checking if node head is fine and we can perform the scanning
+// Result: (tip_height: u64, tip_hash:String, first_block_to_scan_from: ScannedBlockInfo, is_reorg: bool)
+// is_reorg true if new need go back by the chain to perform scanning
+// Note: In case of error return tip 0!!!
+fn get_last_detect_last_scanned_block<'a, L, C, K>(
+	wallet_inst: Arc<Mutex<Box<dyn WalletInst<'a, L, C, K>>>>,
+	keychain_mask: Option<&SecretKey>,
+	status_send_channel: &Option<Sender<StatusMessage>>,
+) -> Result<(u64, String, ScannedBlockInfo, bool), Error>
+where
+	L: WalletLCProvider<'a, C, K>,
+	C: NodeClient + 'a,
+	K: Keychain + 'a,
+{
+	wallet_lock!(wallet_inst, w);
+
+	// Wallet update logic doesn't handle truncating of the blockchain. That happen when node in sync or in reorg-sync
+	// In this case better to inform user and do nothing. Sync is useless in any case.
+
+	// Checking if keychain mask correct. Issue that sometimes update_wallet_state doesn't need it and it is a security problem
+	let _ = w.batch(keychain_mask)?;
+
+	let (tip_height, tip_hash, _) = match w.w2n_client().get_chain_tip() {
+		Ok(t) => t,
+		Err(_) => {
+			if let Some(ref s) = status_send_channel {
+				let _ = s.send(StatusMessage::Warning(
+					"Unable to contact mwc-node".to_owned(),
+				));
+			}
+			return Ok((0, String::new(), ScannedBlockInfo::empty(), false));
+		}
+	};
+
+	let blocks = w.last_scanned_blocks()?;
+
+	// If the server height is less than our confirmed height, don't apply
+	// these changes as the chain is syncing, incorrect or forking
+	if tip_height == 0 || tip_height < blocks.first().map(|b| b.height).unwrap_or(0) {
+		if let Some(ref s) = status_send_channel {
+			let _ = s.send(StatusMessage::Warning(
+					String::from("Wallet Update is skipped, please wait for sync on node to complete or fork to resolve.")
+				));
+		}
+		return Ok((0, String::new(), ScannedBlockInfo::empty(), false));
+	}
+
+	let mut last_scanned_block = ScannedBlockInfo::empty();
+	let head_height = blocks.first().map(|b| b.height).unwrap_or(0);
+	for bl in blocks {
+		// check if that block is not changed
+		if let Ok(hdr_info) = w.w2n_client().get_header_info(bl.height) {
+			if hdr_info.hash == bl.hash {
+				last_scanned_block = bl;
+				break;
+			}
+		}
+	}
+
+	let has_reorg = last_scanned_block.height != head_height;
+
+	Ok((tip_height, tip_hash, last_scanned_block, has_reorg))
+}
+
 /// Experimental, wrap the entire definition of how a wallet's state is updated
 pub fn update_wallet_state<'a, L, C, K>(
 	wallet_inst: Arc<Mutex<Box<dyn WalletInst<'a, L, C, K>>>>,
@@ -811,61 +892,16 @@ where
 	C: NodeClient + 'a,
 	K: Keychain + 'a,
 {
-	// Wallet update logic doesn't handle truncating of the blockchain. That happen when node in sync or in reorg-sync
-	// In this case better to inform user and do nothing. Sync is useless in any case.
-	let (tip_height, tip_hash) = {
-		wallet_lock!(wallet_inst, w);
+	// Checking from what point we should start scanning
+	let (tip_height, tip_hash, last_scanned_block, has_reorg) = get_last_detect_last_scanned_block(
+		wallet_inst.clone(),
+		keychain_mask,
+		status_send_channel,
+	)?;
 
-		// Checking if keychain mask correct. Issue that sometimes update_wallet_state doesn't need it and it is a security problem
-		let _ = w.batch(keychain_mask)?;
-
-		let (tip_height, tip_hash, _) = match w.w2n_client().get_chain_tip() {
-			Ok(t) => t,
-			Err(_) => {
-				if let Some(ref s) = status_send_channel {
-					let _ = s.send(StatusMessage::Warning(
-						"Unable to contact mwc-node".to_owned(),
-					));
-				}
-				return Ok(false);
-			}
-		};
-
-		(tip_height, tip_hash)
-	};
-
-	// Check if this is a restored wallet that needs a full scan
-	let (last_scanned_block, has_reorg) = {
-		wallet_lock!(wallet_inst, w);
-
-		let blocks = w.last_scanned_blocks()?;
-
-		// If the server height is less than our confirmed height, don't apply
-		// these changes as the chain is syncing, incorrect or forking
-		if tip_height == 0 || tip_height < blocks.first().map(|b| b.height).unwrap_or(0) {
-			if let Some(ref s) = status_send_channel {
-				let _ = s.send(StatusMessage::Warning(
-					String::from("Wallet Update is skipped, please wait for sync on node to complete or fork to resolve.")
-				));
-			}
-			return Ok(false);
-		}
-
-		let mut res_bl = ScannedBlockInfo::empty();
-		let head_height = blocks.first().map(|b| b.height).unwrap_or(0);
-		for bl in blocks {
-			// check if that block is not changed
-			if let Ok(hdr_info) = w.w2n_client().get_header_info(bl.height) {
-				if hdr_info.hash == bl.hash {
-					res_bl = bl;
-					break;
-				}
-			}
-		}
-
-		let has_reorg = res_bl.height != head_height;
-		(res_bl, has_reorg)
-	};
+	if tip_height == 0 {
+		return Ok(false);
+	}
 
 	if has_reorg {
 		info!(

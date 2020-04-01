@@ -576,6 +576,8 @@ where
 	// Wallet - node sync up strategy. We can request blocks from the node and analyze them. 1 week of blocks can be requested in theory.
 	// Or we can validate tx kernels, outputs e.t.c
 
+	let chain_outs: Vec<OutputResult>;
+
 	let height_deep_limit =
 		SYNC_BLOCKS_DEEPNESS + not_confirmed_txs / 2 + spendable_outputs / OUTPUT_TO_BLOCK;
 
@@ -685,7 +687,7 @@ where
 		}
 
 		// Parse all node_outputs from the blocks and check ours the new ones...
-		let chain_outs = identify_utxo_outputs(&keychain, node_outputs)?;
+		chain_outs = identify_utxo_outputs(&keychain, node_outputs)?;
 
 		// Reporting user what outputs we found
 		if let Some(ref s) = status_send_channel {
@@ -724,8 +726,6 @@ where
 			out.output.status = OutputStatus::Spent;
 			out.updated = true;
 		}
-
-		Ok((outputs, chain_outs, transactions, last_output))
 	} else {
 		debug!("get_wallet_and_chain_data using check whatever needed strategy");
 		// Full data update.
@@ -736,7 +736,7 @@ where
 		let pmmr_range = client.height_range_to_pmmr_indices(start_height, Some(end_height))?;
 
 		// Getting outputs that are published on the chain.
-		let chain_outs = collect_chain_outputs(
+		chain_outs = collect_chain_outputs(
 			&keychain,
 			client,
 			pmmr_range.0,
@@ -876,9 +876,45 @@ where
 				out.updated = true;
 			}
 		}
-
-		Ok((outputs, chain_outs, transactions, last_output))
 	}
+
+	// Now let's process inputs from trsnacaction that change it's status from confirmed to non confirmed
+	// the issue that some Spent can be exist on the chain and they must be turn to Locked for now
+	let mut commits: HashSet<String> = HashSet::new();
+
+	for tx in transactions.values() {
+		if tx.kernel_validation.is_some() {
+			if tx.tx_log.confirmed && tx.kernel_validation.clone().unwrap() == false {
+				// All input commits need to reevaluate
+				commits.extend(tx.input_commit.clone());
+			}
+		}
+	}
+
+	commits.retain(|c| outputs.contains_key(c));
+
+	if !commits.is_empty() {
+		let wallet_outputs_to_check: Vec<pedersen::Commitment> = commits
+			.iter()
+			.map(|out| pedersen::Commitment::from_vec(util::from_hex(out.clone()).unwrap()))
+			.collect();
+
+		let client = w.w2n_client().clone();
+
+		// Node will return back only Commits that are exist now.
+		let active_commits: HashMap<pedersen::Commitment, (String, u64, u64)> =
+			client.get_outputs_from_node(wallet_outputs_to_check)?;
+
+		for (active_commit, _, _) in active_commits.values() {
+			let output = outputs.get_mut(active_commit).unwrap();
+			if output.output.status != OutputStatus::Locked {
+				output.output.status = OutputStatus::Locked;
+				output.updated = true;
+			}
+		}
+	}
+
+	Ok((outputs, chain_outs, transactions, last_output))
 }
 
 /// Check / repair wallet contents by scanning against chain

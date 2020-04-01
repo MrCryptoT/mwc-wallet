@@ -101,6 +101,10 @@ pub enum ErrorKind {
 	#[fail(display = "Node API error")]
 	Node,
 
+	/// Error when not found ready to process sync data node
+	#[fail(display = "Node not ready or not available")]
+	NodeNotReady,
+
 	/// Error contacting wallet API
 	#[fail(display = "Wallet Communication Error: {}", _0)]
 	WalletComms(String),
