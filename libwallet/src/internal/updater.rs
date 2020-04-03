@@ -40,7 +40,7 @@ pub fn retrieve_outputs<'a, T: ?Sized, C, K>(
 	keychain_mask: Option<&SecretKey>,
 	show_spent: bool,
 	tx: Option<&TxLogEntry>,
-	parent_key_id: Option<&Identifier>,
+	parent_key_id: &Identifier,
 	pagination_start: Option<u32>,
 	pagination_len: Option<u32>,
 ) -> Result<Vec<OutputCommitMapping>, Error>
@@ -74,13 +74,11 @@ where
 			.collect::<Vec<_>>();
 	}
 
-	if let Some(k) = parent_key_id {
-		outputs = outputs
-			.iter()
-			.filter(|o| o.root_key_id == *k)
-			.map(|o| o.clone())
-			.collect();
-	}
+	outputs = outputs
+		.iter()
+		.filter(|o| o.root_key_id == *parent_key_id)
+		.map(|o| o.clone())
+		.collect();
 
 	outputs.sort_by_key(|out| out.n_child);
 	let keychain = wallet.keychain(keychain_mask)?;
@@ -88,6 +86,7 @@ where
 	// Key: tx_log id;  Value: true if active, false if cancelled
 	let tx_log_cancellation_status: HashMap<u32, bool> = wallet
 		.tx_log_iter()
+		.filter(|tx_log| tx_log.parent_key_id == *parent_key_id)
 		.map(|tx_log| (tx_log.id, !tx_log.is_cancelled()))
 		.collect();
 
@@ -262,6 +261,7 @@ where
 	// Key: tx_log id;  Value: true if active, false if cancelled
 	let tx_log_cancellation_status: HashMap<u32, bool> = wallet
 		.tx_log_iter()
+		.filter(|tx_log| tx_log.parent_key_id == *parent_key_id)
 		.map(|tx_log| (tx_log.id, !tx_log.is_cancelled()))
 		.collect();
 

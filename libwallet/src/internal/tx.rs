@@ -335,7 +335,7 @@ where
 		keychain_mask,
 		false,
 		Some(&tx),
-		Some(&parent_key_id),
+		&parent_key_id,
 		None,
 		None,
 	)?;

@@ -162,7 +162,7 @@ where
 			keychain_mask,
 			include_spent,
 			tx.as_ref(),
-			Some(&parent_key_id),
+			&parent_key_id,
 			None,
 			None,
 		)?,
