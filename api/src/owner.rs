@@ -696,8 +696,8 @@ where
 		outputs: Option<Vec<&str>>, // outputs to include into the transaction
 		routputs: usize,            // Number of resulting outputs. Normally it is 1
 	) -> Result<Slate, Error> {
-		let send_args = args.send_args.clone();
 		let address = args.address.clone();
+		let send_args = args.send_args.clone();
 		//minimum_confirmations cannot be zero.
 		let minimum_confirmations = args.minimum_confirmations.clone();
 		println!(
@@ -706,9 +706,21 @@ where
 		);
 		if minimum_confirmations < 1 {
 			return Err(ErrorKind::ClientCallback(
-				"minimum_confirmations can not be smaller than 1".to_owned(),
+				"Minimum_confirmations can not be smaller than 1".to_owned(),
 			)
 			.into());
+		}
+
+		match args.send_args.clone() {
+			Some(sa) => {
+				if sa.post_tx && !sa.finalize {
+					return Err(ErrorKind::ClientCallback(
+						"Transcations can not be posted without being finalized!".to_owned(),
+					)
+					.into());
+				}
+			}
+			None => {}
 		}
 
 		let mut slate = {

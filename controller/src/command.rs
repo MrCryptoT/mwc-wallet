@@ -348,6 +348,16 @@ where
 						Ok(())
 					})?;
 				}
+
+				"mwcmqs" => {
+					api.tx_lock_outputs(m, &slate, Some(String::from("self")), 0)?;
+					let km = match keychain_mask.as_ref() {
+						None => None,
+						Some(&m) => Some(m.to_owned()),
+					};
+					//start the listener finalize tx
+					//controller::init_start_mwcmqs_listener(config.clone(), wallet.clone(), Mutex::new(km));
+				}
 				method => {
 					let sender = create_sender(method, &args.dest, &args.apisecret, tor_config)?;
 					slate = sender.send_tx(&slate)?;

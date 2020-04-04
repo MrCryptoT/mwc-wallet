@@ -128,12 +128,6 @@ impl MQSConfig {
 		public_key_from_secret_key(&self.get_mwcmqs_secret_key()?)
 	}
 
-	//	pub fn get_mwcmqs_secret_key(&self) -> Result<SecretKey, Error> {
-	//		self.grinbox_address_key
-	//			.clone()
-	//			.ok_or_else(|| ErrorKind::NoWallet.into())
-	//	}
-
 	pub fn get_mwcmqs_secret_key(&self) -> Result<SecretKey, Error> {
 		self.mwcmqs_key
 			.clone()

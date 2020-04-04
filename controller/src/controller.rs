@@ -260,11 +260,10 @@ where
 				if slate.amount > max_auto_accept_invoice {
 					Err(ErrorKind::InvoiceAmountTooBig(slate.amount))?;
 				}
-				let active_account = "default";
 
 				//create the args
 				let params = grin_wallet_libwallet::InitTxArgs {
-					src_acct_name: Some(active_account.to_string()),
+					src_acct_name: None, //it will be set in the implementation layer.
 					amount: slate.amount,
 					minimum_confirmations: 10,
 					max_outputs: 500,
@@ -394,17 +393,8 @@ where
 			GrinboxAddress::from_str(&from.to_string()).expect("invalid mwcmq address");
 		}
 
-		//
-		// yang todo get the acitve_account
-		//		let account = {
-		//			// lock must be very local
-		//			let w = self.wallet.lock();
-		//			w.active_account.clone()
-		//		};
-		let account = "default";
-
 		let result = self
-			.process_incoming_slate(Some(from.to_string()), slate, config, Some(&account))
+            .process_incoming_slate(Some(from.to_string()), slate, config, None)
 			.and_then(|is_finalized| {
 				if !is_finalized {
 					self.publisher
