@@ -158,13 +158,7 @@ pub trait Subscriber {
 
 pub trait SubscriptionHandler: Send {
 	fn on_open(&self);
-	fn on_slate(
-		&self,
-		from: &dyn Address,
-		slate: &mut Slate,
-		proof: Option<&mut TxProof>,
-		_: Option<MQSConfig>,
-	);
+	fn on_slate(&self, from: &dyn Address, slate: &mut Slate, _: Option<MQSConfig>);
 	fn on_close(&self, result: CloseReason);
 	fn on_dropped(&self);
 	fn on_reestablished(&self);
@@ -826,7 +820,7 @@ impl MWCMQSBroker {
 									delcount = delcount + 1;
 								}
 
-								let (mut slate, mut tx_proof) = match TxProof::from_response(
+								let (mut slate, mut _tx_proof) = match TxProof::from_response(
 									from.clone(),
 									r5.clone(),
 									"".to_string(),
@@ -853,7 +847,6 @@ impl MWCMQSBroker {
 								handler.lock().on_slate(
 									&from,
 									&mut slate,
-									Some(&mut tx_proof),
 									Some(self.config.clone()),
 								);
 								break;

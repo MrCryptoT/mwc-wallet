@@ -28,7 +28,6 @@ use crate::util::secp::key::SecretKey;
 use crate::util::{to_hex, Mutex, ZeroingString};
 use crate::{controller, display};
 use grin_wallet_libwallet::TxLogEntry;
-use grin_wallet_mwcmqs::types::AddressBook;
 use serde_json as json;
 use std::fs::File;
 use std::io::Write;
@@ -127,7 +126,6 @@ pub fn listen<L, C, K>(
 	tor_config: &TorConfig,
 	args: &ListenArgs,
 	g_args: &GlobalArgs,
-	address_book: Arc<Mutex<AddressBook>>,
 ) -> Result<(), Error>
 where
 	L: WalletLCProvider<'static, C, K> + 'static,
@@ -149,7 +147,7 @@ where
 			g_args.node_api_secret.clone(),
 		),
 		"mwcmqs" => {
-			controller::init_start_mwcmqs_listener(config.clone(), wallet.clone(), address_book)
+			controller::init_start_mwcmqs_listener(config.clone(), wallet.clone(), keychain_mask)
 		}
 		method => {
 			return Err(ErrorKind::ArgumentError(format!(
@@ -170,7 +168,6 @@ pub fn owner_api<L, C, K>(
 	wallet: Arc<Mutex<Box<dyn WalletInst<'static, L, C, K>>>>,
 	keychain_mask: Option<SecretKey>,
 	config: &WalletConfig,
-	address_book: Arc<Mutex<AddressBook>>,
 	tor_config: &TorConfig,
 	g_args: &GlobalArgs,
 ) -> Result<(), Error>
@@ -191,7 +188,6 @@ where
 		config.owner_api_include_foreign.clone(),
 		config.owner_api_include_mqs_listener.clone(),
 		config.clone(),
-		address_book.clone(),
 		Some(tor_config.clone()),
 	);
 	if let Err(e) = res {
@@ -268,7 +264,6 @@ pub fn send<L, C, K>(
 	tor_config: Option<TorConfig>,
 	args: SendArgs,
 	dark_scheme: bool,
-	address_book: Arc<Mutex<AddressBook>>,
 ) -> Result<(), Error>
 where
 	L: WalletLCProvider<'static, C, K> + 'static,

@@ -29,9 +29,6 @@ use grin_wallet_libwallet::Slate;
 use grin_wallet_libwallet::{
 	address, IssueInvoiceTxArgs, NodeClient, WalletInst, WalletLCProvider,
 };
-use grin_wallet_mwcmqs::backend::Backend;
-use grin_wallet_mwcmqs::tx_proof::TxProof;
-use grin_wallet_mwcmqs::types::AddressBook;
 use grin_wallet_util::grin_core as core;
 use grin_wallet_util::grin_core::core::amount_to_hr_string;
 use grin_wallet_util::grin_core::global;
@@ -883,9 +880,9 @@ where
 	node_client.set_node_api_secret(global_wallet_args.node_api_secret.clone());
 
 	//create the tx_proof dir inside the wallet_data folder.
-	TxProof::init_proof_backend(&wallet_config.data_file_dir).unwrap_or_else(|e| {
-		println!("Unable to init proof_backend{}", e);
-	});
+	//	TxProof::init_proof_backend(&wallet_config.data_file_dir).unwrap_or_else(|e| {
+	//		println!("Unable to init proof_backend{}", e);
+	//	});
 
 	// legacy hack to avoid the need for changes in existing mwc-wallet.toml files
 	// remove `wallet_data` from end of path as
@@ -964,15 +961,8 @@ where
 
 	let km = (&keychain_mask).as_ref();
 
-	//mqs feature : add address book feature
-	let data_path_buf = wallet_config.get_data_path();
+	let _data_path_buf = wallet_config.get_data_path();
 	//let data_path = data_path_buf.to_str().unwrap();
-
-	let address_book_backend =
-		Backend::new(&data_path_buf).expect("could not create address book backend!");
-	let address_book = AddressBook::new(Box::new(address_book_backend))
-		.expect("could not create an address book!");
-	let address_book = Arc::new(Mutex::new(address_book));
 
 	let res = match wallet_args.subcommand() {
 		("init", Some(args)) => {
@@ -1004,7 +994,6 @@ where
 				&t,
 				&a,
 				&global_wallet_args.clone(),
-				address_book.clone(),
 			)
 		}
 		("owner_api", Some(args)) => {
@@ -1012,20 +1001,12 @@ where
 			let mut g = global_wallet_args.clone();
 			g.tls_conf = None;
 			arg_parse!(parse_owner_api_args(&mut c, &args));
-			command::owner_api(
-				wallet,
-				keychain_mask,
-				&c,
-				address_book.clone(),
-				&tor_config,
-				&g,
-			)
+			command::owner_api(wallet, keychain_mask, &c, &tor_config, &g)
 		}
 		("web", Some(_)) => command::owner_api(
 			wallet,
 			keychain_mask,
 			&wallet_config,
-			address_book,
 			&tor_config,
 			&global_wallet_args,
 		),
@@ -1041,7 +1022,6 @@ where
 				Some(tor_config),
 				a,
 				wallet_config.dark_background_color_scheme.unwrap_or(true),
-				address_book.clone(),
 			)
 		}
 		("receive", Some(args)) => {

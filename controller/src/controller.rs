@@ -15,55 +15,53 @@
 //! Controller for wallet.. instantiates and handles listeners (or single-run
 //! invocations) as needed.
 
-use crate::api::{self, ApiServer, BasicAuthMiddleware, ResponseFuture, Router, TLSConfig};
-use crate::config::{TorConfig, WalletConfig};
-use crate::keychain::Keychain;
-use crate::libwallet::{
-	address, ErrorKind, NodeClient, NodeVersionInfo, Slate, WalletInst, WalletLCProvider,
-	GRIN_BLOCK_HEADER_VERSION,
-};
-use failure::Error;
-use grin_wallet_mwcmqs::mwcmq::CloseReason;
-use grin_wallet_mwcmqs::tx_proof::TxProof;
-use grin_wallet_mwcmqs::COLORED_PROMPT;
-use grin_wallet_util::grin_core::core;
+use std::collections::HashMap;
+use std::net::SocketAddr;
+use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::Arc;
 use std::thread;
 
-use crate::util::secp::key::SecretKey;
-use crate::util::{from_hex, static_secp_instance, to_base64, Mutex};
 use colored::Colorize;
+use easy_jsonrpc_mw;
+use easy_jsonrpc_mw::{Handler, MaybeReply};
+use failure::Error;
 use failure::ResultExt;
 use futures::future::{err, ok};
 use futures::{Future, Stream};
+use hyper::header::HeaderValue;
+use hyper::{Body, Request, Response, StatusCode};
+use serde::{Deserialize, Serialize};
+use serde_json;
+
 use grin_wallet_libwallet::wallet_lock;
 use grin_wallet_mwcmqs::hasher;
+use grin_wallet_mwcmqs::mwcmq::CloseReason;
 use grin_wallet_mwcmqs::mwcmq::MQSConfig;
 use grin_wallet_mwcmqs::mwcmq::MWCMQPublisher;
 use grin_wallet_mwcmqs::mwcmq::MWCMQSubscriber;
 use grin_wallet_mwcmqs::mwcmq::Publisher;
 use grin_wallet_mwcmqs::mwcmq::SubscriptionHandler;
 use grin_wallet_mwcmqs::types::Address;
-use grin_wallet_mwcmqs::types::AddressBook;
 use grin_wallet_mwcmqs::types::AddressType;
 use grin_wallet_mwcmqs::types::GrinboxAddress;
-use hyper::header::HeaderValue;
-use hyper::{Body, Request, Response, StatusCode};
-use serde::{Deserialize, Serialize};
-use serde_json;
-use std::collections::HashMap;
-use std::net::SocketAddr;
-use std::sync::mpsc::{channel, Receiver, Sender};
-use std::sync::Arc;
+use grin_wallet_mwcmqs::COLORED_PROMPT;
+use grin_wallet_util::grin_core::core;
 
-use crate::impls::tor::config as tor_config;
-use crate::impls::tor::process as tor_process;
-
+use crate::api::{self, ApiServer, BasicAuthMiddleware, ResponseFuture, Router, TLSConfig};
 use crate::apiwallet::{
-	apis, EncryptedRequest, EncryptedResponse, EncryptionErrorResponse, Foreign,
+	EncryptedRequest, EncryptedResponse, EncryptionErrorResponse, Foreign,
 	ForeignCheckMiddlewareFn, ForeignRpc, Owner, OwnerRpc, OwnerRpcS,
 };
-use easy_jsonrpc_mw;
-use easy_jsonrpc_mw::{Handler, MaybeReply};
+use crate::config::{TorConfig, WalletConfig};
+use crate::impls::tor::config as tor_config;
+use crate::impls::tor::process as tor_process;
+use crate::keychain::Keychain;
+use crate::libwallet::{
+	address, ErrorKind, NodeClient, NodeVersionInfo, Slate, WalletInst, WalletLCProvider,
+	GRIN_BLOCK_HEADER_VERSION,
+};
+use crate::util::secp::key::SecretKey;
+use crate::util::{from_hex, static_secp_instance, to_base64, Mutex};
 
 lazy_static! {
 	pub static ref MWC_OWNER_BASIC_REALM: HeaderValue =
@@ -202,10 +200,10 @@ where
 	/// Wallet instance
 	pub name: String,
 	pub wallet: Arc<Mutex<Box<dyn WalletInst<'static, L, C, K> + 'static>>>,
-	pub address_book: Arc<Mutex<AddressBook>>,
 	pub publisher: Box<dyn Publisher + Send>,
 	pub slate_send_channel: Option<Sender<Box<Slate>>>,
 	pub max_auto_accept_invoice: Option<u64>,
+	pub keychain_mask: Arc<Mutex<Option<SecretKey>>>,
 }
 
 impl<L, C, K> Controller<L, C, K>
@@ -217,9 +215,9 @@ where
 	pub fn new(
 		name: &str,
 		wallet: Arc<Mutex<Box<dyn WalletInst<'static, L, C, K>>>>,
-		address_book: Arc<Mutex<AddressBook>>,
 		publisher: Box<dyn Publisher + Send>,
 		slate_send_channel: Option<Sender<Box<Slate>>>,
+		keychain_mask: Arc<Mutex<Option<SecretKey>>>,
 	) -> Result<Self, crate::libwallet::Error>
 	where
 		L: WalletLCProvider<'static, C, K>,
@@ -229,10 +227,10 @@ where
 		Ok(Self {
 			name: name.to_string(),
 			wallet,
-			address_book,
 			publisher,
 			slate_send_channel,
 			max_auto_accept_invoice: None,
+			keychain_mask,
 		})
 	}
 	fn set_max_auto_accept_invoice(&mut self, max_auto_accept_invoice: Option<u64>) {
@@ -243,41 +241,107 @@ where
 		&self,
 		address: Option<String>,
 		slate: &mut Slate,
-		tx_proof: Option<&mut TxProof>,
 		_config: Option<MQSConfig>,
 		dest_acct_name: Option<&str>,
 	) -> Result<bool, Error> {
+		let owner_api = Owner::new(self.wallet.clone());
+		let foreign_api = Foreign::new(self.wallet.clone(), None, None);
+		let mask = self.keychain_mask.lock();
+
 		if slate.num_participants > slate.participant_data.len() {
 			//TODO: this needs to be changed to properly figure out if this slate is an invoice or a send
 			if slate.tx.inputs().len() == 0 {
-				apis::process_receiver_initiated_slate(
-					self.wallet.clone(),
-					slate,
-					self.max_auto_accept_invoice,
-					address.clone(),
-				)?;
+				// reject by default unless wallet is set to auto accept invoices under a certain threshold
+
+				let max_auto_accept_invoice = self
+					.max_auto_accept_invoice
+					.ok_or(ErrorKind::DoesNotAcceptInvoices)?;
+
+				if slate.amount > max_auto_accept_invoice {
+					Err(ErrorKind::InvoiceAmountTooBig(slate.amount))?;
+				}
+				let active_account = "default";
+
+				//create the args
+				let params = grin_wallet_libwallet::InitTxArgs {
+					src_acct_name: Some(active_account.to_string()),
+					amount: slate.amount,
+					minimum_confirmations: 10,
+					max_outputs: 500,
+					num_change_outputs: 1,
+					/// If `true`, attempt to use up as many outputs as
+					/// possible to create the transaction, up the 'soft limit' of `max_outputs`. This helps
+					/// to reduce the size of the UTXO set and the amount of data stored in the wallet, and
+					/// minimizes fees. This will generally result in many inputs and a large change output(s),
+					/// usually much larger than the amount being sent. If `false`, the transaction will include
+					/// as many outputs as are needed to meet the amount, (and no more) starting with the smallest
+					/// value outputs.
+					selection_strategy_is_use_all: false,
+					message: None,
+					/// Optionally set the output target slate version (acceptable
+					/// down to the minimum slate version compatible with the current. If `None` the slate
+					/// is generated with the latest version.
+					target_slate_version: None,
+					/// Number of blocks from current after which TX should be ignored
+					ttl_blocks: None,
+					/// If set, require a payment proof for the particular recipient
+					payment_proof_recipient_address: None,
+					address: address.clone(),
+					/// If true, just return an estimate of the resulting slate, containing fees and amounts
+					/// locked without actually locking outputs or creating the transaction. Note if this is set to
+					/// 'true', the amount field in the slate will contain the total amount locked, not the provided
+					/// transaction amount
+					estimate_only: None,
+					/// Sender arguments. If present, the underlying function will also attempt to send the
+					/// transaction to a destination and optionally finalize the result
+					send_args: None,
+				};
+
+				*slate = owner_api.process_invoice_tx((&mask).as_ref(), slate, params)?;
+
+				owner_api.tx_lock_outputs((&mask).as_ref(), slate, address, 1)?;
 			} else {
-				apis::process_sender_initiated_slate(
-					self.wallet.clone(),
-					address,
-					slate,
-					None,
-					None,
-					dest_acct_name,
-				)?;
+				let s = foreign_api
+					.receive_tx(slate, address, dest_acct_name, None)
+					.map_err(|_| ErrorKind::GrinWalletReceiveError)?;
+				*slate = s;
 			}
 			Ok(false)
 		} else {
-			match apis::finalize_slate(self.wallet.clone(), slate, tx_proof) {
-				Err(_) => apis::finalize_invoice_slate(self.wallet.clone(), slate)?,
-				Ok(_) => (),
-			}
-
 			//send the slate to owner Api.
 			if let Some(s) = &self.slate_send_channel {
-				//let _ = s.send(result_string);
+				//this happens when the request is from owner_api, owner_api will take care of finalizing and posting tx.
 				let slate_immutable = slate.clone();
 				let _ = s.send(Box::new(slate_immutable));
+			} else {
+				//verify slate message
+				slate
+					.verify_messages()
+					.map_err(|_| ErrorKind::GrinWalletVerifySlateMessagesError)?;
+
+				//finalize_tx first and then post_tx
+
+				let mut should_post = {
+					*slate = owner_api
+						.finalize_tx((&mask).as_ref(), slate)
+						.map_err(|_| ErrorKind::GrinWalletFinalizeError)?;
+
+					true
+				};
+
+				if !should_post {
+					should_post = {
+						*slate = foreign_api
+							.finalize_invoice_tx(&slate)
+							.map_err(|_| ErrorKind::GrinWalletPostError)?;
+						true
+					}
+				}
+				if should_post {
+					owner_api
+						.post_tx((&mask).as_ref(), &slate.tx, false)
+						.map_err(|_| ErrorKind::GrinWalletPostError)?;
+				}
 			}
 
 			Ok(true)
@@ -296,21 +360,8 @@ where
 		print!("{}", COLORED_PROMPT);
 	}
 
-	fn on_slate(
-		&self,
-		from: &dyn Address,
-		slate: &mut Slate,
-		tx_proof: Option<&mut TxProof>,
-		config: Option<MQSConfig>,
-	) {
-		let mut display_from = from.stripped();
-		if let Ok(contact) = self
-			.address_book
-			.lock()
-			.get_contact_by_address(&from.to_string())
-		{
-			display_from = contact.get_name().to_string();
-		}
+	fn on_slate(&self, from: &dyn Address, slate: &mut Slate, config: Option<MQSConfig>) {
+		let display_from = from.stripped();
 
 		if slate.num_participants > slate.participant_data.len() {
 			let message = &slate.participant_data[0].message;
@@ -353,13 +404,7 @@ where
 		let account = "default";
 
 		let result = self
-			.process_incoming_slate(
-				Some(from.to_string()),
-				slate,
-				tx_proof,
-				config,
-				Some(&account),
-			)
+			.process_incoming_slate(Some(from.to_string()), slate, config, Some(&account))
 			.and_then(|is_finalized| {
 				if !is_finalized {
 					self.publisher
@@ -418,7 +463,7 @@ where
 pub fn init_start_mwcmqs_listener<L, C, K>(
 	config: WalletConfig,
 	wallet: Arc<Mutex<Box<dyn WalletInst<'static, L, C, K>>>>,
-	address_book: Arc<Mutex<AddressBook>>,
+	keychain_mask: Arc<Mutex<Option<SecretKey>>>,
 ) -> Result<(), crate::libwallet::Error>
 where
 	L: WalletLCProvider<'static, C, K> + 'static,
@@ -443,10 +488,10 @@ where
 	start_mwcmqs_listener(
 		&mqs_config,
 		wallet.clone(),
-		address_book,
 		config.max_auto_accept_invoice,
 		None,
 		true,
+		keychain_mask,
 	)
 	.map_err(|_| ErrorKind::GenericError("cannot start mqs listener".to_string()))?;
 	Ok(())
@@ -456,10 +501,10 @@ where
 fn start_mwcmqs_listener<L, C, K>(
 	config: &MQSConfig,
 	wallet: Arc<Mutex<Box<dyn WalletInst<'static, L, C, K>>>>,
-	address_book: Arc<Mutex<AddressBook>>,
 	max_auto_accept_invoice: Option<u64>,
 	slate_send_channel: Option<Sender<Box<Slate>>>,
 	wait_for_thread: bool,
+	keychain_mask: Arc<Mutex<Option<SecretKey>>>,
 ) -> Result<(MWCMQPublisher, MWCMQSubscriber), Error>
 where
 	L: WalletLCProvider<'static, C, K> + 'static,
@@ -479,17 +524,20 @@ where
 
 	let cloned_publisher = mwcmqs_publisher.clone();
 	let mut cloned_subscriber = mwcmqs_subscriber.clone();
+	//let mask = keychain_mask.lock();
 
 	let thread = thread::Builder::new()
 		.name("mwcmqs-broker".to_string())
 		.spawn(move || {
 			let mut controller = Controller::new(
 				&mwcmqs_address.stripped(),
-				wallet,
-				address_book.clone(),
+				wallet.clone(),
 				Box::new(cloned_publisher),
 				slate_send_channel,
-			)
+				keychain_mask,
+				//                Owner::new(wallet.clone()),
+				//    Foreign::new(wallet, None, None),
+			) //todo I am not sure for the foreign keychain_mask, should we pass keychain_mask or None
 			.expect("could not start mwcmqs controller!");
 			controller.set_max_auto_accept_invoice(max_auto_accept_invoice);
 			cloned_subscriber
@@ -516,7 +564,6 @@ pub fn owner_listener<L, C, K>(
 	owner_api_include_foreign: Option<bool>,
 	owner_api_include_mqs_listener: Option<bool>,
 	config: WalletConfig,
-	address_book: Arc<Mutex<AddressBook>>,
 	tor_config: Option<TorConfig>,
 ) -> Result<(), crate::libwallet::Error>
 where
@@ -570,12 +617,11 @@ where
 		let result = start_mwcmqs_listener(
 			&mqs_config,
 			wallet.clone(),
-			address_book,
 			config.max_auto_accept_invoice,
 			Some(tx),
 			false,
+			keychain_mask.clone(),
 		);
-		//let result = init_start_mwcmqs_listener(config.clone(), wallet.clone(),address_book);
 		match result {
 			Err(e) => {
 				warn!("Error starting MWCMQS listener: {}", e);

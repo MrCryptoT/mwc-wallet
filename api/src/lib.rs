@@ -43,9 +43,6 @@ mod owner;
 mod owner_rpc;
 mod owner_rpc_s;
 
-///added with mqs feature
-pub mod apis;
-
 mod types;
 
 pub use crate::foreign::{Foreign, ForeignCheckMiddleware, ForeignCheckMiddlewareFn};

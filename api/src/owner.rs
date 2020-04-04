@@ -745,7 +745,7 @@ where
 							)
 							.into());
 						}
-						self.tx_lock_outputs(keychain_mask, &slate, address.clone(), 0)?;
+						//self.tx_lock_outputs(keychain_mask, &slate, address.clone(), 0)?;
 						//here the workflow has some problem, the finalization and post of transaction will be automatically done
 						//from the mqs subscription handler thread started in controller.rs
 
@@ -753,10 +753,10 @@ where
 						let rx_withlock = self.rx_withlock.lock();
 						if let Some(i) = &*rx_withlock {
 							let rx = &i;
-							//yang todo move to config later
 							let slate_returned = rx.recv_timeout(Duration::from_secs(30));
 							match slate_returned {
-								Ok(s) => return Ok(*s),
+								//Ok(s) => return Ok(*s),
+								Ok(s) => slate = *s,
 								_ => {
 									return Err(ErrorKind::ClientCallback(
 										"request timeout, please use txs api to check the status"
@@ -800,10 +800,18 @@ where
 					true => self.finalize_tx(keychain_mask, &slate)?,
 					false => slate,
 				};
+				println!(
+					"slate [{}] finalized successfully in owner_api",
+					slate.id.to_string()
+				);
 
 				if sa.post_tx {
 					self.post_tx(keychain_mask, &slate.tx, sa.fluff)?;
 				}
+				println!(
+					"slate [{}] posted successfully in owner_api",
+					slate.id.to_string()
+				);
 				Ok(slate)
 			}
 			None => Ok(slate),
