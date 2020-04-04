@@ -480,7 +480,7 @@ where
 	);
 
 	if coins.len() + routputs + change_outputs > max_outputs {
-		return Err( ErrorKind::TooLargeSlate(max_outputs) )?;
+		return Err(ErrorKind::TooLargeSlate(max_outputs))?;
 	}
 
 	// sender is responsible for setting the fee on the partial tx
@@ -544,7 +544,6 @@ where
 				needed_disp: amount_to_hr_string(amount_with_fee as u64, false),
 			})?;
 		}
-
 	}
 	Ok((coins, total, amount, fee))
 }
