@@ -468,16 +468,20 @@ where
 	K: Keychain + 'a,
 {
 	// select some spendable coins from the wallet
-	let (max_outputs, mut coins) = select_coins(
+	let (_, mut coins) = select_coins(
 		wallet,
 		amount,
 		current_height,
 		minimum_confirmations,
-		max_outputs,
+		max_outputs.saturating_sub(routputs + change_outputs), // Exclude number sof outpus
 		selection_strategy_is_use_all,
 		parent_key_id,
 		outputs, // outputs to include into the transaction
 	);
+
+	if coins.len() + routputs + change_outputs > max_outputs {
+		return Err( ErrorKind::TooLargeSlate(max_outputs) )?;
+	}
 
 	// sender is responsible for setting the fee on the partial tx
 	// recipient should double check the fee calculation and not blindly trust the
@@ -487,31 +491,15 @@ where
 	// TODO - Does this not potentially reveal the senders private key?
 	//
 	// First attempt to spend without change
-	let mut fee = tx_fee(coins.len(), 1, 1, None);
+	assert!(routputs >= 1); // Normally it is 1
+
+	let mut fee = tx_fee(coins.len(), routputs, 1, None);
 	let mut total: u64 = coins.iter().map(|c| c.value).sum();
 	let mut amount_with_fee = amount + fee;
 
-	if total == 0 {
-		return Err(ErrorKind::NotEnoughFunds {
-			available: 0,
-			available_disp: amount_to_hr_string(0, false),
-			needed: amount_with_fee as u64,
-			needed_disp: amount_to_hr_string(amount_with_fee as u64, false),
-		})?;
-	}
-
-	// The amount with fee is more than the total values of our max outputs
-	if total < amount_with_fee && coins.len() == max_outputs {
-		return Err(ErrorKind::NotEnoughFunds {
-			available: total,
-			available_disp: amount_to_hr_string(total, false),
-			needed: amount_with_fee as u64,
-			needed_disp: amount_to_hr_string(amount_with_fee as u64, false),
-		})?;
-	}
-
-	assert!(routputs >= 1); // Normally it is 1
 	let num_outputs = change_outputs + routputs;
+
+	// We don't want to have large transactions because of storage
 
 	// We need to add a change address or amount with fee is more than total
 	if total != amount_with_fee {
@@ -522,14 +510,8 @@ where
 		// look for other outputs and check again
 		while total < amount_with_fee {
 			// End the loop if we have selected all the outputs and still not enough funds
-			if coins.len() == max_outputs {
-				return Err(ErrorKind::NotEnoughFunds {
-					available: total as u64,
-					available_disp: amount_to_hr_string(total, false),
-					needed: amount_with_fee as u64,
-					needed_disp: amount_to_hr_string(amount_with_fee as u64, false),
-				})?;
-			}
+
+			let coins_len = coins.len();
 
 			// select some spendable coins from the wallet
 			coins = select_coins(
@@ -546,7 +528,23 @@ where
 			fee = tx_fee(coins.len(), num_outputs, 1, None);
 			total = coins.iter().map(|c| c.value).sum();
 			amount_with_fee = amount + fee;
+
+			// Checking if new solution is better (has more outputs)
+			// Don't cheking outputs limit because light overcounting is fine
+			if coins.len() <= coins_len {
+				break;
+			}
 		}
+
+		if total < amount_with_fee {
+			return Err(ErrorKind::NotEnoughFunds {
+				available: total as u64,
+				available_disp: amount_to_hr_string(total, false),
+				needed: amount_with_fee as u64,
+				needed_disp: amount_to_hr_string(amount_with_fee as u64, false),
+			})?;
+		}
+
 	}
 	Ok((coins, total, amount, fee))
 }

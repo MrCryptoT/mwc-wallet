@@ -49,6 +49,10 @@ pub enum ErrorKind {
 		needed_disp: String,
 	},
 
+	/// Too large slate
+	#[fail(display = "Slate inputs and outputs number is more then {}. Please reduce number of outputs or reduce sending amount", _0)]
+	TooLargeSlate(usize),
+
 	/// Fee error
 	#[fail(display = "Fee Error: {}", _0)]
 	Fee(String),
