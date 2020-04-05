@@ -105,8 +105,8 @@ pub enum ErrorKind {
 	IO,
 
 	/// Error when contacting a node through its API
-	#[fail(display = "Node API error")]
-	Node,
+	#[fail(display = "Node API error: {}", _0)]
+	Node(String),
 
 	/// Error when not found ready to process sync data node
 	#[fail(display = "Node not ready or not available")]
