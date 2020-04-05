@@ -330,7 +330,7 @@ impl WalletOutputInfo {
 #[derive(Debug)]
 struct WalletTxInfo {
 	updated: bool,   // true if data was updated, we need push it into DB
-	tx_uuid: String, // transaction uuid, full name
+	tx_uuid: String, // transaction uuid++. Foramt:  "{}/{}/{}", uuid_str, tx.id, tx.parent_key_id.to_hex()
 	tx_log: TxLogEntry,
 	input_commit: HashSet<String>,   // Commits from input (if found)
 	output_commit: HashSet<String>,  // Commits from output (if found)
@@ -369,9 +369,15 @@ impl WalletTxInfo {
 				.insert(util::to_hex(output.commit.0.to_vec()));
 		}
 
-		if self.tx_log.kernel_excess.is_none() {
+		// We have !tx_log.confirmed here because of Account to account transfer issue
+		// By some reasons Send and receive getting different kernels. As a result Send TxLig has wrong kernel
+        // We check is_cancelled because we want to minimize IOs.
+        // As a result, if this issues happen, user cancel tx, it will not be uncancelled. We accept that because failure is not very
+        // critical and user not expected to destroy it's own data.
+		if self.tx_log.kernel_excess.is_none() || (!self.tx_log.confirmed && !self.tx_log.is_cancelled()) {
 			if let Some(kernel) = tx.body.kernels.get(0) {
 				self.tx_log.kernel_excess = Some(kernel.excess);
+				self.updated = true;
 			}
 		}
 	}
@@ -479,7 +485,7 @@ where
 		}
 
 		// For transactions without uuid generating temp uuid just for mapping
-		let uuid_str = match tx.tx_slate_id {
+		let tx_uuid_str = match tx.tx_slate_id {
 			Some(tx_slate_id) => tx_slate_id.to_string(),
 			None => {
 				non_uuid_tx_counter += 1;
@@ -491,11 +497,11 @@ where
 
 		// uuid must include tx uuid, id for transaction to handle self send with same account,
 		//    parent_key_id  to handle senf send to different accounts
-		let uuid_str = format!("{}/{}/{}", uuid_str, tx.id, tx.parent_key_id.to_hex());
+		let uuid_str = format!("{}/{}/{}", tx_uuid_str, tx.id, tx.parent_key_id.to_hex());
 
 		let mut wtx = WalletTxInfo::new(uuid_str, tx.clone());
 
-		if let Ok(transaction) = w.get_stored_tx_by_uuid(&wtx.tx_uuid) {
+		if let Ok(transaction) = w.get_stored_tx_by_uuid(&tx_uuid_str) {
 			wtx.add_transaction(transaction);
 		};
 		transactions_id2uuid.insert(
