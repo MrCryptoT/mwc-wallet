@@ -590,30 +590,31 @@ where
 		let mut txkernel_to_txuuid: HashMap<String, Vec<String>> = HashMap::new();
 
 		for (tx_uuid, tx) in &mut transactions {
-			// check if we need to reset tx confirmation first.
-			if tx.tx_log.confirmed {
-				if let Some(lookup_min_heihgt) = tx.tx_log.kernel_lookup_min_height {
-					if lookup_min_heihgt>=start_height {
+			if tx.tx_log.kernel_excess.is_some() {
+				// check if we need to reset tx confirmation first.
+				if tx.tx_log.confirmed {
+					if let Some(lookup_min_heihgt) = tx.tx_log.kernel_lookup_min_height {
+						if lookup_min_heihgt >= start_height {
+							tx.tx_log.confirmed = false;
+							tx.updated = true;
+						}
+					}
+
+					if tx.tx_log.output_height >= start_height {
 						tx.tx_log.confirmed = false;
 						tx.updated = true;
 					}
 				}
 
-				if tx.tx_log.output_height >= start_height {
-					tx.tx_log.confirmed = false;
-					tx.updated = true;
-				}
-			}
+				if !tx.tx_log.confirmed {
+					tx.kernel_validation = Some(false);
+					let kernel = util::to_hex(tx.tx_log.kernel_excess.clone().unwrap().0.to_vec());
 
-			if tx.tx_log.kernel_excess.is_some() && !tx.tx_log.confirmed
-			{
-				tx.kernel_validation = Some(false);
-				let kernel = util::to_hex(tx.tx_log.kernel_excess.clone().unwrap().0.to_vec());
-
-				if let Some(v) = txkernel_to_txuuid.get_mut(&kernel) {
-					v.push(tx_uuid.clone());
-				} else {
-					txkernel_to_txuuid.insert(kernel, vec![tx_uuid.clone()]);
+					if let Some(v) = txkernel_to_txuuid.get_mut(&kernel) {
+						v.push(tx_uuid.clone());
+					} else {
+						txkernel_to_txuuid.insert(kernel, vec![tx_uuid.clone()]);
+					}
 				}
 			}
 		}
@@ -665,13 +666,18 @@ where
 		if block_heights.len() as u64 != end_height - start_height + 1 {
 			return Err(ErrorKind::Node("Unable to get all blocks data".to_string()))?;
 		}
-		if (block_heights[0]!=start_height || block_heights[block_heights.len()-1]!=end_height) {
-			return Err(ErrorKind::Node("Get not expected blocks from the node".to_string()))?;
+		if block_heights[0] != start_height || block_heights[block_heights.len() - 1] != end_height
+		{
+			return Err(ErrorKind::Node(
+				"Get not expected blocks from the node".to_string(),
+			))?;
 		}
-		if block_heights.len()>1 {
-			for i in (1..block_heights.len()) {
-				if block_heights[i - 1] != block_heights[i]-1 {
-					return Err(ErrorKind::Node("Get duplicated blocks from the node".to_string()))?;
+		if block_heights.len() > 1 {
+			for i in 1..block_heights.len() {
+				if block_heights[i - 1] != block_heights[i] - 1 {
+					return Err(ErrorKind::Node(
+						"Get duplicated blocks from the node".to_string(),
+					))?;
 				}
 			}
 		}
