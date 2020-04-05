@@ -371,13 +371,18 @@ impl WalletTxInfo {
 
 		// We have !tx_log.confirmed here because of Account to account transfer issue
 		// By some reasons Send and receive getting different kernels. As a result Send TxLig has wrong kernel
-        // We check is_cancelled because we want to minimize IOs.
-        // As a result, if this issues happen, user cancel tx, it will not be uncancelled. We accept that because failure is not very
-        // critical and user not expected to destroy it's own data.
-		if self.tx_log.kernel_excess.is_none() || (!self.tx_log.confirmed && !self.tx_log.is_cancelled()) {
+		// We check is_cancelled because we want to minimize IOs.
+		// As a result, if this issues happen, user cancel tx, it will not be uncancelled. We accept that because failure is not very
+		// critical and user not expected to destroy it's own data.
+		if self.tx_log.kernel_excess.is_none()
+			|| (!self.tx_log.confirmed && !self.tx_log.is_cancelled())
+		{
 			if let Some(kernel) = tx.body.kernels.get(0) {
-				self.tx_log.kernel_excess = Some(kernel.excess);
-				self.updated = true;
+				if kernel.excess != pedersen::Commitment::from_vec(vec![0; 33]) {
+					// We have a test case with zero (default value) kernel. Still need to handle
+					self.tx_log.kernel_excess = Some(kernel.excess);
+					self.updated = true;
+				}
 			}
 		}
 	}
