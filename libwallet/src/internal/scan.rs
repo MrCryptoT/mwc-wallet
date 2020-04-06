@@ -1348,19 +1348,39 @@ fn validate_outputs_ownership(
 ) {
 	for w_out in outputs.values_mut() {
 		// For every output checking to how many transaction it belong as Input and Output
-		let in_cancelled = w_out
+
+		// Because of Account to account transactions (any type self transactions) we can have pairs.
+		// Those pairs should be processed as a single transaction, overwise it will be guarantee
+		// false collision reporting
+		let in_cancelled_uuid: HashSet<String> = w_out
 			.tx_input_uuid
 			.iter()
 			.filter(|tx_uuid| transactions.get(*tx_uuid).unwrap().tx_log.is_cancelled())
-			.count();
-		let in_active = w_out.tx_input_uuid.len() - in_cancelled;
+			.map(|tx_uuid| format!("{}", tx_uuid.split('/').next().unwrap()))
+			.collect();
 
-		let out_cancelled = w_out
+		let in_all_uuid: HashSet<String> = w_out
+			.tx_input_uuid
+			.iter()
+			.map(|tx_uuid| format!("{}", tx_uuid.split('/').next().unwrap()))
+			.collect();
+
+		let in_active = in_all_uuid.len() - in_cancelled_uuid.len();
+
+		let out_cancelled_uuid: HashSet<String> = w_out
 			.tx_output_uuid
 			.iter()
 			.filter(|tx_uuid| transactions.get(*tx_uuid).unwrap().tx_log.is_cancelled())
-			.count();
-		let out_active = w_out.tx_output_uuid.len() - out_cancelled;
+			.map(|tx_uuid| format!("{}", tx_uuid.split('/').next().unwrap()))
+			.collect();
+
+		let out_all_uuid: HashSet<String> = w_out
+			.tx_output_uuid
+			.iter()
+			.map(|tx_uuid| format!("{}", tx_uuid.split('/').next().unwrap()))
+			.collect();
+
+		let out_active = out_all_uuid.len() - out_cancelled_uuid.len();
 
 		// Commit can belong to 1 transaction only. Other wise it is a transaction issue.
 		// Fortunatelly transaction issue doesn't affect the balance of send logic.
@@ -1404,7 +1424,7 @@ fn validate_outputs_ownership(
 					w_out.output.status = OutputStatus::Unspent;
 					w_out.updated = true;
 				}
-				if out_active == 0 && out_cancelled > 0 {
+				if out_active == 0 && out_cancelled_uuid.len() > 0 {
 					recover_first_cancelled(
 						status_send_channel,
 						&w_out.tx_input_uuid,
@@ -1414,14 +1434,14 @@ fn validate_outputs_ownership(
 			}
 			OutputStatus::Spent => {
 				// output have to have some valid transation. User cancel all of them?
-				if out_active == 0 && out_cancelled > 0 {
+				if out_active == 0 && out_cancelled_uuid.len() > 0 {
 					recover_first_cancelled(
 						status_send_channel,
 						&w_out.tx_output_uuid,
 						transactions,
 					);
 				}
-				if in_active == 0 && in_cancelled > 0 {
+				if in_active == 0 && in_cancelled_uuid.len() > 0 {
 					recover_first_cancelled(
 						status_send_channel,
 						&w_out.tx_input_uuid,
@@ -1451,7 +1471,7 @@ fn validate_outputs_ownership(
 					w_out.output.status = OutputStatus::Locked;
 					w_out.updated = true;
 				}
-				if out_active == 0 && out_cancelled > 0 {
+				if out_active == 0 && out_cancelled_uuid.len() > 0 {
 					recover_first_cancelled(
 						status_send_channel,
 						&w_out.tx_output_uuid,
