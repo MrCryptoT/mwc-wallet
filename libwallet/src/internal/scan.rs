@@ -1527,7 +1527,8 @@ fn delete_unconfirmed(
 						tx.tx_log.tx_type = TxLogEntryType::TxReceivedCancelled;
 					}
 					TxLogEntryType::ConfirmedCoinbase => {
-						tx.tx_log.tx_type = TxLogEntryType::TxReceivedCancelled;
+						// coinbased not confirmed are filtered out. That is why there no needs to change the status
+						tx.tx_log.confirmed = false;
 					}
 					_ => assert!(false), // Not expected, must be logical issue
 				}

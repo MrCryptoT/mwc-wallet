@@ -173,7 +173,11 @@ where
 				}
 				false => true,
 			};
-			f_pk && f_tx_id && f_txs && f_outstanding
+			// Miners doesn't like the fact that CoinBase tx can be unconfirmed. That is we are hiding them fir Rest API and for UI
+			let non_confirmed_coinbase =
+				!tx_entry.confirmed && (tx_entry.tx_type == TxLogEntryType::ConfirmedCoinbase);
+
+			f_pk && f_tx_id && f_txs && f_outstanding && !non_confirmed_coinbase
 		})
 		.collect();
 
