@@ -29,6 +29,7 @@ use grin_wallet_libwallet::Slate;
 use grin_wallet_libwallet::{
 	address, IssueInvoiceTxArgs, NodeClient, WalletInst, WalletLCProvider,
 };
+use grin_wallet_mwcmqs::tx_proof::TxProof;
 use grin_wallet_util::grin_core as core;
 use grin_wallet_util::grin_core::core::amount_to_hr_string;
 use grin_wallet_util::grin_core::global;
@@ -880,9 +881,9 @@ where
 	node_client.set_node_api_secret(global_wallet_args.node_api_secret.clone());
 
 	//create the tx_proof dir inside the wallet_data folder.
-	//	TxProof::init_proof_backend(&wallet_config.data_file_dir).unwrap_or_else(|e| {
-	//		println!("Unable to init proof_backend{}", e);
-	//	});
+	TxProof::init_proof_backend(&wallet_config.data_file_dir).unwrap_or_else(|e| {
+		println!("Unable to init proof_backend{}", e);
+	});
 
 	// legacy hack to avoid the need for changes in existing mwc-wallet.toml files
 	// remove `wallet_data` from end of path as

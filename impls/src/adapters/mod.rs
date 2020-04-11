@@ -25,6 +25,17 @@ use crate::libwallet::{Error, ErrorKind, Slate};
 use crate::tor::config::complete_tor_address;
 use crate::util::ZeroingString;
 
+//todo Yang may need to move to other places.
+use crate::util::Mutex;
+use grin_wallet_mwcmqs::mwcmq::MWCMQPublisher;
+use grin_wallet_mwcmqs::mwcmq::MWCMQSubscriber;
+use grin_wallet_mwcmqs::mwcmq::Publisher;
+use grin_wallet_mwcmqs::types::Address;
+use grin_wallet_mwcmqs::types::MWCMQSAddress;
+use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::Arc;
+use std::time::Duration;
+
 /// Sends transactions to a corresponding SlateReceiver
 pub trait SlateSender {
 	/// Send a transaction slate to another listening wallet and return result
@@ -63,6 +74,7 @@ pub fn create_sender(
 	dest: &str,
 	apisecret: &Option<String>,
 	tor_config: Option<TorConfig>,
+	mqs_channel: Option<MwcMqsChannel>,
 ) -> Result<Box<dyn SlateSender>, Error> {
 	let invalid = || {
 		ErrorKind::WalletComms(format!(
@@ -102,6 +114,7 @@ pub fn create_sender(
 			),
 		},
 		"keybase" => Box::new(KeybaseChannel::new(dest.to_owned())?),
+		"mwcmqs" => Box::new(mqs_channel.unwrap()),
 		"self" => {
 			return Err(ErrorKind::WalletComms(
 				"No sender implementation for \"self\".".to_string(),
@@ -122,4 +135,76 @@ pub fn create_sender(
 			.into());
 		}
 	})
+}
+
+//===============add with mwcmqs feature=============
+//may need to move to other place later
+pub struct MwcMqsChannel {
+	mwcmqs_broker: Arc<Mutex<Option<(MWCMQPublisher, MWCMQSubscriber)>>>,
+	rx: Arc<Mutex<Option<Receiver<Box<Slate>>>>>,
+	tx: Arc<Mutex<Option<Sender<Box<bool>>>>>,
+	des_address: String,
+	finalize: bool,
+}
+
+impl MwcMqsChannel {
+	pub fn new(
+		mwcmqs_broker: Arc<Mutex<Option<(MWCMQPublisher, MWCMQSubscriber)>>>,
+		rx_withlock: Arc<Mutex<Option<Receiver<Box<Slate>>>>>,
+		tx_withlock: Arc<Mutex<Option<Sender<Box<bool>>>>>,
+		des_address: String,
+		finalize: bool,
+	) -> Self {
+		Self {
+			mwcmqs_broker: mwcmqs_broker,
+			rx: rx_withlock,
+			des_address: des_address,
+			tx: tx_withlock,
+			finalize: finalize,
+		}
+	}
+}
+
+impl SlateSender for MwcMqsChannel {
+	fn send_tx(&self, slate: &Slate) -> Result<Slate, Error> {
+		let mwcmqs_broker_lock = self.mwcmqs_broker.lock();
+		let tx_lock = self.tx.lock();
+		//notify the mqs thread to do finalizing and proof.
+		if let Some(i) = &*tx_lock {
+			i.send(Box::new(self.finalize));
+		}
+
+		if let Some(i) = &*mwcmqs_broker_lock {
+			let mwcmqs_publisher = &i.0;
+			let des_address = MWCMQSAddress::from_str(self.des_address.as_ref());
+			if des_address.is_ok() {
+				let des_address = des_address.unwrap();
+				let _res = mwcmqs_publisher.post_slate(&slate, &des_address);
+			}
+		} else {
+			return Err(ErrorKind::ClientCallback(
+				"mqs is not started, not able to send the request".to_owned(),
+			)
+			.into());
+		}
+
+		//expect to get the ok message
+		let rx_withlock = self.rx.lock();
+		if let Some(i) = &*rx_withlock {
+			let rx = &i;
+			let slate_returned = rx.recv_timeout(Duration::from_secs(30));
+			match slate_returned {
+				Ok(s) => {
+					return Ok(*s);
+				}
+				_ => {
+					return Err(ErrorKind::ClientCallback(
+						"request timeout, please use txs api to check the status".to_owned(),
+					)
+					.into())
+				}
+			}
+		}
+		return Err(Error::from(ErrorKind::GrinWalletMwcMqsGeneralError));
+	}
 }

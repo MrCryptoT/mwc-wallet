@@ -49,6 +49,7 @@ sysinfo = "0.9"
 grin_wallet_util = { path = "../util", version = "3.1.4" }
 grin_wallet_config = { path = "../config", version = "3.1.4" }
 grin_wallet_libwallet = { path = "../libwallet", version = "3.1.4" }
+grin_wallet_mwcmqs = { path = "../mwcmqs", version = "3.1.4" }
 
 
 # Release

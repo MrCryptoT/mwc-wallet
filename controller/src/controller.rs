@@ -41,6 +41,7 @@ use grin_wallet_mwcmqs::mwcmq::MWCMQPublisher;
 use grin_wallet_mwcmqs::mwcmq::MWCMQSubscriber;
 use grin_wallet_mwcmqs::mwcmq::Publisher;
 use grin_wallet_mwcmqs::mwcmq::SubscriptionHandler;
+use grin_wallet_mwcmqs::tx_proof::TxProof;
 use grin_wallet_mwcmqs::types::Address;
 use grin_wallet_mwcmqs::types::AddressType;
 use grin_wallet_mwcmqs::types::GrinboxAddress;
@@ -62,6 +63,7 @@ use crate::libwallet::{
 };
 use crate::util::secp::key::SecretKey;
 use crate::util::{from_hex, static_secp_instance, to_base64, Mutex};
+use std::time::Duration;
 
 lazy_static! {
 	pub static ref MWC_OWNER_BASIC_REALM: HeaderValue =
@@ -202,6 +204,7 @@ where
 	pub wallet: Arc<Mutex<Box<dyn WalletInst<'static, L, C, K> + 'static>>>,
 	pub publisher: Box<dyn Publisher + Send>,
 	pub slate_send_channel: Option<Sender<Box<Slate>>>,
+	pub message_receive_channel: Option<Receiver<Box<bool>>>,
 	pub max_auto_accept_invoice: Option<u64>,
 	pub keychain_mask: Arc<Mutex<Option<SecretKey>>>,
 }
@@ -217,6 +220,7 @@ where
 		wallet: Arc<Mutex<Box<dyn WalletInst<'static, L, C, K>>>>,
 		publisher: Box<dyn Publisher + Send>,
 		slate_send_channel: Option<Sender<Box<Slate>>>,
+		message_receive_channel: Option<Receiver<Box<bool>>>,
 		keychain_mask: Arc<Mutex<Option<SecretKey>>>,
 	) -> Result<Self, crate::libwallet::Error>
 	where
@@ -229,6 +233,7 @@ where
 			wallet,
 			publisher,
 			slate_send_channel,
+			message_receive_channel,
 			max_auto_accept_invoice: None,
 			keychain_mask,
 		})
@@ -243,6 +248,7 @@ where
 		slate: &mut Slate,
 		_config: Option<MQSConfig>,
 		dest_acct_name: Option<&str>,
+		proof: Option<&mut TxProof>,
 	) -> Result<bool, Error> {
 		let owner_api = Owner::new(self.wallet.clone());
 		let foreign_api = Foreign::new(self.wallet.clone(), None, None);
@@ -307,9 +313,32 @@ where
 			}
 			Ok(false)
 		} else {
-			//send the slate to owner Api.
+			//request may come to here from owner api or send command
+
 			if let Some(s) = &self.slate_send_channel {
-				//this happens when the request is from owner_api, owner_api will take care of finalizing and posting tx.
+				//this happens when the request is from owner_api
+
+				let mut should_finalize = false;
+
+				if let Some(s) = &self.message_receive_channel {
+					//this happens when the request is from owner_api
+					//unless get false from owner_api, it should always finalize tx here.
+					should_finalize = *s
+						.recv_timeout(Duration::from_secs(15))
+						.unwrap_or_else(|_| Box::new(true));
+				}
+
+				if should_finalize {
+					slate
+						.verify_messages()
+						.map_err(|_| ErrorKind::GrinWalletVerifySlateMessagesError)?;
+					owner_api.tx_lock_outputs((&mask).as_ref(), slate, address, 0)?;
+					*slate = owner_api
+						.finalize_tx_with_proof((&mask).as_ref(), slate, proof)
+						.map_err(|_| ErrorKind::GrinWalletFinalizeError)?;
+				}
+
+				//send the slate to owner_api
 				let slate_immutable = slate.clone();
 				let _ = s.send(Box::new(slate_immutable));
 			} else {
@@ -317,12 +346,13 @@ where
 				slate
 					.verify_messages()
 					.map_err(|_| ErrorKind::GrinWalletVerifySlateMessagesError)?;
+				owner_api.tx_lock_outputs((&mask).as_ref(), slate, address, 0)?;
 
 				//finalize_tx first and then post_tx
 
 				let mut should_post = {
 					*slate = owner_api
-						.finalize_tx((&mask).as_ref(), slate)
+						.finalize_tx_with_proof((&mask).as_ref(), slate, proof)
 						.map_err(|_| ErrorKind::GrinWalletFinalizeError)?;
 
 					true
@@ -359,7 +389,13 @@ where
 		print!("{}", COLORED_PROMPT);
 	}
 
-	fn on_slate(&self, from: &dyn Address, slate: &mut Slate, config: Option<MQSConfig>) {
+	fn on_slate(
+		&self,
+		from: &dyn Address,
+		slate: &mut Slate,
+		proof: Option<&mut TxProof>,
+		config: Option<MQSConfig>,
+	) {
 		let display_from = from.stripped();
 
 		if slate.num_participants > slate.participant_data.len() {
@@ -394,7 +430,7 @@ where
 		}
 
 		let result = self
-            .process_incoming_slate(Some(from.to_string()), slate, config, None)
+			.process_incoming_slate(Some(from.to_string()), slate, config, None, proof)
 			.and_then(|is_finalized| {
 				if !is_finalized {
 					self.publisher
@@ -454,7 +490,7 @@ pub fn init_start_mwcmqs_listener<L, C, K>(
 	config: WalletConfig,
 	wallet: Arc<Mutex<Box<dyn WalletInst<'static, L, C, K>>>>,
 	keychain_mask: Arc<Mutex<Option<SecretKey>>>,
-) -> Result<(), crate::libwallet::Error>
+) -> Result<(MWCMQPublisher, MWCMQSubscriber), crate::libwallet::Error>
 where
 	L: WalletLCProvider<'static, C, K> + 'static,
 	C: NodeClient + 'static,
@@ -480,11 +516,11 @@ where
 		wallet.clone(),
 		config.max_auto_accept_invoice,
 		None,
+		None,
 		true,
 		keychain_mask,
 	)
-	.map_err(|_| ErrorKind::GenericError("cannot start mqs listener".to_string()))?;
-	Ok(())
+	.map_err(|e| ErrorKind::GenericError(format!("cannot start mqs listener :{:?}", e)).into())
 }
 
 /// Start the mqs listener
@@ -493,6 +529,7 @@ fn start_mwcmqs_listener<L, C, K>(
 	wallet: Arc<Mutex<Box<dyn WalletInst<'static, L, C, K>>>>,
 	max_auto_accept_invoice: Option<u64>,
 	slate_send_channel: Option<Sender<Box<Slate>>>,
+	message_receive_channel: Option<Receiver<Box<bool>>>,
 	wait_for_thread: bool,
 	keychain_mask: Arc<Mutex<Option<SecretKey>>>,
 ) -> Result<(MWCMQPublisher, MWCMQSubscriber), Error>
@@ -524,6 +561,7 @@ where
 				wallet.clone(),
 				Box::new(cloned_publisher),
 				slate_send_channel,
+				message_receive_channel,
 				keychain_mask,
 				//                Owner::new(wallet.clone()),
 				//    Foreign::new(wallet, None, None),
@@ -583,7 +621,10 @@ where
 		running_foreign = true;
 	}
 
-	let (tx, rx) = channel();
+	let (tx, rx) = channel(); //this chaneel is used for listener thread to send message to other thread
+
+	//this chaneel is used for listener thread to receive message from other thread
+	let (tx_from_others, rx_from_others) = channel();
 
 	// If so configured, run mqs listener
 	//mqs feature
@@ -609,6 +650,7 @@ where
 			wallet.clone(),
 			config.max_auto_accept_invoice,
 			Some(tx),
+			Some(rx_from_others),
 			false,
 			keychain_mask.clone(),
 		);
@@ -623,11 +665,13 @@ where
 	}
 	let mwcmqs_broker_withlock = Arc::new(Mutex::new(mwcmqs_broker));
 	let rx_withlock = Arc::new(Mutex::new(Some(rx)));
+	let tx_withlock = Arc::new(Mutex::new(Some(tx_from_others)));
 
 	let api_handler_v2 = OwnerAPIHandlerV2::new(
 		wallet.clone(),
 		mwcmqs_broker_withlock.clone(),
 		rx_withlock.clone(),
+		tx_withlock.clone(),
 	);
 	let api_handler_v3 = OwnerAPIHandlerV3::new(
 		wallet.clone(),
@@ -636,6 +680,7 @@ where
 		running_foreign,
 		mwcmqs_broker_withlock,
 		rx_withlock,
+		tx_withlock,
 	);
 
 	router
@@ -734,6 +779,7 @@ where
 	pub wallet: Arc<Mutex<Box<dyn WalletInst<'static, L, C, K> + 'static>>>,
 	mwcmqs_broker: Arc<Mutex<Option<(MWCMQPublisher, MWCMQSubscriber)>>>,
 	rx_withlock: Arc<Mutex<Option<Receiver<Box<Slate>>>>>,
+	tx_withlock: Arc<Mutex<Option<Sender<Box<bool>>>>>,
 }
 
 impl<L, C, K> OwnerAPIHandlerV2<L, C, K>
@@ -747,11 +793,13 @@ where
 		wallet: Arc<Mutex<Box<dyn WalletInst<'static, L, C, K> + 'static>>>,
 		mwcmqs_broker: Arc<Mutex<Option<(MWCMQPublisher, MWCMQSubscriber)>>>,
 		rx_withlock: Arc<Mutex<Option<Receiver<Box<Slate>>>>>,
+		tx_withlock: Arc<Mutex<Option<Sender<Box<bool>>>>>,
 	) -> OwnerAPIHandlerV2<L, C, K> {
 		OwnerAPIHandlerV2 {
 			wallet,
 			mwcmqs_broker,
 			rx_withlock,
+			tx_withlock,
 		}
 	}
 
@@ -779,7 +827,11 @@ where
 	fn handle_post_request(&self, req: Request<Body>) -> WalletResponseFuture {
 		let mut api = Owner::new(self.wallet.clone());
 		//check to see if mqs listener is started, if it is started, pass it to Owner.rs
-		api.set_mqs_broker(self.mwcmqs_broker.clone(), self.rx_withlock.clone());
+		api.set_mqs_broker(
+			self.mwcmqs_broker.clone(),
+			self.rx_withlock.clone(),
+			self.tx_withlock.clone(),
+		);
 		Box::new(
 			self.call_api(req, api)
 				.and_then(|resp| ok(json_response_pretty(&resp))),
@@ -1055,10 +1107,11 @@ where
 		running_foreign: bool,
 		mwcmqs_broker: Arc<Mutex<Option<(MWCMQPublisher, MWCMQSubscriber)>>>,
 		rx_withlock: Arc<Mutex<Option<Receiver<Box<Slate>>>>>,
+		tx_withlock: Arc<Mutex<Option<Sender<Box<bool>>>>>,
 	) -> OwnerAPIHandlerV3<L, C, K> {
 		let mut owner_api = Owner::new(wallet.clone());
 		owner_api.set_tor_config(tor_config);
-		owner_api.set_mqs_broker(mwcmqs_broker, rx_withlock);
+		owner_api.set_mqs_broker(mwcmqs_broker, rx_withlock, tx_withlock);
 		let owner_api = Arc::new(owner_api);
 		OwnerAPIHandlerV3 {
 			wallet,

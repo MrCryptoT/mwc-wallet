@@ -22,6 +22,7 @@ use crate::config::{TorConfig, WalletConfig};
 use crate::core::core::Transaction;
 use crate::core::global;
 use crate::impls::create_sender;
+use crate::impls::MwcMqsChannel;
 use crate::keychain::{Identifier, Keychain};
 use crate::libwallet::api_impl::owner_updater::{start_updater_log_thread, StatusMessage};
 use crate::libwallet::api_impl::{owner, owner_updater};
@@ -36,6 +37,7 @@ use crate::util::{from_hex, static_secp_instance, Mutex, ZeroingString};
 use grin_wallet_mwcmqs::mwcmq::MWCMQPublisher;
 use grin_wallet_mwcmqs::mwcmq::MWCMQSubscriber;
 use grin_wallet_mwcmqs::mwcmq::Publisher;
+use grin_wallet_mwcmqs::tx_proof::TxProof;
 use grin_wallet_mwcmqs::types::Address;
 use grin_wallet_mwcmqs::types::MWCMQSAddress;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -90,6 +92,7 @@ where
 	updater_log_running_state: Arc<AtomicBool>,
 	mwcmqs_broker: Arc<Mutex<Option<(MWCMQPublisher, MWCMQSubscriber)>>>,
 	rx_withlock: Arc<Mutex<Option<Receiver<Box<Slate>>>>>,
+	tx_withlock: Arc<Mutex<Option<Sender<Box<bool>>>>>,
 }
 
 // Owner need to release the resources. We have a thread that is running in background
@@ -220,6 +223,7 @@ where
 			updater_log_running_state: running,
 			mwcmqs_broker: Arc::new(Mutex::new(None)),
 			rx_withlock: Arc::new(Mutex::new(None)),
+			tx_withlock: Arc::new(Mutex::new(None)),
 		}
 	}
 
@@ -248,11 +252,13 @@ where
 		&mut self,
 		mwcmqs_broker: Arc<Mutex<Option<(MWCMQPublisher, MWCMQSubscriber)>>>,
 		rx_withlock: Arc<Mutex<Option<Receiver<Box<Slate>>>>>,
+		tx_withlock: Arc<Mutex<Option<Sender<Box<bool>>>>>,
 	) {
 		//		let mut lock = self.mwcmqs_broker.lock();
 		//		*lock = mwcmqs_broker;
 		self.mwcmqs_broker = mwcmqs_broker;
 		self.rx_withlock = rx_withlock;
+		self.tx_withlock = tx_withlock;
 	}
 
 	/// Returns a list of accounts stored in the wallet (i.e. mappings between
@@ -700,10 +706,6 @@ where
 		let send_args = args.send_args.clone();
 		//minimum_confirmations cannot be zero.
 		let minimum_confirmations = args.minimum_confirmations.clone();
-		println!(
-			"minimum_confirmations = args.minimum_confirmations.clone(); {}",
-			minimum_confirmations
-		);
 		if minimum_confirmations < 1 {
 			return Err(ErrorKind::ClientCallback(
 				"Minimum_confirmations can not be smaller than 1".to_owned(),
@@ -735,66 +737,31 @@ where
 				routputs,
 			)?
 		};
-		// Helper functionality. If send arguments exist, attempt to send
+
+		let mut is_mqs = false;
+
 		match send_args {
 			Some(sa) => {
 				//TODO: in case of keybase, the response might take 60s and leave the service hanging
 				match sa.method.as_ref() {
-					"mwcmqs" => {
-						//to do the implementation here;
-						let mwcmqs_broker_lock = self.mwcmqs_broker.lock();
-						if let Some(i) = &*mwcmqs_broker_lock {
-							//let mwcmqs_publisher  = *mwcmqs_broker_lock.map(|(p, _)| p);
-							let mwcmqs_publisher = &i.0;
-							let des_address = MWCMQSAddress::from_str(sa.dest.as_str());
-							if des_address.is_ok() {
-								let des_address = des_address.unwrap();
-								let _res = mwcmqs_publisher.post_slate(&slate, &des_address);
-							}
-						} else {
-							return Err(ErrorKind::ClientCallback(
-								"mqs is not started, not able to send the request".to_owned(),
-							)
-							.into());
-						}
-						//self.tx_lock_outputs(keychain_mask, &slate, address.clone(), 0)?;
-						//here the workflow has some problem, the finalization and post of transaction will be automatically done
-						//from the mqs subscription handler thread started in controller.rs
-
-						//expect to get the ok message
-						let rx_withlock = self.rx_withlock.lock();
-						if let Some(i) = &*rx_withlock {
-							let rx = &i;
-							let slate_returned = rx.recv_timeout(Duration::from_secs(30));
-							match slate_returned {
-								//Ok(s) => return Ok(*s),
-								Ok(s) => slate = *s,
-								_ => {
-									return Err(ErrorKind::ClientCallback(
-										"request timeout, please use txs api to check the status"
-											.to_owned(),
-									)
-									.into())
-								}
-							}
-							//							//let slate_returned = rx.recv().unwrap();
-							//							println!("got the message from the mqs handler ");
-							//							return Ok(*slate_returned);
+					"http" | "keybase" | "mwcmqs" => {
+						if &sa.method == "mwcmqs" {
+							is_mqs = true;
 						}
 
-						//						return Err(ErrorKind::ClientCallback(
-						//							"request timeout, please use txs api to check the status".to_owned(),
-						//						)
-						//						.into());
-					}
-
-					"http" | "keybase" => {
 						let tor_config_lock = self.tor_config.lock();
 						let comm_adapter = create_sender(
 							&sa.method,
 							&sa.dest,
 							&sa.apisecret,
 							tor_config_lock.clone(),
+							Some(MwcMqsChannel::new(
+								self.mwcmqs_broker.clone(),
+								self.rx_withlock.clone(),
+								self.tx_withlock.clone(),
+								sa.dest.clone(),
+								sa.finalize.clone(),
+							)),
 						)
 						.map_err(|e| ErrorKind::GenericError(format!("{}", e)))?;
 						slate = comm_adapter.send_tx(&slate)?;
@@ -807,15 +774,19 @@ where
 						.into());
 					}
 				};
-				self.tx_lock_outputs(keychain_mask, &slate, address, 0)?;
-				let slate = match sa.finalize {
-					true => self.finalize_tx(keychain_mask, &slate)?,
-					false => slate,
-				};
-				println!(
-					"slate [{}] finalized successfully in owner_api",
-					slate.id.to_string()
-				);
+
+				//for mwcmqs ,finalizing and proof  has been done in listener thread
+				if !is_mqs {
+					self.tx_lock_outputs(keychain_mask, &slate, address, 0)?;
+					slate = match sa.finalize {
+						true => self.finalize_tx(keychain_mask, &slate)?,
+						false => slate,
+					};
+					println!(
+						"slate [{}] finalized successfully in owner_api",
+						slate.id.to_string()
+					);
+				}
 
 				if sa.post_tx {
 					self.post_tx(keychain_mask, &slate.tx, sa.fluff)?;
@@ -1084,8 +1055,39 @@ where
 	) -> Result<Slate, Error> {
 		let mut w_lock = self.wallet_inst.lock();
 		let w = w_lock.lc_provider()?.wallet_inst()?;
-		let (slate, _) = owner::finalize_tx(&mut **w, keychain_mask, &slate)?;
-		Ok(slate)
+		let (slate_res, _context) = owner::finalize_tx(&mut **w, keychain_mask, &slate)?;
+
+		Ok(slate_res)
+	}
+
+	///added with mqs feature.
+	pub fn finalize_tx_with_proof(
+		&self,
+		keychain_mask: Option<&SecretKey>,
+		slate: &Slate,
+		tx_proof: Option<&mut TxProof>,
+	) -> Result<Slate, Error> {
+		let mut w_lock = self.wallet_inst.lock();
+		let w = w_lock.lc_provider()?.wallet_inst()?;
+		let (slate_res, context) = owner::finalize_tx(&mut **w, keychain_mask, &slate)?;
+		//do tx_proof
+		if tx_proof.is_some() {
+			let mut proof = tx_proof.unwrap();
+			proof.amount = context.amount;
+			proof.fee = context.fee;
+			for input in context.input_commits {
+				proof.inputs.push(input.clone());
+			}
+			for output in context.output_commits {
+				proof.outputs.push(output.clone());
+			}
+
+			proof
+				.store_tx_proof(w.get_data_file_dir(), &slate_res.id.to_string())
+				.map_err(|e| ErrorKind::GrinWalletProofError)?;
+		};
+
+		Ok(slate_res)
 	}
 
 	/// Posts a completed transaction to the listening node for validation and inclusion in a block

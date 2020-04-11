@@ -277,8 +277,15 @@ pub enum ErrorKind {
 	GrinWalletVerifySlateMessagesError,
 
 	///added with mqs feature
+	#[fail(display = "\x1b[31;1merror:\x1b[0m general error of mqs feature!")]
+	GrinWalletMwcMqsGeneralError,
+	///added with mqs feature
 	#[fail(display = "\x1b[31;1merror:\x1b[0m failed finalizing slate!")]
 	GrinWalletFinalizeError,
+
+	///added with mqs feature
+	#[fail(display = "\x1b[31;1merror:\x1b[0m failed creating proof file!")]
+	GrinWalletProofError,
 
 	///added with mqs feature
 	#[fail(display = "\x1b[31;1merror:\x1b[0m failed posting transaction!")]

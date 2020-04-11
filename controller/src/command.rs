@@ -148,6 +148,7 @@ where
 		),
 		"mwcmqs" => {
 			controller::init_start_mwcmqs_listener(config.clone(), wallet.clone(), keychain_mask)
+				.map(|_o| ())
 		}
 		method => {
 			return Err(ErrorKind::ArgumentError(format!(
@@ -359,7 +360,8 @@ where
 					//controller::init_start_mwcmqs_listener(config.clone(), wallet.clone(), Mutex::new(km));
 				}
 				method => {
-					let sender = create_sender(method, &args.dest, &args.apisecret, tor_config)?;
+					let sender =
+						create_sender(method, &args.dest, &args.apisecret, tor_config, None)?;
 					slate = sender.send_tx(&slate)?;
 					api.tx_lock_outputs(m, &slate, Some(args.dest.clone()), 0)?;
 				}
@@ -629,7 +631,7 @@ where
 					})?;
 				}
 				method => {
-					let sender = create_sender(method, &args.dest, &None, tor_config)?;
+					let sender = create_sender(method, &args.dest, &None, tor_config, None)?;
 					slate = sender.send_tx(&slate)?;
 					api.tx_lock_outputs(m, &slate, Some(args.dest.clone()), 1)?;
 				}
