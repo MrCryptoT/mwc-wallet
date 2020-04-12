@@ -551,7 +551,6 @@ where
 
 	let cloned_publisher = mwcmqs_publisher.clone();
 	let mut cloned_subscriber = mwcmqs_subscriber.clone();
-	//let mask = keychain_mask.lock();
 
 	let thread = thread::Builder::new()
 		.name("mwcmqs-broker".to_string())
@@ -632,6 +631,15 @@ where
 	if running_mqs {
 		warn!("Starting MWCMQS Listener");
 		//create MQSConifg from the WalletConfig.
+
+		//create the tx_proof dir inside the wallet_data folder.
+		{
+			wallet_lock!(wallet, w);
+			TxProof::init_proof_backend(w.get_data_file_dir()).unwrap_or_else(|e| {
+				println!("Unable to init proof_backend{}", e);
+			});
+		}
+
 		let mut mqs_config: MQSConfig = MQSConfig::default(&config);
 
 		let index = config.grinbox_address_index();
