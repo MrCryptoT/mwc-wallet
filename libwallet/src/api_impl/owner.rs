@@ -488,8 +488,8 @@ where
 		use_test_rng,
 		None,
 		1,
-                args.exclude_change_outputs.unwrap_or(false),
-                args.minimum_confirmations_change_outputs,
+		args.exclude_change_outputs.unwrap_or(false),
+		args.minimum_confirmations_change_outputs,
 	)?;
 
 	// Save the aggsig context in our DB for when we

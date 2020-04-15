@@ -117,13 +117,13 @@ pub struct InitTxArgs {
 	/// If true, exclude change outputs from minimum_confirmation settings. Instead --min_conf_change_outputs
 	/// will be used for the minimum_confirmation value for all change_outputs. All non change outputs will continue
 	/// to use the --min_conf parameter.
-        #[serde(default)]
-        pub exclude_change_outputs: Option<bool>,
-        /// The minimum number of confirmations an output that is a change output
-        /// should have in order to be included in the transaction.
+	#[serde(default)]
+	pub exclude_change_outputs: Option<bool>,
+	/// The minimum number of confirmations an output that is a change output
+	/// should have in order to be included in the transaction.
 	/// This parameter is only used if exclude_change_outputs is true.
-        #[serde(default = "InitTxArgs::default_change_output_minimum_confirmations")]
-        pub minimum_confirmations_change_outputs: u64,
+	#[serde(default = "InitTxArgs::default_change_output_minimum_confirmations")]
+	pub minimum_confirmations_change_outputs: u64,
 	/// Sender arguments. If present, the underlying function will also attempt to send the
 	/// transaction to a destination and optionally finalize the result
 	#[serde(default)]
@@ -167,7 +167,7 @@ impl Default for InitTxArgs {
 			estimate_only: Some(false),
 			payment_proof_recipient_address: None,
 			address: None,
-			exclude_change_outputs: Some(false), 
+			exclude_change_outputs: Some(false),
 			minimum_confirmations_change_outputs: 1,
 			send_args: None,
 		}

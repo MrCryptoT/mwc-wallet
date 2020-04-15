@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use crate::api::TLSConfig;
+use crate::cmd::wallet_args::ParseError::ArgumentError;
 use crate::config::GRIN_WALLET_DIR;
 use crate::util::file::get_first_line;
 use crate::util::{to_hex, Mutex, ZeroingString};
@@ -21,7 +22,6 @@ use clap::ArgMatches;
 use failure::Fail;
 use grin_wallet_config::{TorConfig, WalletConfig};
 use grin_wallet_controller::command;
-use crate::cmd::wallet_args::ParseError::ArgumentError;
 use grin_wallet_controller::{Error, ErrorKind};
 use grin_wallet_impls::tor::config::is_tor_address;
 use grin_wallet_impls::{DefaultLCProvider, DefaultWalletImpl};
@@ -517,14 +517,18 @@ pub fn parse_send_args(args: &ArgMatches) -> Result<command::SendArgs, ParseErro
 		}
 	};
 
-	let minimum_confirmations_change_outputs_is_present = args.occurrences_of("minimum_confirmations_change_outputs") != 0;
-	let minimum_confirmations_change_outputs = parse_required(args, "minimum_confirmations_change_outputs")?;
-	let minimum_confirmations_change_outputs = parse_u64(minimum_confirmations_change_outputs, "minimum_confirmations_change_outputs")?;
+	let minimum_confirmations_change_outputs_is_present =
+		args.occurrences_of("minimum_confirmations_change_outputs") != 0;
+	let minimum_confirmations_change_outputs =
+		parse_required(args, "minimum_confirmations_change_outputs")?;
+	let minimum_confirmations_change_outputs = parse_u64(
+		minimum_confirmations_change_outputs,
+		"minimum_confirmations_change_outputs",
+	)?;
 	let exclude_change_outputs = args.is_present("exclude_change_outputs");
 	if minimum_confirmations_change_outputs_is_present && !exclude_change_outputs {
 		Err(ArgumentError("minimum_confirmations_change_outputs may only be specified if exclude_change_outputs is set".to_string()))
 	} else {
-
 		Ok(command::SendArgs {
 			amount: amount,
 			message: message,

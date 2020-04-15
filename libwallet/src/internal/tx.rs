@@ -99,8 +99,8 @@ pub fn estimate_send_tx<'a, T: ?Sized, C, K>(
 	parent_key_id: &Identifier,
 	outputs: &Option<Vec<&str>>, // outputs to include into the transaction
 	routputs: usize,             // Number of resulting outputs. Normally it is 1
-        exclude_change_outputs: bool,
-        change_output_minimum_confirmations: u64,
+	exclude_change_outputs: bool,
+	change_output_minimum_confirmations: u64,
 ) -> Result<
 	(
 		u64, // total
@@ -135,8 +135,8 @@ where
 		parent_key_id,
 		outputs,
 		routputs,
-        	exclude_change_outputs,
-        	change_output_minimum_confirmations,
+		exclude_change_outputs,
+		change_output_minimum_confirmations,
 	)?;
 	Ok((total, fee))
 }
@@ -158,8 +158,8 @@ pub fn add_inputs_to_slate<'a, T: ?Sized, C, K>(
 	use_test_rng: bool,
 	outputs: Option<Vec<&str>>, // outputs to include into the transaction
 	routputs: usize,            // Number of resulting outputs. Normally it is 1
-        exclude_change_outputs: bool,
-        change_output_minimum_confirmations: u64,
+	exclude_change_outputs: bool,
+	change_output_minimum_confirmations: u64,
 ) -> Result<Context, Error>
 where
 	T: WalletBackend<'a, C, K>,
@@ -186,8 +186,8 @@ where
 		use_test_rng,
 		&outputs, // outputs to include into the transaction
 		routputs, // Number of resulting outputs. Normally it is 1
-        	exclude_change_outputs,
-        	change_output_minimum_confirmations,
+		exclude_change_outputs,
+		change_output_minimum_confirmations,
 	)?;
 
 	// Generate a kernel offset and subtract from our context's secret key. Store

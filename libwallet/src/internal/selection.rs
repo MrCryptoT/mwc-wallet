@@ -49,8 +49,8 @@ pub fn build_send_tx<'a, T: ?Sized, C, K>(
 	use_test_nonce: bool,
 	outputs: &Option<Vec<&str>>, // outputs to include into the transaction
 	routputs: usize,             // Number of resulting outputs. Normally it is 1
-        exclude_change_outputs: bool,
-        change_output_minimum_confirmations: u64,
+	exclude_change_outputs: bool,
+	change_output_minimum_confirmations: u64,
 ) -> Result<Context, Error>
 where
 	T: WalletBackend<'a, C, K>,
@@ -69,8 +69,8 @@ where
 		&parent_key_id,
 		outputs,
 		routputs,
-        	exclude_change_outputs,
-        	change_output_minimum_confirmations,
+		exclude_change_outputs,
+		change_output_minimum_confirmations,
 	)?;
 
 	// Update the fee on the slate so we account for this when building the tx.
@@ -410,8 +410,8 @@ pub fn select_send_tx<'a, T: ?Sized, C, K, B>(
 	parent_key_id: &Identifier,
 	outputs: &Option<Vec<&str>>, // outputs to include into the transaction
 	routputs: usize,             // Number of resulting outputs. Normally it is 1
-        exclude_change_outputs: bool,
-        change_output_minimum_confirmations: u64,
+	exclude_change_outputs: bool,
+	change_output_minimum_confirmations: u64,
 ) -> Result<
 	(
 		Vec<Box<build::Append<K, B>>>,
@@ -427,7 +427,6 @@ where
 	K: Keychain + 'a,
 	B: ProofBuild,
 {
-
 	let (coins, _total, amount, fee) = select_coins_and_fee(
 		wallet,
 		amount,
@@ -439,8 +438,8 @@ where
 		&parent_key_id,
 		outputs,  // outputs to include into the transaction
 		routputs, // Number of resulting outputs. Normally it is 1
-        	exclude_change_outputs,
-        	change_output_minimum_confirmations,
+		exclude_change_outputs,
+		change_output_minimum_confirmations,
 	)?;
 
 	// build transaction skeleton with inputs and change
@@ -462,8 +461,8 @@ pub fn select_coins_and_fee<'a, T: ?Sized, C, K>(
 	parent_key_id: &Identifier,
 	outputs: &Option<Vec<&str>>, // outputs to include into the transaction
 	routputs: usize,             // Number of resulting outputs. Normally it is 1
-        exclude_change_outputs: bool,
-        change_output_minimum_confirmations: u64,
+	exclude_change_outputs: bool,
+	change_output_minimum_confirmations: u64,
 ) -> Result<
 	(
 		Vec<OutputData>,
@@ -488,8 +487,8 @@ where
 		selection_strategy_is_use_all,
 		parent_key_id,
 		outputs, // outputs to include into the transaction
-        	exclude_change_outputs,
-        	change_output_minimum_confirmations,
+		exclude_change_outputs,
+		change_output_minimum_confirmations,
 	);
 
 	if coins.len() + routputs + change_outputs > max_outputs {
@@ -536,8 +535,8 @@ where
 				selection_strategy_is_use_all,
 				parent_key_id,
 				outputs,
-        			exclude_change_outputs,
-        			change_output_minimum_confirmations,
+				exclude_change_outputs,
+				change_output_minimum_confirmations,
 			)
 			.1;
 			fee = tx_fee(coins.len(), num_outputs, 1, None);
@@ -659,15 +658,12 @@ where
 	C: NodeClient + 'a,
 	K: Keychain + 'a,
 {
-
-	let mut change_outputs:HashMap<String,u32> = HashMap::new();
+	let mut change_outputs: HashMap<String, u32> = HashMap::new();
 	if exclude_change_outputs {
-        	let txs: Vec<TxLogEntry> = wallet
-                	.tx_log_iter()
-			.filter(|tx_entry| {
-				tx_entry.tx_type == TxLogEntryType::TxSent && tx_entry.confirmed
-			})
-                	.collect();
+		let txs: Vec<TxLogEntry> = wallet
+			.tx_log_iter()
+			.filter(|tx_entry| tx_entry.tx_type == TxLogEntryType::TxSent && tx_entry.confirmed)
+			.collect();
 
 		for tx in &txs {
 			for o in &tx.output_commits {
@@ -676,8 +672,10 @@ where
 			}
 		}
 	}
-	debug!("exclude_change_outputs = {}, change_output_minimum_confirmations = {}",
-		exclude_change_outputs, change_output_minimum_confirmations);
+	debug!(
+		"exclude_change_outputs = {}, change_output_minimum_confirmations = {}",
+		exclude_change_outputs, change_output_minimum_confirmations
+	);
 	// first find all eligible outputs based on number of confirmations
 	let mut eligible = wallet
 		.iter()

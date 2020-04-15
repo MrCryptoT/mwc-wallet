@@ -281,7 +281,8 @@ where
 						selection_strategy_is_use_all: strategy == "all",
 						estimate_only: Some(true),
 						exclude_change_outputs: Some(args.exclude_change_outputs),
-						minimum_confirmations_change_outputs: args.minimum_confirmations_change_outputs,
+						minimum_confirmations_change_outputs: args
+							.minimum_confirmations_change_outputs,
 						..Default::default()
 					};
 					let slate = api.init_send_tx(m, init_args, None, 1).unwrap();
@@ -306,8 +307,8 @@ where
 				payment_proof_recipient_address,
 				ttl_blocks: args.ttl_blocks,
 				send_args: None,
-                                exclude_change_outputs: Some(args.exclude_change_outputs),
-                                minimum_confirmations_change_outputs: args.minimum_confirmations_change_outputs,
+				exclude_change_outputs: Some(args.exclude_change_outputs),
+				minimum_confirmations_change_outputs: args.minimum_confirmations_change_outputs,
 				..Default::default()
 			};
 			let result = api.init_send_tx(m, init_args, None, 1);
