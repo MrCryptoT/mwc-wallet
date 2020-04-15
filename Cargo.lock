@@ -1018,7 +1018,7 @@ dependencies = [
 
 [[package]]
 name = "grin_wallet_api"
-version = "3.1.6"
+version = "3.1.7"
 dependencies = [
  "base64 0.9.3",
  "chrono",
@@ -1042,7 +1042,7 @@ dependencies = [
 
 [[package]]
 name = "grin_wallet_config"
-version = "3.1.6"
+version = "3.1.7"
 dependencies = [
  "dirs",
  "grin_wallet_util",
@@ -1055,7 +1055,7 @@ dependencies = [
 
 [[package]]
 name = "grin_wallet_controller"
-version = "3.1.6"
+version = "3.1.7"
 dependencies = [
  "chrono",
  "colored",
@@ -1086,7 +1086,7 @@ dependencies = [
 
 [[package]]
 name = "grin_wallet_impls"
-version = "3.1.6"
+version = "3.1.7"
 dependencies = [
  "blake2-rfc",
  "byteorder",
@@ -1126,7 +1126,7 @@ dependencies = [
 
 [[package]]
 name = "grin_wallet_libwallet"
-version = "3.1.6"
+version = "3.1.7"
 dependencies = [
  "blake2-rfc",
  "byteorder",
@@ -1154,7 +1154,7 @@ dependencies = [
 
 [[package]]
 name = "grin_wallet_util"
-version = "3.1.6"
+version = "3.1.7"
 dependencies = [
  "dirs",
  "grin_api",
@@ -1675,7 +1675,7 @@ dependencies = [
 
 [[package]]
 name = "mwc_wallet"
-version = "3.1.6"
+version = "3.1.7"
 dependencies = [
  "built",
  "clap",
