@@ -36,6 +36,7 @@ change outputs are being sent by the exchange itself, there is no risk to a doub
 
 This command will send 10 MWC, but only select from outputs that have at least 5,100 confirmations or change outputs that have
 1 confirmation (1 is the default value for --minimum_confirmations_change_outputs).
+
 ```mwc-wallet send -x -c 5100 -m file -d tx.tx 10```
 
 This command does the same, except sets the minimum confirmation for change outputs to 20.
