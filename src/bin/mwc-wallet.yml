@@ -98,6 +98,17 @@ subcommands:
             long: min_conf
             default_value: "10"
             takes_value: true
+        - exclude_change_outputs:
+            help: If this flag is set, 'minimum_confirmations' will not apply to change_outputs for this request. Instead, minimum_confirmations_change_outputs will be used as the minimum_confirmations required for change_outputs.
+            short: x
+            long: exclude_change_outputs
+            takes_value: false
+        - minimum_confirmations_change_outputs:
+            help: minimum confirmations required for change outputs. This value may only be set if the -exclude_change_outputs flag is set.
+            short: r
+            long: minimum_confirmations_change_outputs 
+            default_value: "1"
+            takes_value: true
         - selection_strategy:
             help: Coin/Output selection strategy.
             short: s

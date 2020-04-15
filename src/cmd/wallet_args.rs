@@ -21,6 +21,7 @@ use clap::ArgMatches;
 use failure::Fail;
 use grin_wallet_config::{TorConfig, WalletConfig};
 use grin_wallet_controller::command;
+use crate::cmd::wallet_args::ParseError::ArgumentError;
 use grin_wallet_controller::{Error, ErrorKind};
 use grin_wallet_impls::tor::config::is_tor_address;
 use grin_wallet_impls::{DefaultLCProvider, DefaultWalletImpl};
@@ -516,22 +517,33 @@ pub fn parse_send_args(args: &ArgMatches) -> Result<command::SendArgs, ParseErro
 		}
 	};
 
-	Ok(command::SendArgs {
-		amount: amount,
-		message: message,
-		minimum_confirmations: min_c,
-		selection_strategy: selection_strategy.to_owned(),
-		estimate_selection_strategies,
-		method: method.to_owned(),
-		dest: dest.to_owned(),
-		apisecret: apisecret,
-		change_outputs: change_outputs,
-		fluff: fluff,
-		max_outputs: max_outputs,
-		payment_proof_address,
-		ttl_blocks,
-		target_slate_version: target_slate_version,
-	})
+	let minimum_confirmations_change_outputs_is_present = args.occurrences_of("minimum_confirmations_change_outputs") != 0;
+	let minimum_confirmations_change_outputs = parse_required(args, "minimum_confirmations_change_outputs")?;
+	let minimum_confirmations_change_outputs = parse_u64(minimum_confirmations_change_outputs, "minimum_confirmations_change_outputs")?;
+	let exclude_change_outputs = args.is_present("exclude_change_outputs");
+	if minimum_confirmations_change_outputs_is_present && !exclude_change_outputs {
+		Err(ArgumentError("minimum_confirmations_change_outputs may only be specified if exclude_change_outputs is set".to_string()))
+	} else {
+
+		Ok(command::SendArgs {
+			amount: amount,
+			message: message,
+			minimum_confirmations: min_c,
+			selection_strategy: selection_strategy.to_owned(),
+			estimate_selection_strategies,
+			method: method.to_owned(),
+			dest: dest.to_owned(),
+			apisecret: apisecret,
+			change_outputs: change_outputs,
+			fluff: fluff,
+			max_outputs: max_outputs,
+			payment_proof_address,
+			ttl_blocks,
+			target_slate_version: target_slate_version,
+			exclude_change_outputs: exclude_change_outputs,
+			minimum_confirmations_change_outputs: minimum_confirmations_change_outputs,
+		})
+	}
 }
 
 pub fn parse_receive_args(receive_args: &ArgMatches) -> Result<command::ReceiveArgs, ParseError> {

@@ -279,6 +279,8 @@ where
 			&parent_key_id,
 			&outputs,
 			routputs,
+			args.exclude_change_outputs.unwrap_or(false),
+			args.minimum_confirmations_change_outputs,
 		)?;
 		slate.amount = total;
 		slate.fee = fee;
@@ -300,6 +302,8 @@ where
 		use_test_rng,
 		outputs,
 		routputs,
+		args.exclude_change_outputs.unwrap_or(false),
+		args.minimum_confirmations_change_outputs,
 	)?;
 
 	// Payment Proof, add addresses to slate and save address
@@ -484,6 +488,8 @@ where
 		use_test_rng,
 		None,
 		1,
+                args.exclude_change_outputs.unwrap_or(false),
+                args.minimum_confirmations_change_outputs,
 	)?;
 
 	// Save the aggsig context in our DB for when we
