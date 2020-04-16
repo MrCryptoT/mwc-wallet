@@ -1,4 +1,6 @@
 steps:
+  - script: 'cargo test --all'
+    displayName: Cargo Test All
   - script: 'cargo build --release'
     displayName: Build Release
   - script: |
