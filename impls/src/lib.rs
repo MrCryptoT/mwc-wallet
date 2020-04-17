@@ -26,7 +26,7 @@ use grin_wallet_libwallet as libwallet;
 use grin_wallet_util::grin_api as api;
 use grin_wallet_util::grin_chain as chain;
 use grin_wallet_util::grin_core as core;
-use grin_wallet_util::grin_keychain as keychain;
+pub use grin_wallet_util::grin_keychain as keychain;
 use grin_wallet_util::grin_store as store;
 use grin_wallet_util::grin_util as util;
 
@@ -43,8 +43,8 @@ pub mod test_framework;
 pub mod tor;
 
 pub use crate::adapters::{
-	create_sender, HttpSlateSender, KeybaseAllChannels, KeybaseChannel, PathToSlate, SlateGetter,
-	SlatePutter, SlateReceiver, SlateSender,
+	create_sender, HttpSlateSender, KeybaseAllChannels, KeybaseChannel, MwcMqsChannel, PathToSlate,
+	SlateGetter, SlatePutter, SlateReceiver, SlateSender,
 };
 pub use crate::backends::{wallet_db_exists, LMDBBackend};
 pub use crate::error::{Error, ErrorKind};

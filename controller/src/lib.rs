@@ -16,6 +16,9 @@
 
 #[macro_use]
 extern crate prettytable;
+extern crate gotham_derive;
+extern crate serde_derive;
+extern crate serde_json;
 
 #[macro_use]
 extern crate log;

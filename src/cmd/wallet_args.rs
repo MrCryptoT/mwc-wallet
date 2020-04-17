@@ -403,6 +403,10 @@ pub fn parse_owner_api_args(
 	if args.is_present("run_foreign") {
 		config.owner_api_include_foreign = Some(true);
 	}
+
+	if args.is_present("run_mqs") {
+		config.owner_api_include_mqs_listener = Some(true);
+	}
 	Ok(())
 }
 
@@ -918,7 +922,7 @@ where
 			node_client,
 		)
 		.unwrap_or_else(|e| {
-			println!("Error: {}", e);
+			println!("{}", e);
 			std::process::exit(1);
 		});
 
@@ -967,6 +971,9 @@ where
 	};
 
 	let km = (&keychain_mask).as_ref();
+
+	let _data_path_buf = wallet_config.get_data_path();
+	//let data_path = data_path_buf.to_str().unwrap();
 
 	let res = match wallet_args.subcommand() {
 		("init", Some(args)) => {

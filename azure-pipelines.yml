@@ -15,7 +15,8 @@
 trigger:
   branches:
     include:
-      - master
+      - maste
+      - rebase3.0_withmwcmqs
   tags:
     include: ['*']
 

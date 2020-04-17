@@ -369,6 +369,7 @@ pub trait OwnerRpc: Sync + Send {
 			"params": {
 				"args": {
 					"amount": "200000000"
+
 				}
 			},
 			"id": 1

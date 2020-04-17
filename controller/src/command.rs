@@ -146,6 +146,10 @@ where
 			&g_args.account,
 			g_args.node_api_secret.clone(),
 		),
+		"mwcmqs" => {
+			controller::init_start_mwcmqs_listener(config.clone(), wallet.clone(), keychain_mask)
+				.map(|_o| ())
+		}
 		method => {
 			return Err(ErrorKind::ArgumentError(format!(
 				"No listener for method \"{}\".",
@@ -183,6 +187,8 @@ where
 		g_args.api_secret.clone(),
 		g_args.tls_conf.clone(),
 		config.owner_api_include_foreign.clone(),
+		config.owner_api_include_mqs_listener.clone(),
+		config.clone(),
 		Some(tor_config.clone()),
 	);
 	if let Err(e) = res {
@@ -350,8 +356,19 @@ where
 						Ok(())
 					})?;
 				}
+
+				"mwcmqs" => {
+					api.tx_lock_outputs(m, &slate, Some(String::from("self")), 0)?;
+					let _km = match keychain_mask.as_ref() {
+						None => None,
+						Some(&m) => Some(m.to_owned()),
+					};
+					//start the listener finalize tx
+					//controller::init_start_mwcmqs_listener(config.clone(), wallet.clone(), Mutex::new(km));
+				}
 				method => {
-					let sender = create_sender(method, &args.dest, &args.apisecret, tor_config)?;
+					let sender =
+						create_sender(method, &args.dest, &args.apisecret, tor_config, None)?;
 					slate = sender.send_tx(&slate)?;
 					api.tx_lock_outputs(m, &slate, Some(args.dest.clone()), 0)?;
 				}
@@ -621,7 +638,7 @@ where
 					})?;
 				}
 				method => {
-					let sender = create_sender(method, &args.dest, &None, tor_config)?;
+					let sender = create_sender(method, &args.dest, &None, tor_config, None)?;
 					slate = sender.send_tx(&slate)?;
 					api.tx_lock_outputs(m, &slate, Some(args.dest.clone()), 1)?;
 				}

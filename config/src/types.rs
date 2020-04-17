@@ -18,6 +18,7 @@ use std::fmt;
 use std::io;
 use std::path::PathBuf;
 
+use crate::config::GRIN_WALLET_DIR;
 use crate::core::global::ChainTypes;
 use crate::util::logger::LoggingConfig;
 
@@ -42,6 +43,16 @@ pub struct WalletConfig {
 	pub check_node_api_http_addr: String,
 	/// Whether to include foreign API endpoints on the Owner API
 	pub owner_api_include_foreign: Option<bool>,
+	/// Whether to include the mwcmqs listener
+	pub owner_api_include_mqs_listener: Option<bool>,
+	///To enable this amount for an invoice amount, for example if the value is 50000000000 that is 50 mwc or less,
+	pub max_auto_accept_invoice: Option<u64>,
+	/// mwcmqs domain
+	pub mwcmqs_domain: Option<String>,
+	/// mwcmqs port
+	pub mwcmqs_port: Option<u16>,
+	//mqs address index
+	pub grinbox_address_index: Option<u32>,
 	/// The directory in which wallet files are stored
 	pub data_file_dir: String,
 	/// If Some(true), don't cache commits alongside output data
@@ -71,7 +82,12 @@ impl Default for WalletConfig {
 			node_api_secret_path: Some(".api_secret".to_string()),
 			check_node_api_http_addr: "http://127.0.0.1:3413".to_string(),
 			owner_api_include_foreign: Some(false),
+			owner_api_include_mqs_listener: Some(false),
+			mwcmqs_domain: None,
+			mwcmqs_port: None,
+			max_auto_accept_invoice: Some(50000000000),
 			data_file_dir: ".".to_string(),
+			grinbox_address_index: None,
 			no_commit_cache: Some(false),
 			tls_certificate_file: None,
 			tls_certificate_key: None,
@@ -103,7 +119,19 @@ impl WalletConfig {
 	pub fn owner_api_listen_addr(&self) -> String {
 		format!("127.0.0.1:{}", self.owner_api_listen_port())
 	}
+
+	pub fn get_data_path(&self) -> String {
+		//mqs feature
+		self.wallet_data_dir
+			.clone()
+			.unwrap_or(GRIN_WALLET_DIR.to_string())
+	}
+
+	pub fn grinbox_address_index(&self) -> u32 {
+		self.grinbox_address_index.unwrap_or(0)
+	}
 }
+
 /// Error type wrapping config errors.
 #[derive(Debug)]
 pub enum ConfigError {

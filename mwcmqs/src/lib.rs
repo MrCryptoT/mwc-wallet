@@ -22,16 +22,31 @@
 
 #[macro_use]
 extern crate serde_derive;
+extern crate serde_json;
 
-use grin_wallet_util::grin_core as core;
-use grin_wallet_util::grin_util as util;
-
-mod comments;
-pub mod config;
+#[allow(missing_docs)]
+pub mod backend;
+mod base58;
+#[allow(missing_docs)]
+pub mod crypto;
+mod encrypt;
+#[allow(missing_docs)]
+mod error_kind;
+#[allow(missing_docs)]
+pub mod hasher;
+#[allow(missing_docs)]
+pub mod message;
+#[allow(missing_docs)]
+pub mod mwcmq;
+#[allow(missing_docs)]
+pub mod tx_proof;
 #[allow(missing_docs)]
 pub mod types;
 
-pub use crate::config::{initial_setup_wallet, GRIN_WALLET_DIR, WALLET_CONFIG_FILE_NAME};
-pub use crate::types::{
-	ConfigError, GlobalWalletConfig, GlobalWalletConfigMembers, TorConfig, WalletConfig,
-};
+///
+pub const COLORED_PROMPT: &'static str = "\x1b[36mmwc-wallet>\x1b[0m ";
+
+pub use self::error_kind::ErrorKind;
+pub use failure::Error;
+pub use parking_lot::{Mutex, MutexGuard};
+pub use std::sync::Arc;

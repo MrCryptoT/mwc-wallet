@@ -18,8 +18,8 @@ use crate::libwallet::{
 	address, AcctPathMapping, Error, OutputCommitMapping, OutputStatus, TxLogEntry, WalletInfo,
 };
 use crate::util;
-use prettytable;
 use colored::*;
+use prettytable;
 
 /// Display outputs in a pretty way
 pub fn outputs(
@@ -30,10 +30,14 @@ pub fn outputs(
 	dark_background_color_scheme: bool,
 ) -> Result<(), Error> {
 	println!();
-    println!("{}", format!(
-        "Wallet Outputs - Account '{}' - Block Height: {}",
-        account, cur_height
-    ).magenta());
+	println!(
+		"{}",
+		format!(
+			"Wallet Outputs - Account '{}' - Block Height: {}",
+			account, cur_height
+		)
+		.magenta()
+	);
 
 	let mut table = table!();
 
@@ -125,10 +129,14 @@ pub fn txs(
 	has_proof: impl Fn(&TxLogEntry) -> bool,
 ) -> Result<(), Error> {
 	println!();
-    println!("{}", format!(
-        "Transaction Log - Account '{}' - Block Height: {}",
-        account, cur_height
-    ).magenta());
+	println!(
+		"{}",
+		format!(
+			"Transaction Log - Account '{}' - Block Height: {}",
+			account, cur_height
+		)
+		.magenta()
+	);
 
 	let mut table = table!();
 
@@ -153,8 +161,7 @@ pub fn txs(
 			bMG->"Kernel",
 			bMG->"Tx \nData",
 		]);
-	}
-	else {
+	} else {
 		// 'short' format is used by mwc 713 wallet
 		table.set_titles(row![
 			bMG->"Id",
@@ -228,8 +235,7 @@ pub fn txs(
 		};
 		let payment_proof = if has_proof(t) {
 			"Yes".to_owned()
-		}
-		else {
+		} else {
 			"None".to_owned()
 		};
 
@@ -298,20 +304,19 @@ pub fn txs(
 					]);
 				}
 			}
-		}
-		else {
+		} else {
 			// Short supports only dark scheme, we really don't need more
 			table.add_row(row![
 				bFC->id,
-                bFC->entry_type,
-                bFB->short_slate_id,
-                bFC->address,
-                bFB->creation_ts,
-                bFG->confirmed,
-                bFG->height,
-                bFB->confirmation_ts,
-                bFY->net_diff,
-                bFG->payment_proof,
+				bFC->entry_type,
+				bFB->short_slate_id,
+				bFC->address,
+				bFB->creation_ts,
+				bFG->confirmed,
+				bFG->height,
+				bFB->confirmation_ts,
+				bFY->net_diff,
+				bFG->payment_proof,
 			]);
 		}
 	}
@@ -483,11 +488,14 @@ pub fn accounts(acct_mappings: Vec<AcctPathMapping>) {
 /// Display transaction log messages
 pub fn tx_messages(tx: &TxLogEntry, dark_background_color_scheme: bool) -> Result<(), Error> {
 	println!();
-    println!("{}", format!("Transaction Messages - Transaction '{}'", tx.id,).magenta());
+	println!(
+		"{}",
+		format!("Transaction Messages - Transaction '{}'", tx.id,).magenta()
+	);
 
 	let msgs = match tx.messages.clone() {
 		None => {
-            println!("{}", "None");
+			println!("{}", "None");
 			return Ok(());
 		}
 		Some(m) => m.clone(),
@@ -551,7 +559,10 @@ pub fn tx_messages(tx: &TxLogEntry, dark_background_color_scheme: bool) -> Resul
 /// Display individual Payment Proof
 pub fn payment_proof(tx: &TxLogEntry) -> Result<(), Error> {
 	println!();
-    println!("{}", format!("Payment Proof - Transaction '{}'", tx.id,).magenta());
+	println!(
+		"{}",
+		format!("Payment Proof - Transaction '{}'", tx.id,).magenta()
+	);
 
 	let pp = match &tx.payment_proof {
 		None => {
@@ -591,14 +602,14 @@ pub fn payment_proof(tx: &TxLogEntry) -> Result<(), Error> {
 		None => "None".to_owned(),
 	};
 
-    println!("Receiver Address: {}", receiver_address);
-    println!("Receiver Address (Onion V3): {}", receiver_onion_address);
-    println!("Receiver Signature: {}", receiver_signature);
-    println!("Amount: {}", amount);
-    println!("Kernel Excess: {}", kernel_excess);
-    println!("Sender Address: {}", sender_address);
-    println!("Sender Signature: {}", sender_signature);
-    println!("Sender Address (Onion V3): {}", sender_onion_address);
+	println!("Receiver Address: {}", receiver_address);
+	println!("Receiver Address (Onion V3): {}", receiver_onion_address);
+	println!("Receiver Signature: {}", receiver_signature);
+	println!("Amount: {}", amount);
+	println!("Kernel Excess: {}", kernel_excess);
+	println!("Sender Address: {}", sender_address);
+	println!("Sender Signature: {}", sender_signature);
+	println!("Sender Address (Onion V3): {}", sender_onion_address);
 
 	println!();
 
