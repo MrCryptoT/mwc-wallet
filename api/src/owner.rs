@@ -763,7 +763,7 @@ where
 								sa.finalize.clone(),
 							)),
 						)
-						.map_err(|e| ErrorKind::GenericError(format!("{}", e)))?;
+                        .map_err(|e| ErrorKind::GenericError(format!("Unable to crete a sender, {}", e)))?;
 						slate = comm_adapter.send_tx(&slate)?;
 					}
 					_ => {
@@ -1284,7 +1284,7 @@ where
 	}
 
 	/// Loads a stored transaction from a file
-	pub fn load_stored_tx(&self, file: &String) -> Result<Option<Transaction>, Error> {
+	pub fn load_stored_tx(&self, file: &String) -> Result<Transaction, Error> {
 		let mut w_lock = self.wallet_inst.lock();
 		let w = w_lock.lc_provider()?.wallet_inst()?;
 		owner::load_stored_tx(&**w, file)
@@ -1788,10 +1788,8 @@ where
 			let secp = secp_inst.lock();
 			return Ok(Some(SecretKey::from_slice(
 				&secp,
-				&from_hex(
-					"d096b3cb75986b3b13f80b8f5243a9edf0af4c74ac37578c5a12cfb5b59b1868".to_owned(),
-				)
-				.unwrap(),
+				&from_hex("d096b3cb75986b3b13f80b8f5243a9edf0af4c74ac37578c5a12cfb5b59b1868")
+					.unwrap(),
 			)?));
 		}
 		let mut w_lock = self.wallet_inst.lock();
@@ -2027,7 +2025,7 @@ where
 			.spawn(move || {
 				let u = updater_inner.lock();
 				if let Err(e) = u.run(frequency, keychain_mask, &tx_inner) {
-					error!("Wallet state updater failed with error: {:?}", e);
+					error!("Wallet state updater failed with error: {}", e);
 				}
 			})?;
 		Ok(())

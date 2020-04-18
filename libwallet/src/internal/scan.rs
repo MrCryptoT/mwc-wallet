@@ -249,17 +249,21 @@ where
 		log_id
 	} else {
 		if let Some(ref mut s) = tx_stats {
-			let ts = s.get(&parent_key_id).unwrap().clone();
-			s.insert(
-				parent_key_id.clone(),
-				RestoredTxStats {
-					log_id: ts.log_id,
-					amount_credited: ts.amount_credited + output.value,
-					num_outputs: ts.num_outputs + 1,
-					output_height: output.height,
-				},
-			);
-			ts.log_id
+			match s.get(&parent_key_id).map(|t| t.clone()) {
+				Some(ts) => {
+					s.insert(
+						parent_key_id.clone(),
+						RestoredTxStats {
+							log_id: ts.log_id,
+							amount_credited: ts.amount_credited + output.value,
+							num_outputs: ts.num_outputs + 1,
+							output_height: output.height,
+						},
+					);
+					ts.log_id
+				}
+				None => 0
+			}
 		} else {
 			0
 		}
@@ -279,7 +283,7 @@ where
 		tx_log_entry: Some(log_id),
 	});
 
-	let max_child_index = found_parents.get(&parent_key_id).unwrap().clone();
+	let max_child_index = found_parents.get(&parent_key_id).unwrap_or(&0).clone();
 	if output.n_child >= max_child_index {
 		found_parents.insert(parent_key_id.clone(), output.n_child);
 	}
@@ -456,7 +460,7 @@ where
 	// Really hard to say why Output can be without commit. Probably same non complete or failed data.
 	// In any case we can't use it for recovering.
 	let mut last_output = String::new();
-	for w_out in w.iter() {
+	for w_out in w.iter().filter(|w| w.commit.is_some()) {
 		outputs.insert(
 			w_out.commit.clone().unwrap(),
 			WalletOutputInfo::new(w_out.clone()),
@@ -495,7 +499,7 @@ where
 			None => {
 				non_uuid_tx_counter += 1;
 				Uuid::from_fields(non_uuid_tx_counter, 0, 0, &temp_uuid_data)
-					.unwrap()
+					.map_err(|e| ErrorKind::GenericError(format!("Unable to create UUID, {}", e)))?
 					.to_string()
 			}
 		};
@@ -679,16 +683,12 @@ where
 		}
 		if block_heights[0] != start_height || block_heights[block_heights.len() - 1] != end_height
 		{
-			return Err(ErrorKind::Node(
-				"Get not expected blocks from the node".to_string(),
-			))?;
+			return Err(ErrorKind::Node("Get not expected blocks from the node".to_string()))?;
 		}
 		if block_heights.len() > 1 {
 			for i in 1..block_heights.len() {
 				if block_heights[i - 1] != block_heights[i] - 1 {
-					return Err(ErrorKind::Node(
-						"Get duplicated blocks from the node".to_string(),
-					))?;
+					return Err(ErrorKind::Node("Get duplicated blocks from the node".to_string()))?;
 				}
 			}
 		}
@@ -848,11 +848,10 @@ where
 		let wallet_outputs_to_check: Vec<pedersen::Commitment> = outputs
 			.values()
 			.filter(|out| out.output.is_spendable() && !out.commit.is_empty())
-			.map(
-				|out|  // Parsing Commtment string into the binary, how API needed
-					pedersen::Commitment::from_vec(
-						util::from_hex(out.output.commit.clone().unwrap()).unwrap()),
-			)
+            // Parsing Commtment string into the binary, how API needed
+			.map( |out| util::from_hex(&out.output.commit.as_ref().unwrap()))
+			.filter(|out| out.is_ok() )
+			.map(|out|pedersen::Commitment::from_vec(out.unwrap()) )
 			.collect();
 
 		// get_outputs_from_nodefor large number will take a time. Chunk size is 200 ids.
@@ -944,7 +943,9 @@ where
 	if !commits.is_empty() {
 		let wallet_outputs_to_check: Vec<pedersen::Commitment> = commits
 			.iter()
-			.map(|out| pedersen::Commitment::from_vec(util::from_hex(out.clone()).unwrap()))
+			.map(|out| util::from_hex(out))
+			.filter(|out| out.is_ok())
+			.map(|out| pedersen::Commitment::from_vec(out.unwrap()))
 			.collect();
 
 		let client = w.w2n_client().clone();
@@ -954,7 +955,7 @@ where
 			client.get_outputs_from_node(wallet_outputs_to_check)?;
 
 		for (active_commit, _, _) in active_commits.values() {
-			let output = outputs.get_mut(active_commit).unwrap();
+			let output = outputs.get_mut(active_commit).ok_or(ErrorKind::GenericError("Node return unknown commit value".to_string()))?;
 			if output.output.status != OutputStatus::Locked {
 				output.output.status = OutputStatus::Locked;
 				output.updated = true;
@@ -1075,7 +1076,7 @@ where
 						if let Some(ref s) = status_send_channel {
 							let _ = s.send(StatusMessage::Warning(format!(
 								"Unable to cancel TTL expired transaction {} because of error: {}",
-								tx.tx_uuid.split('/').next().unwrap(),
+								tx.tx_uuid.split('/').next().unwrap_or("????"),
 								e
 							)));
 						}
@@ -1294,7 +1295,7 @@ fn validate_transactions(
 					if let Some(ref s) = status_send_channel {
 						let _ = s.send(StatusMessage::Warning(format!(
 							"Changing transaction {} from Canceled to active and confirmed",
-							tx_info.tx_uuid.split('/').next().unwrap()
+							tx_info.tx_uuid.split('/').next().unwrap_or("????")
 						)));
 					}
 				}
@@ -1307,7 +1308,7 @@ fn validate_transactions(
 					if let Some(ref s) = status_send_channel {
 						let _ = s.send(StatusMessage::Info(format!(
 							"Changing transaction {} state to confirmed",
-							tx_info.tx_uuid.split('/').next().unwrap()
+							tx_info.tx_uuid.split('/').next().unwrap_or("????")
 						)));
 					}
 				}
@@ -1319,7 +1320,7 @@ fn validate_transactions(
 						if let Some(ref s) = status_send_channel {
 							let _ = s.send(StatusMessage::Info(format!(
 								"Changing transaction {} state to NOT confirmed",
-								tx_info.tx_uuid.split('/').next().unwrap()
+								tx_info.tx_uuid.split('/').next().unwrap_or("????")
 							)));
 						}
 					}
@@ -1355,14 +1356,14 @@ fn validate_outputs_ownership(
 		let in_cancelled_uuid: HashSet<String> = w_out
 			.tx_input_uuid
 			.iter()
-			.filter(|tx_uuid| transactions.get(*tx_uuid).unwrap().tx_log.is_cancelled())
-			.map(|tx_uuid| format!("{}", tx_uuid.split('/').next().unwrap()))
+			.filter(|tx_uuid| transactions.get(*tx_uuid).map( |tx| tx.tx_log.is_cancelled()).unwrap_or(false))
+			.map(|tx_uuid| format!("{}", tx_uuid.split('/').next().unwrap_or("????")))
 			.collect();
 
 		let in_all_uuid: HashSet<String> = w_out
 			.tx_input_uuid
 			.iter()
-			.map(|tx_uuid| format!("{}", tx_uuid.split('/').next().unwrap()))
+			.map(|tx_uuid| format!("{}", tx_uuid.split('/').next().unwrap_or("????")))
 			.collect();
 
 		let in_active = in_all_uuid.len() - in_cancelled_uuid.len();
@@ -1370,14 +1371,14 @@ fn validate_outputs_ownership(
 		let out_cancelled_uuid: HashSet<String> = w_out
 			.tx_output_uuid
 			.iter()
-			.filter(|tx_uuid| transactions.get(*tx_uuid).unwrap().tx_log.is_cancelled())
-			.map(|tx_uuid| format!("{}", tx_uuid.split('/').next().unwrap()))
+			.filter(|tx_uuid| transactions.get(*tx_uuid).map( |tx| tx.tx_log.is_cancelled()).unwrap_or(false))
+			.map(|tx_uuid| format!("{}", tx_uuid.split('/').next().unwrap_or("????")))
 			.collect();
 
 		let out_all_uuid: HashSet<String> = w_out
 			.tx_output_uuid
 			.iter()
-			.map(|tx_uuid| format!("{}", tx_uuid.split('/').next().unwrap()))
+			.map(|tx_uuid| format!("{}", tx_uuid.split('/').next().unwrap_or("????")))
 			.collect();
 
 		let out_active = out_all_uuid.len() - out_cancelled_uuid.len();
@@ -1536,7 +1537,7 @@ fn delete_unconfirmed(
 				if let Some(ref s) = status_send_channel {
 					let _ = s.send(StatusMessage::Warning(format!(
 						"Cancelling transaction {}",
-						tx_uuid.split('/').next().unwrap()
+						tx_uuid.split('/').next().unwrap_or("????")
 					)));
 				}
 			}
@@ -1605,7 +1606,7 @@ fn validate_consistancy(
 		if let Some(ref s) = status_send_channel {
 			let transactions_str = collision_transactions
 				.iter()
-				.map(|s| String::from(s.split('/').next().unwrap()))
+				.map(|s| String::from(s.split('/').next().unwrap_or("????")))
 				.collect::<Vec<String>>()
 				.join(", ");
 			let outputs_str = collision_commits
@@ -1659,7 +1660,7 @@ where
 			if let Some(ref s) = status_send_channel {
 				let _ = s.send(StatusMessage::Warning(format!(
 					"Deleting unconfirmed Output without any transaction. Commit: {}",
-					output.output.commit.clone().unwrap()
+					output.output.commit.clone().unwrap_or("UNKNOWN_COMMIT".to_string())
 				)));
 			}
 			batch.delete(&output.output.key_id, &output.output.mmr_index)?;
@@ -1695,12 +1696,7 @@ where
 				let secp = secp.lock();
 				let over_commit = secp.commit_value(w_out.output.value)?;
 				let commit = pedersen::Commitment::from_vec(
-					util::from_hex(w_out.output.commit.clone().unwrap()).map_err(|e| {
-						Error::from(ErrorKind::GenericError(format!(
-							"Output commit parse error {:?}",
-							e
-						)))
-					})?,
+					util::from_hex(w_out.output.commit.as_ref().unwrap()).map_err(|e| ErrorKind::GenericError(format!("Output commit parse error, {}",e)))?,
 				);
 				t.output_commits = vec![commit.clone()];
 				let excess = secp.commit_sum(vec![commit], vec![over_commit])?;
@@ -1812,13 +1808,14 @@ fn report_transaction_collision(
 		let mut cancelled_tx = String::new();
 		tx_uuid
 			.iter()
-			.map(|tx_uuid| transactions.get(tx_uuid).unwrap())
-			.filter(|wtx| !wtx.tx_log.is_cancelled())
+			.map(|tx_uuid| transactions.get(tx_uuid))
+			.filter(|wtx| wtx.map(|tx| !tx.tx_log.is_cancelled()).unwrap_or(false) )
 			.for_each(|wtx| {
 				if cancelled_tx.len() > 0 {
 					cancelled_tx.push_str(", ");
 				}
-				cancelled_tx.push_str(&format!("{}", wtx.tx_uuid.split('/').next().unwrap()));
+				let tx = wtx.unwrap();
+				cancelled_tx.push_str(&format!("{}", tx.tx_uuid.split('/').next().unwrap_or("????")));
 			});
 
 		let inputs = if inputs { "inputs" } else { "outputs" };
@@ -1840,29 +1837,30 @@ fn recover_first_cancelled(
 ) {
 	// let's revert first non cancelled
 	for uuid in tx_uuid {
-		let wtx = transactions.get_mut(uuid).unwrap();
-		if wtx.tx_log.is_cancelled() {
-			let prev_tx_state = wtx.tx_log.tx_type.clone();
-			wtx.tx_log.tx_type = match wtx.tx_log.tx_type {
-				TxLogEntryType::TxReceivedCancelled => TxLogEntryType::TxReceived,
-				TxLogEntryType::TxSentCancelled => TxLogEntryType::TxSent,
-				_ => panic!(
-					"Internal error. Expected cancelled transaction, but get different value"
-				),
-			};
-			wtx.tx_log.confirmed = true;
-			wtx.tx_log.update_confirmation_ts();
-			wtx.updated = true;
-			if let Some(ref s) = status_send_channel {
-				let _ = s.send(StatusMessage::Warning(format!(
-					"Changing transaction {} state from {:?} to {:?}",
-					wtx.tx_uuid.split('/').next().unwrap(),
-					prev_tx_state,
-					wtx.tx_log.tx_type
-				)));
-			}
+		if let Some(wtx) = transactions.get_mut(uuid) {
+			if wtx.tx_log.is_cancelled() {
+				let prev_tx_state = wtx.tx_log.tx_type.clone();
+				wtx.tx_log.tx_type = match wtx.tx_log.tx_type {
+					TxLogEntryType::TxReceivedCancelled => TxLogEntryType::TxReceived,
+					TxLogEntryType::TxSentCancelled => TxLogEntryType::TxSent,
+					_ => panic!(
+						"Internal error. Expected cancelled transaction, but get different value"
+					),
+				};
+				wtx.tx_log.confirmed = true;
+				wtx.tx_log.update_confirmation_ts();
+				wtx.updated = true;
+				if let Some(ref s) = status_send_channel {
+					let _ = s.send(StatusMessage::Warning(format!(
+						"Changing transaction {} state from {:?} to {:?}",
+						wtx.tx_uuid.split('/').next().unwrap_or("????"),
+						prev_tx_state,
+						wtx.tx_log.tx_type
+					)));
+				}
 
-			break;
+				break;
+			}
 		}
 	}
 }

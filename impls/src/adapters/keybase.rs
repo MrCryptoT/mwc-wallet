@@ -45,17 +45,11 @@ impl KeybaseChannel {
 	pub fn new(channel: String) -> Result<KeybaseChannel, Error> {
 		// Limit only one recipient
 		if channel.matches(",").count() > 0 {
-			return Err(
-				ErrorKind::GenericError("Only one recipient is supported!".to_owned()).into(),
-			);
+			return Err(ErrorKind::GenericError("Only one recipient is supported!".to_owned()).into());
 		}
 
 		if !keybase_installed() {
-			return Err(ErrorKind::GenericError(
-				"Keybase executable not found, make sure it is installed and in your PATH"
-					.to_owned(),
-			)
-			.into());
+			return Err(ErrorKind::GenericError("Keybase executable not found, make sure it is installed and in your PATH".to_owned()).into());
 		}
 
 		Ok(KeybaseChannel(channel))
@@ -109,8 +103,8 @@ fn whoami() -> Result<String, Error> {
 		);
 		Err(ErrorKind::GenericError("keybase api fail".to_owned()))?
 	} else {
-		let response: Value =
-			from_str(from_utf8(&output.stdout).expect("Bad output")).expect("Bad output");
+		let keybase_respond = from_utf8(&output.stdout).expect("Bad output");
+		let response: Value = from_str(keybase_respond).expect("Bad output");
 		let err_msg = format!("{}", response["error"]["message"]);
 		if err_msg.len() > 0 && err_msg != "null" {
 			error!("status query got error: {}", err_msg);
@@ -120,10 +114,8 @@ fn whoami() -> Result<String, Error> {
 		if let Some(s) = username {
 			Ok(s.to_string())
 		} else {
-			error!("keybase username query fail");
-			Err(ErrorKind::GenericError(
-				"keybase username query fail".to_owned(),
-			))?
+			error!("keybase username query fail, {}", keybase_respond);
+			Err(ErrorKind::GenericError("keybase username query fail".to_owned()))?
 		}
 	}
 }
@@ -144,23 +136,20 @@ fn read_from_channel(channel: &str, topic: &str) -> Result<Vec<String>, Error> {
 	))
 	.unwrap();
 
-	let response = api_send(&payload);
-	if let Ok(res) = response {
-		let mut unread: Vec<String> = Vec::new();
-		for msg in res["result"]["messages"]
-			.as_array()
-			.unwrap_or(&vec![json!({})])
-			.iter()
-		{
-			if (msg["msg"]["content"]["type"] == "text") && (msg["msg"]["unread"] == true) {
-				let message = msg["msg"]["content"]["text"]["body"].as_str().unwrap_or("");
-				unread.push(message.to_owned());
-			}
+	let res = api_send(&payload)
+		.map_err(|e| ErrorKind::GenericError(format!("keybase api fail, {}", e)))?;
+	let mut unread: Vec<String> = Vec::new();
+	for msg in res["result"]["messages"]
+		.as_array()
+		.unwrap_or(&vec![json!({})])
+		.iter()
+	{
+		if (msg["msg"]["content"]["type"] == "text") && (msg["msg"]["unread"] == true) {
+			let message = msg["msg"]["content"]["text"]["body"].as_str().unwrap_or("");
+			unread.push(message.to_owned());
 		}
-		Ok(unread)
-	} else {
-		Err(ErrorKind::GenericError("keybase api fail".to_owned()))?
 	}
+	Ok(unread)
 }
 
 /// Get unread messages from all channels and mark as read.
@@ -174,42 +163,48 @@ fn get_unread(topic: &str) -> Result<HashMap<String, String>, Error> {
 		}
 	}))
 	.unwrap();
-	let response = api_send(&payload);
 
-	if let Ok(res) = response {
-		let mut channels = HashSet::new();
-		// Unfortunately the response does not contain the message body
-		// and a separate call is needed for each channel
-		for msg in res["result"]["conversations"]
-			.as_array()
-			.unwrap_or(&vec![json!({})])
-			.iter()
-		{
-			if (msg["unread"] == true) && (msg["channel"]["topic_name"] == topic) {
-				let channel = msg["channel"]["name"].as_str().unwrap();
-				channels.insert(channel.to_string());
-			}
+	let res = api_send(&payload)
+		.map_err(|e| ErrorKind::GenericError(format!("keybase api fail, {}", e)))?;
+
+	let mut channels = HashSet::new();
+	// Unfortunately the response does not contain the message body
+	// and a separate call is needed for each channel
+	for msg in res["result"]["conversations"]
+		.as_array()
+		.unwrap_or(&vec![json!({})])
+		.iter()
+	{
+		if (msg["unread"] == true) && (msg["channel"]["topic_name"] == topic) {
+			let channel = msg["channel"]["name"]
+				.as_str()
+				.ok_or(ErrorKind::GenericError(
+					"Keybase unable to read 'channel', 'name' value from the message".to_string(),
+				))?;
+			channels.insert(channel.to_string());
 		}
-		let mut unread: HashMap<String, String> = HashMap::new();
-		for channel in channels.iter() {
-			let messages = read_from_channel(channel, topic);
-			if messages.is_err() {
-				break;
-			}
-			for msg in messages.unwrap() {
-				unread.insert(msg, channel.to_string());
-			}
-		}
-		Ok(unread)
-	} else {
-		Err(ErrorKind::GenericError("keybase api fail".to_owned()))?
 	}
+
+	let mut unread: HashMap<String, String> = HashMap::new();
+	for channel in channels.iter() {
+		let messages = read_from_channel(channel, topic);
+		if messages.is_err() {
+			break;
+		}
+		for msg in messages.unwrap() {
+			unread.insert(msg, channel.to_string());
+		}
+	}
+	Ok(unread)
 }
 
 /// Send a message to a keybase channel that self-destructs after ttl seconds.
 fn send<T: Serialize>(message: T, channel: &str, topic: &str, ttl: u16) -> bool {
 	let seconds = format!("{}s", ttl);
-	let serialized = to_string(&message).unwrap();
+	let serialized = match to_string(&message) {
+		Ok(s) => s,
+		Err(_) => return false,
+	};
 	let payload = to_string(&json!({
 		"method": "send",
 		"params": {
@@ -273,19 +268,23 @@ fn poll(nseconds: u64, channel: &str) -> Option<Slate> {
 	let start = Instant::now();
 	info!("Waiting for response message from @{}...", channel);
 	while start.elapsed().as_secs() < nseconds {
-		let unread = read_from_channel(channel, SLATE_SIGNED);
-		for msg in unread.unwrap().iter() {
-			let blob = Slate::deserialize_upgrade(&msg);
-			match blob {
-				Ok(slate) => {
-					let slate: Slate = slate.into();
-					info!(
-						"keybase response message received from @{}, tx uuid: {}",
-						channel, slate.id,
-					);
-					return Some(slate);
+		// we want to skip errors and wait
+		if let Ok(unread) = read_from_channel(channel, SLATE_SIGNED)
+			.map_err(|e| error!("Failed to read from Keybase channel, {}", e))
+		{
+			for msg in unread.iter() {
+				let blob = Slate::deserialize_upgrade(&msg);
+				match blob {
+					Ok(slate) => {
+						let slate: Slate = slate.into();
+						info!(
+							"keybase response message received from @{}, tx uuid: {}",
+							channel, slate.id,
+						);
+						return Some(slate);
+					}
+					Err(_) => (),
 				}
-				Err(_) => (),
 			}
 		}
 		sleep(POLL_SLEEP_DURATION);
@@ -305,21 +304,13 @@ impl SlateSender for KeybaseChannel {
 		// Send original slate to recipient with the SLATE_NEW topic
 		match send(&slate, &self.0, SLATE_NEW, TTL) {
 			true => (),
-			false => {
-				return Err(ErrorKind::ClientCallback(
-					"Posting transaction slate".to_owned(),
-				))?;
-			}
+			false => return Err(ErrorKind::ClientCallback("Failed to post transaction slate to keybase".to_owned()))?,
 		}
 		info!("tx request has been sent to @{}, tx uuid: {}", &self.0, id);
 		// Wait for response from recipient with SLATE_SIGNED topic
 		match poll(TTL as u64, &self.0) {
 			Some(slate) => return Ok(slate),
-			None => {
-				return Err(ErrorKind::ClientCallback(
-					"Receiving reply from recipient".to_owned(),
-				))?;
-			}
+			None => return Err(ErrorKind::ClientCallback("Keybase failed to receive reply slate from recipient".to_owned()))?,
 		}
 	}
 }
@@ -333,11 +324,7 @@ impl KeybaseAllChannels {
 	/// Create a KeybaseAllChannels, return error if keybase executable is not present
 	pub fn new() -> Result<KeybaseAllChannels, Error> {
 		if !keybase_installed() {
-			Err(ErrorKind::GenericError(
-				"Keybase executable not found, make sure it is installed and in your PATH"
-					.to_owned(),
-			)
-			.into())
+			Err(ErrorKind::GenericError("Keybase executable not found, make sure it is installed and in your PATH".to_owned()).into())
 		} else {
 			Ok(KeybaseAllChannels { _priv: () })
 		}
@@ -356,7 +343,8 @@ impl SlateReceiver for KeybaseAllChannels {
 	) -> Result<(), Error> {
 		let node_client = HTTPNodeClient::new(&config.check_node_api_http_addr, node_api_secret);
 		let mut wallet = Box::new(
-			DefaultWalletImpl::<'static, HTTPNodeClient>::new(node_client.clone()).unwrap(),
+			DefaultWalletImpl::<'static, HTTPNodeClient>::new(node_client.clone())
+				.map_err(|e| ErrorKind::GenericError(format!("Unable to create a listener's wallet instance, {}",e)))?,
 		)
 			as Box<
 				dyn WalletInst<
@@ -366,7 +354,7 @@ impl SlateReceiver for KeybaseAllChannels {
 					ExtKeychain,
 				>,
 			>;
-		let lc = wallet.lc_provider().unwrap();
+		let lc = wallet.lc_provider()?;
 		lc.set_top_level_directory(&config.data_file_dir)?;
 		let mask = lc.open_wallet(
 			None,
@@ -419,7 +407,7 @@ impl SlateReceiver for KeybaseAllChannels {
 						let res = {
 							let r = foreign::receive_tx(
 								&mut **wallet_inst,
-								Some(mask.as_ref().unwrap()),
+								Some(mask.as_ref().ok_or(ErrorKind::GenericError("Expected mask is not generated".to_string()))?),
 								&slate,
 								Some(format!("keybase {}", channel)), // mwc-wallet doesn't support it yes, mwc713 does
 								None,
@@ -448,10 +436,7 @@ impl SlateReceiver for KeybaseAllChannels {
 							}
 
 							Err(e) => {
-								error!(
-									"Error on receiving tx via keybase: {}. Incoming tx failed",
-									e
-								);
+								error!("Error on receiving tx via keybase: {}. Incoming tx failed",e);
 							}
 						}
 					}

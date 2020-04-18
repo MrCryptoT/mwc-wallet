@@ -27,6 +27,7 @@ use crate::libwallet::{
 use crate::util::secp::key::SecretKey;
 use crate::util::{to_hex, Mutex, ZeroingString};
 use crate::{controller, display};
+use grin_wallet_libwallet::ErrorKind as LibWalletErrorKind;
 use grin_wallet_libwallet::TxLogEntry;
 use serde_json as json;
 use std::fs::File;
@@ -151,16 +152,14 @@ where
 				.map(|_o| ())
 		}
 		method => {
-			return Err(ErrorKind::ArgumentError(format!(
-				"No listener for method \"{}\".",
-				method
-			))
-			.into());
+			return Err(
+				ErrorKind::ArgumentError(format!("No listener for method '{}'", method)).into(),
+			);
 		}
 	};
 
 	if let Err(e) = res {
-		return Err(ErrorKind::LibWallet(e.kind(), e.cause_string()).into());
+		return Err(ErrorKind::LibWallet(e.kind(), "Unable to start listener".to_string()).into());
 	}
 	Ok(())
 }
@@ -192,7 +191,7 @@ where
 		Some(tor_config.clone()),
 	);
 	if let Err(e) = res {
-		return Err(ErrorKind::LibWallet(e.kind(), e.cause_string()).into());
+		return Err(ErrorKind::LibWallet(e.kind(), "Unable to start Listener".to_string()).into());
 	}
 	Ok(())
 }
@@ -221,8 +220,9 @@ where
 			Ok(())
 		});
 		if let Err(e) = res {
-			error!("Error listing accounts: {}", e);
-			return Err(ErrorKind::LibWallet(e.kind(), e.cause_string()).into());
+			let err_str = format!("Error listing accounts: {}", e);
+			error!("{}", err_str);
+			return Err(ErrorKind::LibWallet(e.kind(), err_str).into());
 		}
 	} else {
 		let label = args.create.unwrap();
@@ -234,8 +234,9 @@ where
 		});
 		if let Err(e) = res {
 			thread::sleep(Duration::from_millis(200));
-			error!("Error creating account '{}': {}", label, e);
-			return Err(ErrorKind::LibWallet(e.kind(), e.cause_string()).into());
+			let err_str = format!("Error creating account '{}': {}", label, e);
+			error!("{}", err_str);
+			return Err(ErrorKind::LibWallet(e.kind(), err_str).into());
 		}
 	}
 	Ok(())
@@ -275,26 +276,24 @@ where
 {
 	controller::owner_single_use(wallet.clone(), keychain_mask, |api, m| {
 		if args.estimate_selection_strategies {
-			let strategies = vec!["smallest", "all"]
-				.into_iter()
-				.map(|strategy| {
-					let init_args = InitTxArgs {
-						src_acct_name: None,
-						amount: args.amount,
-						minimum_confirmations: args.minimum_confirmations,
-						max_outputs: args.max_outputs as u32,
-						num_change_outputs: args.change_outputs as u32,
-						selection_strategy_is_use_all: strategy == "all",
-						estimate_only: Some(true),
-						exclude_change_outputs: Some(args.exclude_change_outputs),
-						minimum_confirmations_change_outputs: args
-							.minimum_confirmations_change_outputs,
-						..Default::default()
-					};
-					let slate = api.init_send_tx(m, init_args, None, 1).unwrap();
-					(strategy, slate.amount, slate.fee)
-				})
-				.collect();
+			let mut strategies: Vec<(&str, u64, u64)> = Vec::new();
+			for strategy in vec!["smallest", "all"] {
+				let init_args = InitTxArgs {
+					src_acct_name: None,
+					amount: args.amount,
+					minimum_confirmations: args.minimum_confirmations,
+					max_outputs: args.max_outputs as u32,
+					num_change_outputs: args.change_outputs as u32,
+					selection_strategy_is_use_all: strategy == "all",
+					estimate_only: Some(true),
+					exclude_change_outputs: Some(args.exclude_change_outputs),
+					minimum_confirmations_change_outputs: args
+						.minimum_confirmations_change_outputs,
+					..Default::default()
+				};
+				let slate = api.init_send_tx(m, init_args, None, 1)?;
+				strategies.push((strategy, slate.amount, slate.fee));
+			}
 			display::estimate(args.amount, strategies, dark_scheme);
 		} else {
 			let payment_proof_recipient_address = match args.payment_proof_address {
@@ -356,7 +355,6 @@ where
 						Ok(())
 					})?;
 				}
-
 				"mwcmqs" => {
 					api.tx_lock_outputs(m, &slate, Some(String::from("self")), 0)?;
 					let _km = match keychain_mask.as_ref() {
@@ -568,23 +566,21 @@ where
 	let slate = PathToSlate((&args.input).into()).get_tx()?;
 	controller::owner_single_use(wallet.clone(), keychain_mask, |api, m| {
 		if args.estimate_selection_strategies {
-			let strategies = vec!["smallest", "all"]
-				.into_iter()
-				.map(|strategy| {
-					let init_args = InitTxArgs {
-						src_acct_name: None,
-						amount: slate.amount,
-						minimum_confirmations: args.minimum_confirmations,
-						max_outputs: args.max_outputs as u32,
-						num_change_outputs: 1u32,
-						selection_strategy_is_use_all: strategy == "all",
-						estimate_only: Some(true),
-						..Default::default()
-					};
-					let slate = api.init_send_tx(m, init_args, None, 1).unwrap();
-					(strategy, slate.amount, slate.fee)
-				})
-				.collect();
+			let mut strategies: Vec<(&str, u64, u64)> = Vec::new();
+			for strategy in vec!["smallest", "all"] {
+				let init_args = InitTxArgs {
+					src_acct_name: None,
+					amount: slate.amount,
+					minimum_confirmations: args.minimum_confirmations,
+					max_outputs: args.max_outputs as u32,
+					num_change_outputs: 1u32,
+					selection_strategy_is_use_all: strategy == "all",
+					estimate_only: Some(true),
+					..Default::default()
+				};
+				let slate = api.init_send_tx(m, init_args, None, 1)?;
+				strategies.push((strategy, slate.amount, slate.fee));
+			}
 			display::estimate(slate.amount, strategies, dark_scheme);
 		} else {
 			let init_args = InitTxArgs {
@@ -801,11 +797,7 @@ where
 {
 	controller::owner_single_use(wallet.clone(), keychain_mask, |api, m| {
 		let stored_tx = api.load_stored_tx(&args.input)?;
-		if stored_tx.is_none() {
-			error!("File not found: {:?}", args.input);
-			return Ok(());
-		}
-		api.post_tx(m, &stored_tx.unwrap(), args.fluff)?;
+		api.post_tx(m, &stored_tx, args.fluff)?;
 		info!("Reposted transaction in file: {}", args.input);
 		return Ok(());
 	})?;
@@ -854,7 +846,10 @@ where
 			}
 			Some(f) => {
 				let mut tx_file = File::create(f.clone())?;
-				tx_file.write_all(json::to_string(&stored_tx).unwrap().as_bytes())?;
+				let tx_as_str = json::to_string(&stored_tx).map_err(|e| {
+					LibWalletErrorKind::GenericError(format!("Unable convert Tx to Json, {}", e))
+				})?;
+				tx_file.write_all(tx_as_str.as_bytes())?;
 				tx_file.sync_all()?;
 				info!("Dumped transaction data for tx {} to {}", args.id, f);
 				return Ok(());

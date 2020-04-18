@@ -392,6 +392,11 @@ where
 		Some(t) => t,
 		None => return Err(ErrorKind::TransactionDoesntExist(slate.id.to_string()))?,
 	};
+
+	if tx.tx_slate_id.is_none() {
+		return Err(ErrorKind::GenericError("Transaction doesn't have stored tx slate id".to_string()).into());
+	}
+
 	wallet.store_tx(&format!("{}", tx.tx_slate_id.unwrap()), &slate.tx)?;
 	let parent_key = tx.parent_key_id.clone();
 	tx.kernel_excess = Some(slate.tx.body.kernels[0].excess);
@@ -489,7 +494,8 @@ pub fn _decode_payment_proof_message(
 	Ok((
 		amount,
 		pedersen::Commitment::from_vec(commit_bytes.to_vec()),
-		DalekPublicKey::from_bytes(&sender_address_bytes).unwrap(),
+		DalekPublicKey::from_bytes(&sender_address_bytes)
+			.map_err(|e| ErrorKind::Signature(format!("Failed to build public key, {}", e)))?,
 	))
 }
 
@@ -539,50 +545,34 @@ where
 		None,
 	)?;
 	if tx_vec.len() == 0 {
-		return Err(ErrorKind::PaymentProof(
-			"TxLogEntry with original proof info not found (is account correct?)".to_owned(),
-		))?;
+		return Err(ErrorKind::PaymentProof("TxLogEntry with original proof info not found (is account correct?)".to_owned()))?;
 	}
 
 	let orig_proof_info = tx_vec[0].clone().payment_proof;
 
 	if orig_proof_info.is_some() && slate.payment_proof.is_none() {
-		return Err(ErrorKind::PaymentProof(
-			"Expected Payment Proof for this Transaction is not present".to_owned(),
-		))?;
+		return Err(ErrorKind::PaymentProof("Expected Payment Proof for this Transaction is not present".to_owned()))?;
 	}
 
 	if let Some(ref p) = slate.payment_proof {
 		let orig_proof_info = match orig_proof_info {
 			Some(p) => p,
-			None => {
-				return Err(ErrorKind::PaymentProof(
-					"Original proof info not stored in tx".to_owned(),
-				))?;
-			}
+			None => return Err(ErrorKind::PaymentProof("Original proof info not stored in tx".to_owned()))?,
 		};
 		let keychain = wallet.keychain(keychain_mask)?;
 		let index = match context.payment_proof_derivation_index {
 			Some(i) => i,
-			None => {
-				return Err(ErrorKind::PaymentProof(
-					"Payment proof derivation index required".to_owned(),
-				))?;
-			}
+			None => return Err(ErrorKind::PaymentProof("Payment proof derivation index required".to_owned()))?,
 		};
 		let orig_sender_sk =
 			address::address_from_derivation_path(&keychain, parent_key_id, index)?;
 		let orig_sender_address = address::ed25519_keypair(&orig_sender_sk)?.1;
 		if p.sender_address != orig_sender_address {
-			return Err(ErrorKind::PaymentProof(
-				"Sender address on slate does not match original sender address".to_owned(),
-			))?;
+			return Err(ErrorKind::PaymentProof("Sender address on slate does not match original sender address".to_owned()))?;
 		}
 
 		if orig_proof_info.receiver_address != p.receiver_address {
-			return Err(ErrorKind::PaymentProof(
-				"Recipient address on slate does not match original recipient address".to_owned(),
-			))?;
+			return Err(ErrorKind::PaymentProof("Recipient address on slate does not match original recipient address".to_owned()))?;
 		}
 		let msg = payment_proof_message(
 			slate.amount,
@@ -591,17 +581,11 @@ where
 		)?;
 		let sig = match p.receiver_signature {
 			Some(s) => s,
-			None => {
-				return Err(ErrorKind::PaymentProof(
-					"Recipient did not provide requested proof signature".to_owned(),
-				))?;
-			}
+			None => return Err(ErrorKind::PaymentProof("Recipient did not provide requested proof signature".to_owned()))?,
 		};
 
-		if let Err(_) = p.receiver_address.verify(&msg, &sig) {
-			return Err(ErrorKind::PaymentProof(
-				"Invalid proof signature".to_owned(),
-			))?;
+		if let Err(e) = p.receiver_address.verify(&msg, &sig) {
+			return Err(ErrorKind::PaymentProof(format!("Invalid proof signature, {}", e)))?;
 		};
 	}
 	Ok(())

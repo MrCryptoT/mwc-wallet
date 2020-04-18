@@ -17,7 +17,7 @@ pub mod http;
 mod keybase;
 
 pub use self::file::PathToSlate;
-pub use self::http::{HttpSlateSender, SchemeNotHttp};
+pub use self::http::HttpSlateSender;
 pub use self::keybase::{KeybaseAllChannels, KeybaseChannel};
 
 use crate::config::{TorConfig, WalletConfig};
@@ -76,10 +76,10 @@ pub fn create_sender(
 	tor_config: Option<TorConfig>,
 	mqs_channel: Option<MwcMqsChannel>,
 ) -> Result<Box<dyn SlateSender>, Error> {
-	let invalid = || {
+	let invalid = |e| {
 		ErrorKind::WalletComms(format!(
-			"Invalid wallet comm type and destination. method: {}, dest: {}",
-			method, dest
+			"Invalid wallet comm type and destination. method: {}, dest: {}, error: {}",
+			method, dest, e
 		))
 	};
 
@@ -96,12 +96,10 @@ pub fn create_sender(
 	};
 
 	Ok(match method {
-		"http" => Box::new(HttpSlateSender::new(&dest, apisecret.clone()).map_err(|_| invalid())?),
+		"http" => Box::new(HttpSlateSender::new(&dest, apisecret.clone()).map_err(|e| invalid(e))?),
 		"tor" => match tor_config {
 			None => {
-				return Err(
-					ErrorKind::WalletComms("Tor Configuration required".to_string()).into(),
-				);
+				return Err(ErrorKind::WalletComms("Tor Configuration required".to_string()).into());
 			}
 			Some(tc) => Box::new(
 				HttpSlateSender::with_socks_proxy(
@@ -110,29 +108,19 @@ pub fn create_sender(
 					&tc.socks_proxy_addr,
 					&tc.send_config_dir,
 				)
-				.map_err(|_| invalid())?,
+				.map_err(|e| invalid(e))?,
 			),
 		},
 		"keybase" => Box::new(KeybaseChannel::new(dest.to_owned())?),
 		"mwcmqs" => Box::new(mqs_channel.unwrap()),
 		"self" => {
-			return Err(ErrorKind::WalletComms(
-				"No sender implementation for \"self\".".to_string(),
-			)
-			.into());
+			return Err(ErrorKind::WalletComms("No sender implementation for \"self\".".to_string()).into());
 		}
 		"file" => {
-			return Err(ErrorKind::WalletComms(
-				"File based transactions must be performed asynchronously.".to_string(),
-			)
-			.into());
+			return Err(ErrorKind::WalletComms("File based transactions must be performed asynchronously.".to_string()).into());
 		}
 		_ => {
-			return Err(ErrorKind::WalletComms(format!(
-				"Wallet comm method \"{}\" does not exist.",
-				method
-			))
-			.into());
+			return Err(ErrorKind::WalletComms(format!("Wallet comm method \"{}\" does not exist.",method)).into());
 		}
 	})
 }

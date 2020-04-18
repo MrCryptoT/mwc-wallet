@@ -18,7 +18,7 @@
 use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 
-use crate::error::Error;
+use crate::error::{Error,ErrorKind};
 use crate::grin_core::consensus::reward;
 use crate::grin_core::core::{Output, TxKernel};
 use crate::grin_core::global;
@@ -84,31 +84,30 @@ where
 	let keychain = wallet.keychain(keychain_mask)?;
 
 	// Key: tx_log id;  Value: true if active, false if cancelled
-	let tx_log_cancellation_status: HashMap<u32, bool> = wallet
+	let tx_log_is_active: HashMap<u32, bool> = wallet
 		.tx_log_iter()
 		.filter(|tx_log| tx_log.parent_key_id == *parent_key_id)
 		.map(|tx_log| (tx_log.id, !tx_log.is_cancelled()))
 		.collect();
 
-	let res: Vec<OutputCommitMapping> = outputs
-		.into_iter()
+	let mut res: Vec<OutputCommitMapping> = Vec::new();
+
+	for out in outputs {
 		// Filtering out Unconfirmed from cancelled (not active) transactions
-		.filter(|output| {
-			!(output.status == OutputStatus::Unconfirmed
-				&& !tx_log_cancellation_status
-					.get(&output.tx_log_entry.clone().unwrap_or(std::u32::MAX))
-					.unwrap_or(&true))
-		})
-		.map(|output| {
-			let commit = match output.commit.clone() {
-				Some(c) => pedersen::Commitment::from_vec(util::from_hex(c).unwrap()),
-				None => keychain
-					.commit(output.value, &output.key_id, &SwitchCommitmentType::Regular)
-					.unwrap(), // TODO: proper support for different switch commitment schemes
-			};
-			OutputCommitMapping { output, commit }
-		})
-		.collect();
+		if out.status == OutputStatus::Unconfirmed
+			&& !tx_log_is_active
+				.get(&out.tx_log_entry.clone().unwrap_or(std::u32::MAX))
+				.unwrap_or(&true) {
+			continue;
+		}
+
+		let commit = match out.commit.clone() {
+			Some(c) => pedersen::Commitment::from_vec(util::from_hex(&c).map_err(|e| ErrorKind::GenericError(format!("Unable to parse HEX commit {}, {}", c,e)))?),
+			None => keychain  // TODO: proper support for different switch commitment schemes
+				.commit(out.value, &out.key_id, &SwitchCommitmentType::Regular)?,
+		};
+		res.push( OutputCommitMapping { output: out, commit } );
+	}
 
 	if pagination_len.is_some() || pagination_start.is_some() {
 		let pag_len = pagination_len.unwrap_or(res.len() as u32);

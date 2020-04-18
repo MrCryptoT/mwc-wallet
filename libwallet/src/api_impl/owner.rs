@@ -593,7 +593,7 @@ where
 pub fn load_stored_tx<'a, T: ?Sized, C, K>(
 	w: &T,
 	file: &String,
-) -> Result<Option<Transaction>, Error>
+) -> Result<Transaction, Error>
 where
 	T: WalletBackend<'a, C, K>,
 	C: NodeClient + 'a,
@@ -608,7 +608,7 @@ pub fn post_tx<'a, C>(client: &C, tx: &Transaction, fluff: bool) -> Result<(), E
 where
 	C: NodeClient + 'a,
 {
-	let tx_hex = grin_util::to_hex(ser::ser_vec(tx, ser::ProtocolVersion(1)).unwrap());
+	let tx_hex = grin_util::to_hex(ser::ser_vec(tx, ser::ProtocolVersion(1))?);
 	let res = client.post_tx(&TxWrapper { tx_hex: tx_hex }, fluff);
 	if let Err(e) = res {
 		error!("api: post_tx: failed with error: {}", e);

@@ -1503,11 +1503,15 @@ where
 				tx.payment_proof.clone(),
 				tx.input_commits
 					.iter()
-					.map(|s| pedersen::Commitment::from_vec(util::from_hex(s.clone()).unwrap()))
+					.map(|s| util::from_hex(s))
+					.filter(|s| s.is_ok())
+					.map(|s| pedersen::Commitment::from_vec(s.unwrap()))
 					.collect(),
 				tx.output_commits
 					.iter()
-					.map(|s| pedersen::Commitment::from_vec(util::from_hex(s.clone()).unwrap()))
+					.map(|s| util::from_hex(s))
+					.filter(|s| s.is_ok())
+					.map(|s| pedersen::Commitment::from_vec(s.unwrap()))
 					.collect(),
 			),
 		)

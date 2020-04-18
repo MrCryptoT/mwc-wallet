@@ -11,6 +11,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#[macro_use]
+extern crate log;
+
 use grin_wallet_config as config;
 use grin_wallet_util::grin_api as api;
 use grin_wallet_util::grin_util as util;

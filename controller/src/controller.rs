@@ -14,18 +14,15 @@
 
 //! Controller for wallet.. instantiates and handles listeners (or single-run
 //! invocations) as needed.
-
-use std::collections::HashMap;
-use std::net::SocketAddr;
-use std::sync::mpsc::{channel, Receiver, Sender};
-use std::sync::Arc;
-use std::thread;
-
-use colored::Colorize;
-use easy_jsonrpc_mw;
-use easy_jsonrpc_mw::{Handler, MaybeReply};
-use failure::Error;
-use failure::ResultExt;
+use crate::api::{self, ApiServer, BasicAuthMiddleware, ResponseFuture, Router, TLSConfig};
+use crate::config::TorConfig;
+use crate::keychain::Keychain;
+use crate::libwallet::{
+	address, Error, ErrorKind, NodeClient, NodeVersionInfo, Slate, WalletInst, WalletLCProvider,
+	GRIN_BLOCK_HEADER_VERSION,
+};
+use crate::util::secp::key::SecretKey;
+use crate::util::{from_hex, static_secp_instance, to_base64, Mutex};
 use futures::future::{err, ok};
 use futures::{Future, Stream};
 use hyper::header::HeaderValue;
@@ -74,7 +71,7 @@ fn check_middleware(
 	name: ForeignCheckMiddlewareFn,
 	node_version_info: Option<NodeVersionInfo>,
 	slate: Option<&Slate>,
-) -> Result<(), crate::libwallet::Error> {
+) -> Result<(), Error> {
 	match name {
 		// allow coinbases to be built regardless
 		ForeignCheckMiddlewareFn::BuildCoinbase => Ok(()),
@@ -102,7 +99,7 @@ fn init_tor_listener<L, C, K>(
 	wallet: Arc<Mutex<Box<dyn WalletInst<'static, L, C, K> + 'static>>>,
 	keychain_mask: Arc<Mutex<Option<SecretKey>>>,
 	addr: &str,
-) -> Result<tor_process::TorProcess, crate::libwallet::Error>
+) -> Result<tor_process::TorProcess, Error>
 where
 	L: WalletLCProvider<'static, C, K> + 'static,
 	C: NodeClient + 'static,
@@ -118,23 +115,23 @@ where
 	let parent_key_id = w_inst.parent_key_id();
 	let tor_dir = format!("{}/tor/listener", lc.get_top_level_directory()?);
 	let sec_key = address::address_from_derivation_path(&k, &parent_key_id, 0)
-		.map_err(|e| ErrorKind::TorConfig(format!("{:?}", e).into()))?;
+		.map_err(|e| ErrorKind::TorConfig(format!("Unable to build key for onion address, {}", e).into()))?;
 	let onion_address = tor_config::onion_address_from_seckey(&sec_key)
-		.map_err(|e| ErrorKind::TorConfig(format!("{:?}", e).into()))?;
-	warn!(
-		"Starting TOR Hidden Service for API listener at address {}, binding to {}",
-		onion_address, addr
-	);
+		.map_err(|e| ErrorKind::TorConfig(format!("Unable to build onion address, {}", e).into()))?;
+
+	warn!("Starting TOR Hidden Service for API listener at address {}, binding to {}",onion_address, addr);
+
 	tor_config::output_tor_listener_config(&tor_dir, addr, &vec![sec_key])
-		.map_err(|e| ErrorKind::TorConfig(format!("{:?}", e).into()))?;
+		.map_err(|e| ErrorKind::TorConfig(format!("Failed to configure tor, {}", e).into()))?;
 	// Start TOR process
+	let tor_path = format!("{}/torrc", tor_dir);
 	process
-		.torrc_path(&format!("{}/torrc", tor_dir))
+		.torrc_path(&tor_path)
 		.working_dir(&tor_dir)
 		.timeout(20)
 		.completion_percent(100)
 		.launch()
-		.map_err(|e| ErrorKind::TorProcess(format!("{:?}", e).into()))?;
+		.map_err(|e| ErrorKind::TorProcess(format!("Unable to start tor at {}, {}", tor_path, e).into()))?;
 	Ok(process)
 }
 
@@ -144,10 +141,10 @@ pub fn owner_single_use<L, F, C, K>(
 	wallet: Arc<Mutex<Box<dyn WalletInst<'static, L, C, K>>>>,
 	keychain_mask: Option<&SecretKey>,
 	f: F,
-) -> Result<(), crate::libwallet::Error>
+) -> Result<(), Error>
 where
 	L: WalletLCProvider<'static, C, K> + 'static,
-	F: FnOnce(&mut Owner<L, C, K>, Option<&SecretKey>) -> Result<(), crate::libwallet::Error>,
+	F: FnOnce(&mut Owner<L, C, K>, Option<&SecretKey>) -> Result<(), Error>,
 	C: NodeClient + 'static,
 	K: Keychain + 'static,
 {
@@ -161,10 +158,10 @@ pub fn foreign_single_use<'a, L, F, C, K>(
 	wallet: Arc<Mutex<Box<dyn WalletInst<'a, L, C, K>>>>,
 	keychain_mask: Option<SecretKey>,
 	f: F,
-) -> Result<(), crate::libwallet::Error>
+) -> Result<(), Error>
 where
 	L: WalletLCProvider<'a, C, K>,
-	F: FnOnce(&mut Foreign<'a, L, C, K>) -> Result<(), crate::libwallet::Error>,
+	F: FnOnce(&mut Foreign<'a, L, C, K>) -> Result<(), Error>,
 	C: NodeClient + 'a,
 	K: Keychain + 'a,
 {
@@ -594,13 +591,13 @@ pub fn owner_listener<L, C, K>(
 	owner_api_include_mqs_listener: Option<bool>,
 	config: WalletConfig,
 	tor_config: Option<TorConfig>,
-) -> Result<(), crate::libwallet::Error>
+) -> Result<(), Error>
 where
 	L: WalletLCProvider<'static, C, K> + 'static,
 	C: NodeClient + 'static,
 	K: Keychain + 'static,
 {
-	println!("owen lisenter started {}", addr);
+	println!("owner lisenter started {}", addr);
 	let mut router = Router::new();
 	if api_secret.is_some() {
 		let api_basic_auth =
@@ -695,11 +692,11 @@ where
 
 	router
 		.add_route("/v2/owner", Arc::new(api_handler_v2))
-		.map_err(|_| ErrorKind::GenericError("Router failed to add route".to_string()))?;
+		.map_err(|e| ErrorKind::GenericError(format!("Router failed to add route /v2/owner, {}", e)))?;
 
 	router
 		.add_route("/v3/owner", Arc::new(api_handler_v3))
-		.map_err(|_| ErrorKind::GenericError("Router failed to add route".to_string()))?;
+		.map_err(|e| ErrorKind::GenericError(format!("Router failed to add route /v3/owner, {}", e)))?;
 
 	// If so configured, add the foreign API to the same port
 	if running_foreign {
@@ -707,17 +704,14 @@ where
 		let foreign_api_handler_v2 = ForeignAPIHandlerV2::new(wallet, keychain_mask);
 		router
 			.add_route("/v2/foreign", Arc::new(foreign_api_handler_v2))
-			.map_err(|_| ErrorKind::GenericError("Router failed to add route".to_string()))?;
+			.map_err(|e| ErrorKind::GenericError(format!("Router failed to add route /v2/foreign, {}", e)))?;
 	}
 
 	let mut apis = ApiServer::new();
 	warn!("Starting HTTP Owner API server at {}.", addr);
 	let socket_addr: SocketAddr = addr.parse().expect("unable to parse socket address");
-	let api_thread =
-		apis.start(socket_addr, router, tls_config)
-			.context(ErrorKind::GenericError(
-				"API thread failed to start".to_string(),
-			))?;
+	let api_thread = apis.start(socket_addr, router, tls_config)
+			.map_err(|e| ErrorKind::GenericError(format!("API thread failed to start, {}", e)))?;
 	warn!("HTTP Owner listener started.");
 	api_thread
 		.join()
@@ -732,7 +726,7 @@ pub fn foreign_listener<L, C, K>(
 	addr: &str,
 	tls_config: Option<TLSConfig>,
 	use_tor: bool,
-) -> Result<(), crate::libwallet::Error>
+) -> Result<(), Error>
 where
 	L: WalletLCProvider<'static, C, K> + 'static,
 	C: NodeClient + 'static,
@@ -757,16 +751,13 @@ where
 
 	router
 		.add_route("/v2/foreign", Arc::new(api_handler_v2))
-		.map_err(|_| ErrorKind::GenericError("Router failed to add route".to_string()))?;
+		.map_err(|e| ErrorKind::GenericError(format!("Router failed to add route /v2/foreign, {}", e)))?;
 
 	let mut apis = ApiServer::new();
 	warn!("Starting HTTP Foreign listener API server at {}.", addr);
 	let socket_addr: SocketAddr = addr.parse().expect("unable to parse socket address");
-	let api_thread =
-		apis.start(socket_addr, router, tls_config)
-			.context(ErrorKind::GenericError(
-				"API thread failed to start".to_string(),
-			))?;
+	let api_thread = apis.start(socket_addr, router, tls_config)
+		.map_err(|e| ErrorKind::GenericError(format!("API thread failed to start, {}", e)))?;
 
 	warn!("HTTP Foreign listener started.");
 
@@ -775,8 +766,7 @@ where
 		.map_err(|e| ErrorKind::GenericError(format!("API thread panicked :{:?}", e)).into())
 }
 
-type WalletResponseFuture =
-	Box<dyn Future<Item = Response<Body>, Error = crate::libwallet::Error> + Send>;
+type WalletResponseFuture = Box<dyn Future<Item = Response<Body>, Error = Error> + Send>;
 
 /// V2 API Handler/Wrapper for owner functions
 pub struct OwnerAPIHandlerV2<L, C, K>
@@ -817,7 +807,7 @@ where
 		&self,
 		req: Request<Body>,
 		api: Owner<L, C, K>,
-	) -> Box<dyn Future<Item = serde_json::Value, Error = crate::libwallet::Error> + Send> {
+	) -> Box<dyn Future<Item = serde_json::Value, Error = Error> + Send> {
 		Box::new(parse_body(req).and_then(move |val: serde_json::Value| {
 			let handler = move || -> serde_json::Value {
 				let owner_api = &api as &dyn OwnerRpc;
@@ -972,7 +962,7 @@ impl OwnerV3Helpers {
 	/// Update the shared mask, in case of foreign API being run
 	pub fn update_mask(mask: Arc<Mutex<Option<SecretKey>>>, val: &serde_json::Value) {
 		if let Some(key) = val["result"]["Ok"].as_str() {
-			let key_bytes = match from_hex(key.to_owned()) {
+			let key_bytes = match from_hex(key) {
 				Ok(k) => k,
 				Err(_) => return,
 			};
@@ -994,6 +984,14 @@ impl OwnerV3Helpers {
 		req: &serde_json::Value,
 	) -> Result<(u32, serde_json::Value), serde_json::Value> {
 		let share_key_ref = key.lock();
+		if share_key_ref.is_none() {
+			return Err(EncryptionErrorResponse::new(
+				1,
+				-32002,
+				"Encrypted request internal error",
+			)
+			.as_json_value());
+		}
 		let shared_key = share_key_ref.as_ref().unwrap();
 		let enc_req: EncryptedRequest = serde_json::from_value(req.clone()).map_err(|e| {
 			EncryptionErrorResponse::new(
@@ -1018,9 +1016,17 @@ impl OwnerV3Helpers {
 		res: &serde_json::Value,
 	) -> Result<serde_json::Value, serde_json::Value> {
 		let share_key_ref = key.lock();
+		if share_key_ref.is_none() {
+			return Err(EncryptionErrorResponse::new(
+				1,
+				-32002,
+				"Encrypted response internal error",
+			)
+			.as_json_value());
+		}
 		let shared_key = share_key_ref.as_ref().unwrap();
 		let enc_res = EncryptedResponse::from_json(id, res, &shared_key).map_err(|e| {
-			EncryptionErrorResponse::new(1, -32003, &format!("EncryptionError: {}", e.kind()))
+			EncryptionErrorResponse::new(1, -32003, &format!("Encryption Error: {}", e.kind()))
 				.as_json_value()
 		})?;
 		let res = enc_res.as_json_value().map_err(|e| {
@@ -1148,7 +1154,7 @@ where
 		&self,
 		req: Request<Body>,
 		api: Arc<Owner<L, C, K>>,
-	) -> Box<dyn Future<Item = serde_json::Value, Error = crate::libwallet::Error> + Send> {
+	) -> Box<dyn Future<Item = serde_json::Value, Error = Error> + Send> {
 		let key = self.shared_key.clone();
 		let mask = self.keychain_mask.clone();
 		let running_foreign = self.running_foreign;
@@ -1291,7 +1297,7 @@ where
 		&self,
 		req: Request<Body>,
 		api: Foreign<'static, L, C, K>,
-	) -> Box<dyn Future<Item = serde_json::Value, Error = crate::libwallet::Error> + Send> {
+	) -> Box<dyn Future<Item = serde_json::Value, Error = Error> + Send> {
 		Box::new(parse_body(req).and_then(move |val: serde_json::Value| {
 			let handler = move || -> serde_json::Value {
 				let foreign_api = &api as &dyn ForeignRpc;
@@ -1348,7 +1354,7 @@ where
 {
 	match serde_json::to_string(s) {
 		Ok(json) => response(StatusCode::OK, json),
-		Err(_) => response(StatusCode::INTERNAL_SERVER_ERROR, ""),
+		Err(e) => response(StatusCode::INTERNAL_SERVER_ERROR, format!("Unable to parse response object, {}",e)),
 	}
 }
 
@@ -1359,11 +1365,11 @@ where
 {
 	match serde_json::to_string_pretty(s) {
 		Ok(json) => response(StatusCode::OK, json),
-		Err(_) => response(StatusCode::INTERNAL_SERVER_ERROR, ""),
+		Err(e) => response(StatusCode::INTERNAL_SERVER_ERROR, format!("Unable to parse response object, {}",e)),
 	}
 }
 
-fn create_error_response(e: crate::libwallet::Error) -> Response<Body> {
+fn create_error_response(e: Error) -> Response<Body> {
 	Response::builder()
 		.status(StatusCode::INTERNAL_SERVER_ERROR)
 		.header("access-control-allow-origin", "*")
@@ -1410,20 +1416,18 @@ fn response<T: Into<Body>>(status: StatusCode, text: T) -> Response<Body> {
 	builder.body(text.into()).unwrap()
 }
 
-fn parse_body<T>(
-	req: Request<Body>,
-) -> Box<dyn Future<Item = T, Error = crate::libwallet::Error> + Send>
+fn parse_body<T>(req: Request<Body>) -> Box<dyn Future<Item = T, Error = Error> + Send>
 where
 	for<'de> T: Deserialize<'de> + Send + 'static,
 {
 	Box::new(
 		req.into_body()
 			.concat2()
-			.map_err(|_| ErrorKind::GenericError("Failed to read request".to_owned()).into())
+			.map_err(|e| ErrorKind::GenericError(format!("Failed to read request, {}", e)).into())
 			.and_then(|body| match serde_json::from_reader(&body.to_vec()[..]) {
 				Ok(obj) => ok(obj),
 				Err(e) => {
-					err(ErrorKind::GenericError(format!("Invalid request body: {}", e)).into())
+					err(ErrorKind::GenericError(format!("Invalid request body, {}", e)).into())
 				}
 			}),
 	)

@@ -31,28 +31,28 @@ pub struct Error {
 #[derive(Clone, Eq, PartialEq, Debug, Fail)]
 pub enum ErrorKind {
 	/// LibTX Error
-	#[fail(display = "LibTx Error")]
+	#[fail(display = "LibTx Error, {}", _0)]
 	LibTX(libtx::ErrorKind),
 
 	/// LibWallet Error
-	#[fail(display = "LibWallet Error: {}", _1)]
-	LibWallet(libwallet::ErrorKind, String),
+	#[fail(display = "LibWallet Error, {}", _0)]
+	LibWallet(String),
 
 	/// Keychain error
-	#[fail(display = "Keychain error")]
+	#[fail(display = "Keychain error, {}", _0)]
 	Keychain(keychain::Error),
 
 	/// Error when formatting json
-	#[fail(display = "IO error")]
-	IO,
+	#[fail(display = "IO error, {}", _0)]
+	IO(String),
 
 	/// Secp Error
-	#[fail(display = "Secp error")]
+	#[fail(display = "Secp error, {}", _0)]
 	Secp(secp::Error),
 
 	/// Error when formatting json
-	#[fail(display = "Serde JSON error")]
-	Format,
+	#[fail(display = "Serde JSON error, {}", _0)]
+	Format(String),
 
 	/// Wallet seed already exists
 	#[fail(display = "Wallet seed file exists: {}", _0)]
@@ -67,12 +67,12 @@ pub enum ErrorKind {
 	WalletDoesntExist(String, String),
 
 	/// Enc/Decryption Error
-	#[fail(display = "Enc/Decryption error (check password?)")]
-	Encryption,
+	#[fail(display = "Enc/Decryption error (check password?), {}", _0)]
+	Encryption(String),
 
 	/// BIP 39 word list
-	#[fail(display = "BIP39 Mnemonic (word list) Error")]
-	Mnemonic,
+	#[fail(display = "BIP39 Mnemonic (word list) Error, {}", _0)]
+	Mnemonic(String),
 
 	/// Command line argument error
 	#[fail(display = "{}", _0)]
@@ -175,7 +175,7 @@ impl From<secp::Error> for Error {
 impl From<libwallet::Error> for Error {
 	fn from(error: libwallet::Error) -> Error {
 		Error {
-			inner: Context::new(ErrorKind::LibWallet(error.kind(), format!("{}", error))),
+			inner: Context::new(ErrorKind::LibWallet(format!("{}", error))),
 		}
 	}
 }

@@ -41,9 +41,9 @@ impl HttpSlateSender {
 	pub fn new(
 		base_url: &str,
 		apisecret: Option<String>,
-	) -> Result<HttpSlateSender, SchemeNotHttp> {
+	) -> Result<HttpSlateSender, Error> {
 		if !base_url.starts_with("http") && !base_url.starts_with("https") {
-			Err(SchemeNotHttp)
+			Err(ErrorKind::GenericError(format!("Invalid http url: {}", base_url)).into())
 		} else {
 			Ok(HttpSlateSender {
 				base_url: base_url.to_owned(),
@@ -61,11 +61,11 @@ impl HttpSlateSender {
 		apisecret: Option<String>,
 		proxy_addr: &str,
 		tor_config_dir: &str,
-	) -> Result<HttpSlateSender, SchemeNotHttp> {
+	) -> Result<HttpSlateSender, Error> {
 		let mut ret = Self::new(base_url, apisecret)?;
 		ret.use_socks = true;
-		//TODO: Unwrap
-		ret.socks_proxy_addr = Some(SocketAddr::V4(proxy_addr.parse().unwrap()));
+		let addr = proxy_addr.parse().map_err(|e| ErrorKind::GenericError(format!("Anable to parse address {}, {}", proxy_addr,e)))?;
+		ret.socks_proxy_addr = Some(SocketAddr::V4(addr));
 		ret.tor_config_dir = tor_config_dir.into();
 		Ok(ret)
 	}
@@ -79,7 +79,7 @@ impl HttpSlateSender {
 			"params": []
 		});
 
-		let res: String = self.post(url, self.apisecret.clone(), req).map_err(|e| {
+		let res_str: String = self.post(url, self.apisecret.clone(), req).map_err(|e| {
 			let mut report = format!("Performing version check (is recipient listening?): {}", e);
 			let err_string = format!("{}", e);
 			if err_string.contains("404") {
@@ -93,7 +93,8 @@ impl HttpSlateSender {
 			ErrorKind::ClientCallback(report)
 		})?;
 
-		let res: Value = serde_json::from_str(&res).unwrap();
+		let res: Value = serde_json::from_str(&res_str)
+			.map_err(|e| ErrorKind::GenericError(format!("Unable to parse respond {}, {}", res_str,e)))?;
 		trace!("Response: {}", res);
 		if res["error"] != json!(null) {
 			let report = format!(
@@ -107,9 +108,11 @@ impl HttpSlateSender {
 		let resp_value = res["result"]["Ok"].clone();
 		trace!("resp_value: {}", resp_value.clone());
 		let foreign_api_version: u16 =
-			serde_json::from_value(resp_value["foreign_api_version"].clone()).unwrap();
+			serde_json::from_value(resp_value["foreign_api_version"].clone())
+				.map_err(|e| ErrorKind::GenericError(format!("Unable to read respond foreign_api_version value {}, {}", res_str,e)))?;
 		let supported_slate_versions: Vec<String> =
-			serde_json::from_value(resp_value["supported_slate_versions"].clone()).unwrap();
+			serde_json::from_value(resp_value["supported_slate_versions"].clone())
+				.map_err(|e| ErrorKind::GenericError(format!("Unable to read respond supported_slate_versions value {}, {}", res_str,e)))?;
 
 		// trivial tests for now, but will be expanded later
 		if foreign_api_version < 2 {
@@ -172,16 +175,17 @@ impl SlateSender for HttpSlateSender {
 			);
 			tor_config::output_tor_sender_config(
 				&tor_dir,
-				&self.socks_proxy_addr.unwrap().to_string(),
+				&self.socks_proxy_addr.ok_or( ErrorKind::GenericError("Not found socks_proxy_addr value".to_string()))?.to_string(),
 			)
-			.map_err(|e| ErrorKind::TorConfig(format!("{:?}", e).into()))?;
+			.map_err(|e| ErrorKind::TorConfig(format!("Failed to config tor, {}", e).into()))?;
 			// Start TOR process
-			tor.torrc_path(&format!("{}/torrc", &tor_dir))
+			let tor_cmd = format!("{}/torrc", &tor_dir);
+			tor.torrc_path(&tor_cmd)
 				.working_dir(&tor_dir)
 				.timeout(20)
 				.completion_percent(100)
 				.launch()
-				.map_err(|e| ErrorKind::TorProcess(format!("{:?}", e).into()))?;
+				.map_err(|e| ErrorKind::TorProcess(format!("Unable to start tor process {}, {:?}", tor_cmd, e).into()))?;
 		}
 
 		let slate_send = match self.check_other_version(&url_str)? {
@@ -212,7 +216,7 @@ impl SlateSender for HttpSlateSender {
 		});
 		trace!("Sending receive_tx request: {}", req);
 
-		let res: String = self
+		let res_str: String = self
 			.post(&url_str, self.apisecret.clone(), req)
 			.map_err(|e| {
 				let report = format!("Posting transaction slate (is recipient listening?): {}", e);
@@ -220,7 +224,8 @@ impl SlateSender for HttpSlateSender {
 				ErrorKind::ClientCallback(report)
 			})?;
 
-		let res: Value = serde_json::from_str(&res).unwrap();
+		let res: Value = serde_json::from_str(&res_str)
+			.map_err(|e| ErrorKind::GenericError(format!("Unable to parse respond {}, {}", res_str,e)))?;
 		trace!("Response: {}", res);
 		if res["error"] != json!(null) {
 			let report = format!(
@@ -233,19 +238,11 @@ impl SlateSender for HttpSlateSender {
 
 		let slate_value = res["result"]["Ok"].clone();
 		trace!("slate_value: {}", slate_value);
-		let slate = Slate::deserialize_upgrade(&serde_json::to_string(&slate_value).unwrap())
-			.map_err(|_| ErrorKind::SlateDeser)?;
+		let slate = Slate::deserialize_upgrade(&serde_json::to_string(&slate_value)
+			.map_err(|e| ErrorKind::GenericError(format!("Unable to build slate form values, {}",e)))?)
+			.map_err(|e| ErrorKind::SlateDeser(format!("{}", e)))?;
 
 		Ok(slate)
 	}
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
-pub struct SchemeNotHttp;
-
-impl Into<Error> for SchemeNotHttp {
-	fn into(self) -> Error {
-		let err_str = format!("url scheme must be http",);
-		ErrorKind::GenericError(err_str).into()
-	}
-}

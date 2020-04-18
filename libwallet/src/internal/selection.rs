@@ -81,7 +81,7 @@ where
 	// Create our own private context
 	let mut context = Context::new(
 		keychain.secp(),
-		blinding.secret_key(&keychain.secp()).unwrap(),
+		blinding.secret_key(&keychain.secp())?,
 		&parent_key_id,
 		use_test_nonce,
 		0,
@@ -168,7 +168,7 @@ where
 		t.num_inputs = lock_inputs.len();
 		t.input_commits = context.input_commits.clone();
 		for id in lock_inputs {
-			let mut coin = batch.get(&id.0, &id.1).unwrap();
+			let mut coin = batch.get(&id.0, &id.1)?;
 			coin.tx_log_entry = Some(log_id);
 			amount_debited = amount_debited + coin.value;
 			batch.lock_output(&mut coin)?;
@@ -181,11 +181,7 @@ where
 		if let Some(ref p) = slate.payment_proof {
 			let sender_address_path = match context.payment_proof_derivation_index {
 				Some(p) => p,
-				None => {
-					return Err(ErrorKind::PaymentProof(
-						"Payment proof derivation index required".to_owned(),
-					))?;
-				}
+				None => return Err(ErrorKind::PaymentProof("Payment proof derivation index required".to_owned()))?,
 			};
 			let sender_key = address::address_from_derivation_path(
 				&keychain,
@@ -263,7 +259,7 @@ where
 		for oaui in output_amounts_unwrapped {
 			sum = sum + oaui;
 			key_vec_amounts.push((
-				keys::next_available_key(wallet, keychain_mask).unwrap(),
+				keys::next_available_key(wallet, keychain_mask)?,
 				oaui,
 			));
 			i = i + 1;
@@ -286,9 +282,9 @@ where
 				// If it is not true - likely use case was chnaged.
 				assert!(num_outputs == 1);
 				let key_str = key_id_opt.unwrap();
-				Identifier::from_hex(key_str).unwrap()
+				Identifier::from_hex(key_str)?
 			} else {
-				keys::next_available_key(wallet, keychain_mask).unwrap()
+				keys::next_available_key(wallet, keychain_mask)?
 			};
 
 			let output_amount: u64 = if i == num_outputs - 1 {
@@ -325,8 +321,7 @@ where
 	let mut context = Context::new(
 		keychain.secp(),
 		blinding
-			.secret_key(wallet.keychain(keychain_mask)?.secp())
-			.unwrap(),
+			.secret_key(wallet.keychain(keychain_mask)?.secp())?,
 		&parent_key_id,
 		use_test_rng,
 		participant_id,
@@ -343,12 +338,7 @@ where
 	for kva in &key_vec_amounts {
 		let commit = wallet.calc_commit_for_cache(keychain_mask, kva.1, &kva.0)?;
 		if let Some(cm) = commit.clone() {
-			commit_ped.push(Commitment::from_vec(util::from_hex(cm).map_err(|e| {
-				Error::from(ErrorKind::GenericError(format!(
-					"Output commit parse error {:?}",
-					e
-				)))
-			})?));
+			commit_ped.push(Commitment::from_vec(util::from_hex(&cm).map_err(|e| ErrorKind::GenericError(format!("Output commit parse error, {}",e)))? ));
 		}
 		commit_vec.push(commit);
 	}
@@ -623,7 +613,7 @@ where
 				part_change
 			};
 
-			let change_key = wallet.next_child(keychain_mask).unwrap();
+			let change_key = wallet.next_child(keychain_mask)?;
 
 			change_amounts_derivations.push((change_amount, change_key.clone(), None));
 			parts.push(build::output(change_amount, change_key));

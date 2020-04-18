@@ -364,7 +364,7 @@ where
 			.join(filename);
 		let path_buf = Path::new(&path).to_path_buf();
 		let mut stored_tx = File::create(path_buf)?;
-		let tx_hex = util::to_hex(ser::ser_vec(tx, ser::ProtocolVersion(1)).unwrap());
+		let tx_hex = util::to_hex(ser::ser_vec(tx, ser::ProtocolVersion(1))?);
 		stored_tx.write_all(&tx_hex.as_bytes())?;
 		stored_tx.sync_all()?;
 		Ok(())
@@ -380,10 +380,8 @@ where
 			.join(filename);
 
 		match path.to_str() {
-			Some(s) => self.load_stored_tx(s),
-			None => Err(ErrorKind::GenericError(
-				"Unable to build transaction path".to_string(),
-			))?,
+			Some(s) => Ok(Some(self.load_stored_tx(s)?)),
+			None => Err(ErrorKind::GenericError("Unable to build transaction path".to_string()))?,
 		}
 	}
 
@@ -397,29 +395,22 @@ where
 					.join(TX_SAVE_DIR)
 					.join(filename);
 
-				let trans = match path.to_str() {
-					Some(s) => self.load_stored_tx(s)?,
-					None => Err(ErrorKind::GenericError(
-						"Unable to build transaction path".to_string(),
-					))?,
-				};
-
-				Ok(trans.unwrap())
+				let trans = self.load_stored_tx(path.to_str().ok_or(ErrorKind::GenericError("Unable to build transaction path".to_string()))? )?;
+				Ok(trans)
 			};
 
 		get_stored_tx_by_uuid_ext(uuid, "mwctx")
 			.or_else(|_| get_stored_tx_by_uuid_ext(uuid, "grintx"))
 	}
 
-	fn load_stored_tx(&self, path: &str) -> Result<Option<Transaction>, Error> {
+	fn load_stored_tx(&self, path: &str) -> Result<Transaction, Error> {
 		let tx_file = Path::new(&path).to_path_buf();
 		let mut tx_f = File::open(tx_file)?;
 		let mut content = String::new();
 		tx_f.read_to_string(&mut content)?;
-		let tx_bin = util::from_hex(content).unwrap();
-		Ok(Some(
-			ser::deserialize::<Transaction>(&mut &tx_bin[..], ser::ProtocolVersion(1)).unwrap(),
-		))
+		let tx_bin = util::from_hex(&content).map_err(|e| ErrorKind::StoredTransactionError(format!("Unable to decode the data, {}", e)))?;
+		Ok(ser::deserialize::<Transaction>(&mut &tx_bin[..], ser::ProtocolVersion(1))
+			.map_err(|e| ErrorKind::StoredTransactionError(format!("Unable to deserialize the data, {}", e)))?)
 	}
 
 	fn batch<'a>(
@@ -622,7 +613,7 @@ where
 		first_scanned_block_height: u64,
 		block_info: &Vec<ScannedBlockInfo>,
 	) -> Result<(), Error> {
-		assert!(block_info.first().unwrap().height >= block_info.last().unwrap().height);
+		debug_assert!(block_info.first().unwrap().height >= block_info.last().unwrap().height);
 
 		let br = self.db.borrow();
 		let db = br.as_ref().unwrap();
@@ -652,7 +643,7 @@ where
 		heights.sort();
 
 		let mut step = 4;
-		let mut start = heights.pop().unwrap();
+		let mut start = heights.pop().unwrap_or(1);
 
 		while let Some(h) = heights.pop() {
 			assert!(h < start);

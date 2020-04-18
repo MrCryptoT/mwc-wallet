@@ -244,10 +244,7 @@ fn parse_required<'a>(args: &'a ArgMatches, name: &str) -> Result<&'a str, Parse
 	let arg = args.value_of(name);
 	match arg {
 		Some(ar) => Ok(ar),
-		None => {
-			let msg = format!("Value for argument '{}' is required in this context", name,);
-			Err(ParseError::ArgumentError(msg))
-		}
+		None => Err(ParseError::ArgumentError(format!("Value for argument '{}' is required in this context", name))),
 	}
 }
 
@@ -256,10 +253,7 @@ fn parse_u64(arg: &str, name: &str) -> Result<u64, ParseError> {
 	let val = arg.parse::<u64>();
 	match val {
 		Ok(v) => Ok(v),
-		Err(e) => {
-			let msg = format!("Could not parse {} as a whole number. e={}", name, e);
-			Err(ParseError::ArgumentError(msg))
-		}
+		Err(e) => Err(ParseError::ArgumentError(format!("Could not parse {} as a whole number, {}", name, e))),
 	}
 }
 
@@ -296,10 +290,7 @@ pub fn parse_global_args(
 		Some(file) => {
 			let key = match config.tls_certificate_key.clone() {
 				Some(k) => k,
-				None => {
-					let msg = format!("Private key for certificate is not set");
-					return Err(ParseError::ArgumentError(msg));
-				}
+				None => return Err(ParseError::ArgumentError(format!("Private key for certificate is not set")))?,
 			};
 			Some(TLSConfig::new(file, key))
 		}
@@ -382,7 +373,7 @@ pub fn parse_listen_args(
 	args: &ArgMatches,
 ) -> Result<command::ListenArgs, ParseError> {
 	if let Some(port) = args.value_of("port") {
-		config.api_listen_port = port.parse().unwrap();
+		config.api_listen_port = port.parse().map_err(|e| ParseError::ArgumentError(format!("Unable to parse port value, {}", e)) )?;
 	}
 	let method = parse_required(args, "method")?;
 	if args.is_present("no_tor") {
@@ -398,7 +389,8 @@ pub fn parse_owner_api_args(
 	args: &ArgMatches,
 ) -> Result<(), ParseError> {
 	if let Some(port) = args.value_of("port") {
-		config.owner_api_listen_port = Some(port.parse().unwrap());
+		let port = port.parse().map_err(|e| ParseError::ArgumentError(format!("Unable to parse port value, {}", e)))?;
+		config.owner_api_listen_port = Some(port);
 	}
 	if args.is_present("run_foreign") {
 		config.owner_api_include_foreign = Some(true);
@@ -424,13 +416,7 @@ pub fn parse_send_args(args: &ArgMatches) -> Result<command::SendArgs, ParseErro
 	let amount = core::core::amount_from_hr_string(amount);
 	let amount = match amount {
 		Ok(a) => a,
-		Err(e) => {
-			let msg = format!(
-				"Could not parse amount as a number with optional decimal point. e={}",
-				e
-			);
-			return Err(ParseError::ArgumentError(msg));
-		}
+		Err(e) => return Err(ParseError::ArgumentError(format!("Could not parse amount as a number with optional decimal point, {}",e))),
 	};
 
 	// message
@@ -476,11 +462,7 @@ pub fn parse_send_args(args: &ArgMatches) -> Result<command::SendArgs, ParseErro
 		&& !dest.starts_with("https://")
 		&& is_tor_address(&dest).is_err()
 	{
-		let msg = format!(
-			"HTTP Destination should start with http://: or https://: {}",
-			dest,
-		);
-		return Err(ParseError::ArgumentError(msg));
+		return Err(ParseError::ArgumentError(format!("HTTP Destination should start with http://: or https://: {}",dest)))?;
 	}
 
 	// change_outputs
@@ -514,7 +496,10 @@ pub fn parse_send_args(args: &ArgMatches) -> Result<command::SendArgs, ParseErro
 				// separately
 				match address::pubkey_from_onion_v3(&dest) {
 					Ok(k) => Some(to_hex(k.to_bytes().to_vec())),
-					Err(_) => Some(parse_required(args, "proof_address")?.to_owned()),
+					Err(e) => {
+						warn!("Unable to parse Onion address '{}', {}", dest, e);
+						Some(parse_required(args, "proof_address")?.to_owned())
+					},
 				}
 			}
 			false => None,
@@ -566,8 +551,7 @@ pub fn parse_receive_args(receive_args: &ArgMatches) -> Result<command::ReceiveA
 
 	// validate input
 	if !Path::new(&tx_file).is_file() {
-		let msg = format!("File {} not found.", &tx_file);
-		return Err(ParseError::ArgumentError(msg));
+		return Err(ParseError::ArgumentError(format!("File {} not found.", &tx_file)));
 	}
 
 	Ok(command::ReceiveArgs {
@@ -582,8 +566,7 @@ pub fn parse_finalize_args(args: &ArgMatches) -> Result<command::FinalizeArgs, P
 	let tx_file = parse_required(args, "input")?;
 
 	if !Path::new(&tx_file).is_file() {
-		let msg = format!("File {} not found.", tx_file);
-		return Err(ParseError::ArgumentError(msg));
+		return Err(ParseError::ArgumentError(format!("File {} not found.", tx_file)));
 	}
 
 	let dest_file = match args.is_present("dest") {
@@ -607,11 +590,7 @@ pub fn parse_issue_invoice_args(
 	let amount = match amount {
 		Ok(a) => a,
 		Err(e) => {
-			let msg = format!(
-				"Could not parse amount as a number with optional decimal point. e={}",
-				e
-			);
-			return Err(ParseError::ArgumentError(msg));
+			return Err(ParseError::ArgumentError(format!("Could not parse amount as a number with optional decimal point, {}",e)));
 		}
 	};
 	// message
@@ -687,11 +666,7 @@ pub fn parse_process_invoice_args(
 		&& !dest.starts_with("http://")
 		&& !dest.starts_with("https://")
 	{
-		let msg = format!(
-			"HTTP Destination should start with http://: or https://: {}",
-			dest,
-		);
-		return Err(ParseError::ArgumentError(msg));
+		return Err(ParseError::ArgumentError(format!("HTTP Destination should start with http://: or https://: {}", dest)));
 	}
 
 	// ttl_blocks
@@ -709,7 +684,7 @@ pub fn parse_process_invoice_args(
 
 		let slate = match PathToSlate((&tx_file).into()).get_tx() {
 			Ok(s) => s,
-			Err(e) => return Err(ParseError::ArgumentError(format!("{}", e))),
+			Err(e) => return Err(ParseError::ArgumentError(format!("Unable to parse 'input' value {}, {}", tx_file, e))),
 		};
 
 		prompt_pay_invoice(&slate, method, dest)?;
@@ -755,15 +730,11 @@ pub fn parse_txs_args(args: &ArgMatches) -> Result<command::TxsArgs, ParseError>
 		None => None,
 		Some(tx) => match tx.parse() {
 			Ok(t) => Some(t),
-			Err(e) => {
-				let msg = format!("Could not parse txid parameter. e={}", e);
-				return Err(ParseError::ArgumentError(msg));
-			}
+			Err(e) => return Err(ParseError::ArgumentError(format!("Could not parse txid parameter, {}", e))),
 		},
 	};
 	if tx_id.is_some() && tx_slate_id.is_some() {
-		let msg = format!("At most one of 'id' (-i) or 'txid' (-t) may be provided.");
-		return Err(ParseError::ArgumentError(msg));
+		return Err(ParseError::ArgumentError(format!("At most one of 'id' (-i) or 'txid' (-t) may be provided.")));
 	}
 	Ok(command::TxsArgs {
 		id: tx_id,
@@ -787,8 +758,7 @@ pub fn parse_submit_args(args: &ArgMatches) -> Result<command::SubmitArgs, Parse
 
 	// validate input
 	if !Path::new(&tx_file).is_file() {
-		let msg = format!("File {} not found.", &tx_file);
-		return Err(ParseError::ArgumentError(msg));
+		return Err(ParseError::ArgumentError(format!("File {} not found.", &tx_file)));
 	}
 
 	// check fluff flag
@@ -813,7 +783,7 @@ pub fn parse_repost_args(args: &ArgMatches) -> Result<command::RepostArgs, Parse
 	};
 
 	Ok(command::RepostArgs {
-		id: tx_id.unwrap(),
+		id: tx_id.ok_or( ParseError::ArgumentError("Please specify transaction id value".to_string()))?,
 		dump_file: dump_file,
 		fluff: fluff,
 	})
@@ -833,14 +803,12 @@ pub fn parse_cancel_args(args: &ArgMatches) -> Result<command::CancelArgs, Parse
 				Some(t)
 			}
 			Err(e) => {
-				let msg = format!("Could not parse txid parameter. e={}", e);
-				return Err(ParseError::ArgumentError(msg));
+				return Err(ParseError::ArgumentError(format!("Could not parse txid parameter, {}", e)));
 			}
 		},
 	};
 	if (tx_id.is_none() && tx_slate_id.is_none()) || (tx_id.is_some() && tx_slate_id.is_some()) {
-		let msg = format!("'id' (-i) or 'txid' (-t) argument is required.");
-		return Err(ParseError::ArgumentError(msg));
+		return Err(ParseError::ArgumentError(format!("'id' (-i) or 'txid' (-t) argument is required.")));
 	}
 	Ok(command::CancelArgs {
 		tx_id: tx_id,
@@ -1112,9 +1080,8 @@ where
 		("dump-wallet-data", Some(args)) => {
 			command::dump_wallet_data(wallet, km, args.value_of("file").map(|s| String::from(s)))
 		}
-		_ => {
-			let msg = format!("Unknown wallet command, use 'mwc help wallet' for details");
-			return Err(ErrorKind::ArgumentError(msg).into());
+		(cmd, _) => {
+			return Err(ErrorKind::ArgumentError( format!("Unknown wallet command '{}', use 'mwc help wallet' for details", cmd) ).into());
 		}
 	};
 	if let Err(e) = res {

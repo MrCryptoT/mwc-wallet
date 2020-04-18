@@ -61,31 +61,31 @@ pub enum ErrorKind {
 	Fee(String),
 
 	/// LibTX Error
-	#[fail(display = "LibTx Error")]
-	LibTX(libtx::ErrorKind),
+	#[fail(display = "LibTx Error, {}", _0)]
+	LibTX(grin_core::libtx::ErrorKind),
 
 	/// Keychain error
-	#[fail(display = "Keychain error")]
+	#[fail(display = "Keychain error, {}", _0)]
 	Keychain(grin_keychain::Error),
 
 	/// Transaction Error
-	#[fail(display = "Transaction error")]
+	#[fail(display = "Transaction error, {}", _0)]
 	Transaction(transaction::Error),
 
 	/// API Error
-	#[fail(display = "Client Callback Error: {}", _0)]
+	#[fail(display = "Client Callback Error, {}", _0)]
 	ClientCallback(String),
 
 	/// Secp Error
-	#[fail(display = "Secp error")]
+	#[fail(display = "Secp error, {}", _0)]
 	Secp(secp::Error),
 
 	/// Callback implementation error conversion
-	#[fail(display = "Trait Implementation error")]
-	CallbackImpl(&'static str),
+	#[fail(display = "Trait Implementation error, {}", _0)]
+	CallbackImpl(String),
 
 	/// Wallet backend error
-	#[fail(display = "Wallet store error: {}", _0)]
+	#[fail(display = "Wallet store error, {}", _0)]
 	Backend(String),
 
 	/// Callback implementation error conversion
@@ -93,16 +93,16 @@ pub enum ErrorKind {
 	Restore,
 
 	/// An error in the format of the JSON structures exchanged by the wallet
-	#[fail(display = "JSON format error: {}", _0)]
+	#[fail(display = "JSON format error, {}", _0)]
 	Format(String),
 
 	/// Other serialization errors
-	#[fail(display = "Ser/Deserialization error")]
+	#[fail(display = "Ser/Deserialization error, {}", _0)]
 	Deser(crate::grin_core::ser::Error),
 
 	/// IO Error
-	#[fail(display = "I/O error")]
-	IO,
+	#[fail(display = "I/O error, {}", _0)]
+	IO(String),
 
 	/// Error when contacting a node through its API
 	#[fail(display = "Node API error: {}", _0)]
@@ -129,7 +129,7 @@ pub enum ErrorKind {
 	Signature(String),
 
 	/// OwnerAPIEncryption
-	#[fail(display = "{}", _0)]
+	#[fail(display = "API encryption error, {}", _0)]
 	APIEncryption(String),
 
 	/// Attempt to use duplicate transaction id in separate transactions
@@ -185,11 +185,11 @@ pub enum ErrorKind {
 	AccountLabelAlreadyExists(String),
 
 	/// Try to rename/delete unknown account
-	#[fail(display = "\x1b[31;1merror:\x1b[0m Account label {} doesn't exist!", 0)]
+	#[fail(display = "error: Account label {} doesn't exist!", _0)]
 	AccountLabelNotExists(String),
 
 	/// Account with can't be renamed
-	#[fail(display = "\x1b[31;1merror:\x1b[0m default account cannot be renamed!")]
+	#[fail(display = "error: default account cannot be renamed!")]
 	AccountDefaultCannotBeRenamed,
 
 	/// Reference unknown account label
@@ -197,20 +197,20 @@ pub enum ErrorKind {
 	UnknownAccountLabel(String),
 
 	/// Error from summing commitments via committed trait.
-	#[fail(display = "Committed Error")]
+	#[fail(display = "Committed Error, {}", _0)]
 	Committed(committed::Error),
 
 	/// Can't parse slate version
-	#[fail(display = "Can't parse slate version")]
-	SlateVersionParse,
+	#[fail(display = "Can't parse slate version, {}", _0)]
+	SlateVersionParse(String),
 
 	/// Can't serialize slate
-	#[fail(display = "Can't Serialize slate")]
-	SlateSer,
+	#[fail(display = "Can't Serialize slate, {}", _0)]
+	SlateSer(String),
 
 	/// Can't deserialize slate
-	#[fail(display = "Can't Deserialize slate")]
-	SlateDeser,
+	#[fail(display = "Can't Deserialize slate, {}", _0)]
+	SlateDeser(String),
 
 	/// Unknown slate version
 	#[fail(display = "Unknown Slate Version: {}", _0)]
@@ -256,9 +256,13 @@ pub enum ErrorKind {
 	#[fail(display = "Transaction Expired")]
 	TransactionExpired,
 
+	/// Stored Transaction issues
+	#[fail(display = "Stored transaction error, {}", _0)]
+	StoredTransactionError(String),
+
 	/// Claim prepare call with wrong amount value
 	#[fail(
-		display = "\x1b[31;1merror:\x1b[0m Amount specified does not match slate! slate = {} / sum = {}",
+		display = "error: Amount specified does not match slate! slate = {} / sum = {}",
 		amount, sum
 	)]
 	AmountMismatch {
@@ -269,7 +273,7 @@ pub enum ErrorKind {
 	},
 
 	/// Other
-	#[fail(display = "Generic error: {}", _0)]
+	#[fail(display = "Generic error, {}", _0)]
 	GenericError(String),
 
 	///when invoice amount is too big(added with mqs feature)
@@ -370,9 +374,9 @@ impl From<Context<ErrorKind>> for Error {
 }
 
 impl From<io::Error> for Error {
-	fn from(_error: io::Error) -> Error {
+	fn from(error: io::Error) -> Error {
 		Error {
-			inner: Context::new(ErrorKind::IO),
+			inner: Context::new(ErrorKind::IO(format!("{}",error))),
 		}
 	}
 }

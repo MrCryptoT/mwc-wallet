@@ -95,9 +95,9 @@ type HandshakeFuture<T> = Box<dyn Future<Item = T, Error = Error> + Send>;
 
 fn auth_negotiation(
 	socket: TcpStream,
-	creds: Option<(Vec<u8>, Vec<u8>)>,
+	creds: (Vec<u8>, Vec<u8>),
 ) -> HandshakeFuture<TcpStream> {
-	let (username, password) = creds.unwrap();
+	let (username, password) = creds;
 	let mut creds_msg: Vec<u8> = Vec::with_capacity(username.len() + password.len() + 3);
 	creds_msg.push(1);
 	creds_msg.push(username.len() as u8);
@@ -125,7 +125,7 @@ fn answer_hello(
 	if response[0] == 5 && response[1] == 0 {
 		Box::new(ok(socket))
 	} else if response[0] == 5 && response[1] == 2 && creds.is_some() {
-		Box::new(auth_negotiation(socket, creds).and_then(|socket| ok(socket)))
+		Box::new(auth_negotiation(socket, creds.unwrap()).and_then(|socket| ok(socket)))
 	} else {
 		Box::new(
 			Err(Error::new(
@@ -207,12 +207,12 @@ fn read_response(socket: TcpStream, response: [u8; 3]) -> HandshakeFuture<TcpStr
 				Err(Error::new(ErrorKind::Other, "address kind not supported")).into_future(),
 			)
 		}
-		_ => return Box::new(Err(Error::new(ErrorKind::Other, "unknown error")).into_future()),
+		_ => return Box::new(Err(Error::new(ErrorKind::Other, format!("unknown handshake error {}", response[1]))).into_future()),
 	};
 
 	if response[2] != 0 {
 		return Box::new(
-			Err(Error::new(ErrorKind::InvalidData, "invalid reserved byt")).into_future(),
+			Err(Error::new(ErrorKind::InvalidData, "invalid reserved byte")).into_future(),
 		);
 	}
 

@@ -59,22 +59,32 @@ use std::process::{Child, ChildStdout, Command, Stdio};
 use std::sync::mpsc::channel;
 use std::thread;
 use sysinfo::{Process, ProcessExt, Signal};
+use failure::Fail;
 
 #[cfg(windows)]
 const TOR_EXE_NAME: &'static str = "tor.exe";
 #[cfg(not(windows))]
 const TOR_EXE_NAME: &'static str = "tor";
 
-#[derive(Debug)]
+#[derive(Fail, Debug)]
 pub enum Error {
+	#[fail(display = "Tor process error, {}", _0)]
 	Process(String),
-	IO(io::Error),
+	#[fail(display = "Tor IO error, {}, {}", _0, _1)]
+	IO(String, io::Error),
+	#[fail(display = "Tor PID error, {}", _0)]
 	PID(String),
+	#[fail(display = "Tor Reported Error {}, and warnings: {:?}", _0, _1)]
 	Tor(String, Vec<String>),
-	InvalidLogLine,
+	#[fail(display = "Tor invalid log line: {}", _0)]
+	InvalidLogLine(String),
+	#[fail(display = "Tor invalid bootstrap line: {}", _0)]
 	InvalidBootstrapLine(String),
-	Regex(regex::Error),
+	#[fail(display = "Tor regex error {}, {}", _0, _1)]
+	Regex(String, regex::Error),
+	#[fail(display = "Tor process not running")]
 	ProcessNotStarted,
+	#[fail(display = "Waiting for tor respond timeout")]
 	Timeout,
 }
 
@@ -160,10 +170,11 @@ impl TorProcess {
 			let pid_file_name = format!("{}{}pid", d, MAIN_SEPARATOR);
 			// kill off PID if its already running
 			if Path::new(&pid_file_name).exists() {
-				let pid = fs::read_to_string(&pid_file_name).map_err(|err| Error::IO(err))?;
+				let pid = fs::read_to_string(&pid_file_name)
+                    .map_err(|err| Error::IO(format!("Unable to read from pid file {}", pid_file_name), err))?;
 				let pid = pid
 					.parse::<i32>()
-					.map_err(|err| Error::PID(format!("{:?}", err)))?;
+					.map_err(|err| Error::PID(format!("Pid value {} is invalid, {:?}", pid, err)))?;
 				let process = get_process(pid);
 				let _ = process.kill(Signal::Kill);
 			}
@@ -186,9 +197,10 @@ impl TorProcess {
 			// split out the process id, so if we don't exit cleanly
 			// we can take it down on the next run
 			let pid_file_name = format!("{}{}pid", d, MAIN_SEPARATOR);
-			let mut file = File::create(pid_file_name).map_err(|err| Error::IO(err))?;
+			let mut file = File::create(pid_file_name.clone())
+                .map_err(|err| Error::IO(format!("Unable to create pid file {}", pid_file_name), err))?;
 			file.write_all(format!("{}", tor_process.id()).as_bytes())
-				.map_err(|err| Error::IO(err))?;
+				.map_err(|err| Error::IO( format!("Unable to update pid file {}", pid_file_name) ,err))?;
 		}
 
 		let stdout = BufReader::new(tor_process.stdout.take().unwrap());
@@ -228,7 +240,7 @@ impl TorProcess {
 		completion_perc: u8,
 	) -> Result<BufReader<ChildStdout>, Error> {
 		let re_bootstrap = Regex::new(r"^\[notice\] Bootstrapped (?P<perc>[0-9]+)%(.*): ")
-			.map_err(|err| Error::Regex(err))?;
+			.map_err(|err| Error::Regex("Failed to parse tor output".to_string(), err))?;
 
 		let timestamp_len = "May 16 02:50:08.792".len();
 		let mut warnings = Vec::new();
@@ -236,12 +248,12 @@ impl TorProcess {
 
 		while stdout
 			.read_line(&mut raw_line)
-			.map_err(|err| Error::Process(format!("{}", err)))?
+			.map_err(|err| Error::Process(format!("Unable to parse tor output, {}", err)))?
 			> 0
 		{
 			{
 				if raw_line.len() < timestamp_len + 1 {
-					return Err(Error::InvalidLogLine);
+					return Err(Error::InvalidLogLine(raw_line));
 				}
 				let timestamp = &raw_line[..timestamp_len];
 				let line = &raw_line[timestamp_len + 1..raw_line.len() - 1];
@@ -274,7 +286,7 @@ impl TorProcess {
 		if let Some(ref mut process) = self.process {
 			Ok(process
 				.kill()
-				.map_err(|err| Error::Process(format!("{}", err)))?)
+				.map_err(|err| Error::Process(format!("Fail to kill tor process, {}", err)))?)
 		} else {
 			Err(Error::ProcessNotStarted)
 		}

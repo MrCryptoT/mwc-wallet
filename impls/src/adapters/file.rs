@@ -40,7 +40,7 @@ impl SlatePutter for PathToSlate {
 		};
 		pub_tx.write_all(
 			serde_json::to_string(&out_slate)
-				.map_err(|_| ErrorKind::SlateSer)?
+				.map_err(|e| ErrorKind::SlateSer(format!("Failed convert Slate to Json, {}", e)))?
 				.as_bytes(),
 		)?;
 		pub_tx.sync_all()?;

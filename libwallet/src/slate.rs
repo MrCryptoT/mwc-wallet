@@ -33,7 +33,6 @@ use crate::grin_util::{self, secp, RwLock};
 use crate::slate_versions::ser as dalek_ser;
 use ed25519_dalek::PublicKey as DalekPublicKey;
 use ed25519_dalek::Signature as DalekSignature;
-use failure::ResultExt;
 use rand::rngs::mock::StepRng;
 use rand::thread_rng;
 use serde::ser::{Serialize, Serializer};
@@ -225,7 +224,7 @@ impl Slate {
 	/// Attempt to find slate version
 	pub fn parse_slate_version(slate_json: &str) -> Result<u16, Error> {
 		let probe: SlateVersionProbe =
-			serde_json::from_str(slate_json).map_err(|_| ErrorKind::SlateVersionParse)?;
+			serde_json::from_str(slate_json).map_err(|e| ErrorKind::SlateVersionParse(format!("Unable to find slate version at {}, {}", slate_json, e)))?;
 		Ok(probe.version())
 	}
 
@@ -233,10 +232,10 @@ impl Slate {
 	pub fn deserialize_upgrade(slate_json: &str) -> Result<Slate, Error> {
 		let version = Slate::parse_slate_version(slate_json)?;
 		let v3: SlateV3 = match version {
-			3 => serde_json::from_str(slate_json).context(ErrorKind::SlateDeser)?,
+			3 => serde_json::from_str(slate_json).map_err(|e| ErrorKind::SlateDeser(format!("Json to SlateV3 conversion failed for {}, {}",slate_json, e)))?,
 			2 => {
 				let v2: SlateV2 =
-					serde_json::from_str(slate_json).context(ErrorKind::SlateDeser)?;
+					serde_json::from_str(slate_json).map_err(|e| ErrorKind::SlateDeser(format!("Json to SlateV2 conversion failed for {}, {}",slate_json, e)))?;
 				SlateV3::from(v2)
 			}
 			_ => return Err(ErrorKind::SlateVersion(version).into()),
@@ -433,6 +432,7 @@ impl Slate {
 	fn part_sigs(&self) -> Vec<&Signature> {
 		self.participant_data
 			.iter()
+			.filter(|p| {debug_assert!(p.part_sig.is_some()); p.part_sig.is_some()} )
 			.map(|p| p.part_sig.as_ref().unwrap())
 			.collect()
 	}
@@ -458,7 +458,7 @@ impl Slate {
 		let pub_key = PublicKey::from_secret_key(keychain.secp(), &sec_key)?;
 		let pub_nonce = PublicKey::from_secret_key(keychain.secp(), &sec_nonce)?;
 
-		let test_message_nonce = SecretKey::from_slice(&keychain.secp(), &[1; 32]).unwrap();
+		let test_message_nonce = SecretKey::from_slice(&keychain.secp(), &[1; 32])?;
 		let message_nonce = match use_test_rng {
 			false => None,
 			true => Some(&test_message_nonce),
@@ -551,9 +551,7 @@ impl Slate {
 		);
 
 		if fee > self.tx.fee() {
-			return Err(ErrorKind::Fee(
-				format!("Fee Dispute Error: {}, {}", self.tx.fee(), fee,).to_string(),
-			))?;
+			return Err(ErrorKind::Fee(format!("Fee Dispute Error: {}, {}", self.tx.fee(), fee,)))?;
 		}
 
 		if fee > self.amount + self.fee {
@@ -574,6 +572,7 @@ impl Slate {
 		// collect public nonces
 		for p in self.participant_data.iter() {
 			if p.is_complete() {
+				debug_assert!(p.part_sig.is_some());
 				aggsig::verify_partial_sig(
 					secp,
 					p.part_sig.as_ref().unwrap(),

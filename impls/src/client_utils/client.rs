@@ -17,7 +17,7 @@
 use crate::client_utils::Socksv5Connector;
 use crate::core::global;
 use crate::util::to_base64;
-use failure::{Backtrace, Context, Fail, ResultExt};
+use failure::{Backtrace, Context, Fail};
 use futures::future::result;
 use futures::future::{err, ok, Either};
 use futures::stream::Stream;
@@ -253,10 +253,7 @@ impl Client {
 		basic_auth_key: Option<String>,
 		body: Option<String>,
 	) -> Result<Request<Body>, Error> {
-		let uri = url.parse::<Uri>().map_err::<Error, _>(|e: InvalidUri| {
-			e.context(ErrorKind::Argument(format!("Invalid url {}", url)))
-				.into()
-		})?;
+		let uri = url.parse::<Uri>().map_err::<Error, _>(|e: InvalidUri| ErrorKind::Argument(format!("Invalid url {}, {}", url, e)).into())?;
 		let mut builder = Request::builder();
 
 		if basic_auth_key.is_some() && api_secret.is_some() {
@@ -277,9 +274,7 @@ impl Client {
 				None => Body::empty(),
 				Some(json) => json.into(),
 			})
-			.map_err(|e| {
-				ErrorKind::RequestError(format!("Bad request {} {}: {}", method, url, e)).into()
-			})
+			.map_err(|e| ErrorKind::RequestError(format!("Bad request {} {}: {}", method, url, e)).into())
 	}
 
 	pub fn create_post_request<IN>(
@@ -292,9 +287,7 @@ impl Client {
 	where
 		IN: Serialize,
 	{
-		let json = serde_json::to_string(input).context(ErrorKind::Internal(
-			"Could not serialize data to JSON".to_owned(),
-		))?;
+		let json = serde_json::to_string(input).map_err(|e| ErrorKind::Internal(format!("Could not serialize data to JSON, {}", e)))?;
 		self.build_request(url, "POST", basic_auth_key, api_secret, Some(json))
 	}
 
@@ -308,9 +301,7 @@ impl Client {
 	where
 		IN: Serialize,
 	{
-		let json = serde_json::to_string(input).context(ErrorKind::Internal(
-			"Could not serialize data to JSON".to_owned(),
-		))?;
+		let json = serde_json::to_string(input).map_err(|e| ErrorKind::Internal(format!("Could not serialize data to JSON, {}", e)))?;
 		self.build_request_ex(url, "POST", api_secret, basic_auth_key, Some(json))
 	}
 
@@ -319,10 +310,7 @@ impl Client {
 		for<'de> T: Deserialize<'de>,
 	{
 		let data = self.send_request(req)?;
-		serde_json::from_str(&data).map_err(|e| {
-			e.context(ErrorKind::ResponseError("Cannot parse response".to_owned()))
-				.into()
-		})
+		serde_json::from_str(&data).map_err(|e| ErrorKind::ResponseError(format!("Cannot parse response {}, {}", data, e)).into())
 	}
 
 	fn handle_request_async<T>(&self, req: Request<Body>) -> ClientResponseFuture<T>
@@ -330,10 +318,7 @@ impl Client {
 		for<'de> T: Deserialize<'de> + Send + 'static,
 	{
 		Box::new(self.send_request_async(req).and_then(|data| {
-			serde_json::from_str(&data).map_err(|e| {
-				e.context(ErrorKind::ResponseError("Cannot parse response".to_owned()))
-					.into()
-			})
+			serde_json::from_str(&data).map_err(|e| ErrorKind::ResponseError(format!("Cannot parse response {}, {}", data, e)).into())
 		}))
 	}
 
@@ -353,40 +338,26 @@ impl Client {
 				Box::new(
 					client
 						.request(req)
-						.map_err(|e| {
-							ErrorKind::RequestError(format!("Cannot make request: {}", e)).into()
-						})
+						.map_err(|e| ErrorKind::RequestError(format!("Cannot make request: {}", e)).into())
 						.and_then(|resp| {
 							if !resp.status().is_success() {
 								Either::A(err(ErrorKind::RequestError(format!(
 									"Error code: {}; Description: {}",
 									resp.status(),
 									resp.into_body()
-										.map_err(|e| {
-											format!("Cannot read response body: {}", e)
-										})
+										.map_err(|e| format!("Fail to read response body: {}", e))
 										.concat2()
-										.and_then(|ch| ok(
-											String::from_utf8_lossy(&ch.to_vec()).to_string()
-										))
+										.and_then(|ch| ok(String::from_utf8_lossy(&ch.to_vec()).to_string()))
 										.wait()
-										.unwrap_or("ERROR".to_string())
+										.unwrap_or("Unable to get any respond".to_string())
 								))
 								.into()))
 							} else {
 								Either::B(
 									resp.into_body()
-										.map_err(|e| {
-											ErrorKind::RequestError(format!(
-												"Cannot read response body: {}",
-												e
-											))
-											.into()
-										})
+										.map_err(|e| ErrorKind::RequestError(format!("Cannot read response body: {}",e)).into())
 										.concat2()
-										.and_then(|ch| {
-											ok(String::from_utf8_lossy(&ch.to_vec()).to_string())
-										}),
+										.and_then(|ch| ok(String::from_utf8_lossy(&ch.to_vec()).to_string())),
 								)
 							}
 						}),
@@ -396,10 +367,7 @@ impl Client {
 				let addr = match self.socks_proxy_addr {
 					Some(a) => a,
 					None => {
-						return Box::new(result(Err(ErrorKind::RequestError(format!(
-							"Can't parse Socks proxy address"
-						))
-						.into())))
+						return Box::new(result(Err(ErrorKind::RequestError(format!("Can't parse Socks proxy address")).into())))
 					}
 				};
 				let socks_connector = Socksv5Connector::new(addr);
@@ -411,40 +379,26 @@ impl Client {
 				Box::new(
 					client
 						.request(req)
-						.map_err(|e| {
-							ErrorKind::RequestError(format!("Cannot make request: {}", e)).into()
-						})
+						.map_err(|e| ErrorKind::RequestError(format!("Failed to make request: {}", e)).into())
 						.and_then(|resp| {
 							if !resp.status().is_success() {
 								Either::A(err(ErrorKind::RequestError(format!(
 									"Error code: {}; Description: {}",
 									resp.status(),
 									resp.into_body()
-										.map_err(|e| {
-											format!("Cannot read response body: {}", e)
-										})
+										.map_err(|e| format!("Cannot read response body: {}", e))
 										.concat2()
-										.and_then(|ch| ok(
-											String::from_utf8_lossy(&ch.to_vec()).to_string()
-										))
+										.and_then(|ch| ok(String::from_utf8_lossy(&ch.to_vec()).to_string()))
 										.wait()
-										.unwrap_or("ERROR".to_string())
+										.unwrap_or("Unable to get any respond".to_string())
 								))
 								.into()))
 							} else {
 								Either::B(
 									resp.into_body()
-										.map_err(|e| {
-											ErrorKind::RequestError(format!(
-												"Cannot read response body: {}",
-												e
-											))
-											.into()
-										})
+										.map_err(|e| ErrorKind::RequestError(format!("Cannot read response body: {}",e)).into())
 										.concat2()
-										.and_then(|ch| {
-											ok(String::from_utf8_lossy(&ch.to_vec()).to_string())
-										}),
+										.and_then(|ch| ok(String::from_utf8_lossy(&ch.to_vec()).to_string())),
 								)
 							}
 						}),
@@ -456,9 +410,9 @@ impl Client {
 	pub fn send_request(&self, req: Request<Body>) -> Result<String, Error> {
 		let task = self.send_request_async(req);
 		let mut rt = Builder::new()
-			.core_threads(1)
+			.core_threads(2) // There was issue with memory
 			.build()
-			.context(ErrorKind::Internal("can't create Tokio runtime".to_owned()))?;
+			.map_err(|e| ErrorKind::Internal(format!("can't create Tokio runtime, {}", e)))?;
 		let res = rt.block_on(task);
 		let _ = rt.shutdown_now().wait();
 		res
