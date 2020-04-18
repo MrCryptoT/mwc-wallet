@@ -35,12 +35,8 @@ grin_wallet_impls = { path = "./impls", version = "3.1.7" }
 grin_wallet_libwallet = { path = "./libwallet", version = "3.1.7" }
 grin_wallet_controller = { path = "./controller", version = "3.1.7" }
 grin_wallet_config = { path = "./config", version = "3.1.7" }
-
 grin_wallet_util = { path = "./util", version = "3.1.7" }
-
 grin_wallet_mwcmqs = { path = "./mwcmqs", version = "3.1.7" }
-
-
 
 
 [build-dependencies]
