@@ -294,6 +294,7 @@ pub enum ErrorKind {
 	/// Hex conversion error
 	#[fail(display = "Hex conversion error, {}", _0)]
 	HexError(String),
+
 }
 
 impl Display for Error {

@@ -18,7 +18,9 @@ use crate::api::TLSConfig;
 use crate::config::{TorConfig, WalletConfig, WALLET_CONFIG_FILE_NAME};
 use crate::core::{core, global};
 use crate::error::{Error, ErrorKind};
-use crate::impls::{create_sender, KeybaseAllChannels, SlateGetter as _, SlateReceiver as _};
+use crate::impls::{
+	create_sender, KeybaseAllChannels, MwcMqsChannel, SlateGetter as _, SlateReceiver as _,
+};
 use crate::impls::{PathToSlate, SlatePutter};
 use crate::keychain;
 use crate::libwallet::{
@@ -31,6 +33,7 @@ use grin_wallet_libwallet::TxLogEntry;
 use serde_json as json;
 use std::fs::File;
 use std::io::Write;
+use std::sync::mpsc::channel;
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
@@ -156,6 +159,9 @@ where
 				config.clone(),
 				wallet.clone(),
 				keychain_mask,
+				None,
+				None,
+				true,
 			)
 			.map_err(|e| {
 				ErrorKind::ListenerError(format!("Unable to start mwcmqs listener, {}", e))
@@ -268,6 +274,7 @@ pub struct SendArgs {
 
 pub fn send<L, C, K>(
 	wallet: Arc<Mutex<Box<dyn WalletInst<'static, L, C, K>>>>,
+	config: &WalletConfig,
 	keychain_mask: Option<&SecretKey>,
 	tor_config: Option<TorConfig>,
 	args: SendArgs,
@@ -339,6 +346,41 @@ where
 					.into());
 				}
 			};
+			//start the mqs listener if needed.
+			let mut mqs_broker = None;
+			let (tx, rx) = channel(); //this chaneel is used for listener thread to send message to other thread
+						  //this channel is used for listener thread to receive message from other thread
+			let (tx_from_others, rx_from_others) = channel();
+
+			//if it is mwcmqs, start listner first.
+			match args.method.as_str() {
+				"mwcmqs" => {
+					//api.tx_lock_outputs(m, &slate, Some(String::from("self")), 0)?;
+					let km = match keychain_mask.as_ref() {
+						None => None,
+						Some(&m) => Some(m.to_owned()),
+					};
+					//start the listener finalize tx
+					let result = controller::init_start_mwcmqs_listener(
+						config.clone(),
+						wallet.clone(),
+						Arc::new(Mutex::new(km)),
+						Some(tx),
+						Some(rx_from_others),
+						false,
+					);
+					match result {
+						Err(_e) => {
+							//mqs_broker = None;
+						}
+						Ok((publisher, subscriber)) => {
+							mqs_broker = Some((publisher, subscriber));
+						}
+					}
+					thread::sleep(Duration::from_millis(2000));
+				}
+				_ => {}
+			}
 
 			match args.method.as_str() {
 				"file" => {
@@ -369,40 +411,48 @@ where
 						Ok(())
 					})?;
 				}
-				"mwcmqs" => {
-					api.tx_lock_outputs(m, &slate, Some(String::from("self")), 0)?;
-					let _km = match keychain_mask.as_ref() {
-						None => None,
-						Some(&m) => Some(m.to_owned()),
-					};
-					//start the listener finalize tx
-					//controller::init_start_mwcmqs_listener(config.clone(), wallet.clone(), Mutex::new(km));
-				}
-				method => {
-					let sender =
-						create_sender(method, &args.dest, &args.apisecret, tor_config, None)
-							.map_err(|e| {
-								ErrorKind::GenericError(format!(
-									"Unable create sender {}, {}",
-									method, e
-								))
-							})?;
-					slate = sender.send_tx(&slate).map_err(|e| {
-						ErrorKind::GenericError(format!(
-							"Unable send slate with method {}, {}",
-							method, e
-						))
-					})?;
 
-					api.tx_lock_outputs(m, &slate, Some(args.dest.clone()), 0)?;
+				method => {
+					let sender = create_sender(
+						method,
+						&args.dest,
+						&args.apisecret,
+						tor_config,
+						Some(MwcMqsChannel::new(
+							Arc::new(Mutex::new(mqs_broker)),
+							Arc::new(Mutex::new(Some(rx))),
+							Arc::new(Mutex::new(Some(tx_from_others))),
+							args.dest.clone(),
+							true,
+						)),
+					)?;
+					slate = sender.send_tx(&slate)?;
 				}
 			}
 
-			api.verify_slate_messages(m, &slate).map_err(|e| {
-				error!("Error validating participant messages: {}", e);
-				e
-			})?;
-			slate = api.finalize_tx(m, &slate)?;
+			//for http and keybase, slate needs to be finalized and posted
+			//for mwcmqs, slate has already been finalized in the listener thread, here only needs to be posted.
+			//right now mwcmqs tx_proof is done in listener thread in finalizing step.
+			match args.method.as_str() {
+				"http" | "keybase" => {
+					api.tx_lock_outputs(m, &slate, Some(args.dest.clone()), 0)?; //this step needs to be done before finalizing the slate
+				}
+
+				_ => {}
+			}
+
+			match args.method.as_str() {
+				"mwcmqs" => {}
+
+				_ => {
+					api.verify_slate_messages(m, &slate).map_err(|e| {
+						error!("Error validating participant messages: {}", e);
+						e
+					})?;
+					slate = api.finalize_tx(m, &slate)?;
+				}
+			}
+
 			let result = api.post_tx(m, &slate.tx, args.fluff);
 			match result {
 				Ok(_) => {

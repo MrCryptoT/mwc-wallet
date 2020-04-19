@@ -202,16 +202,18 @@ impl SlateSender for MwcMqsChannel {
 			.into());
 		}
 
-		//expect to get the ok message
+		//expect to get slate back.
 		let rx_withlock = self.rx.lock();
 		if let Some(i) = &*rx_withlock {
 			let rx = &i;
-			let _ = rx.recv_timeout(Duration::from_secs(120)).map_err(|e| {
+			let slate_returned = rx.recv_timeout(Duration::from_secs(120)).map_err(|e| {
 				ErrorKind::MqsGenericError(format!(
 					"MQS unable to process slate {}, {}",
 					slate.id, e
 				))
 			})?;
+
+			return Ok(slate_returned);
 		} else {
 			return Err(ErrorKind::MqsGenericError(format!(
 				"MQS receive channel is broken, failed to process slate {}",
@@ -219,9 +221,5 @@ impl SlateSender for MwcMqsChannel {
 			))
 			.into());
 		}
-		return Err(Error::from(ErrorKind::MqsGenericError(format!(
-			"MQS send for slate {} failed",
-			slate.id
-		))));
 	}
 }

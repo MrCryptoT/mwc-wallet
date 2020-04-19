@@ -142,6 +142,7 @@ subcommands:
               - file
               - self
               - keybase
+              - mwcmqs
             default_value: http
             takes_value: true
         - dest:

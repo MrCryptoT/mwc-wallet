@@ -997,6 +997,7 @@ where
 			let a = arg_parse!(parse_send_args(&args));
 			command::send(
 				wallet,
+				&wallet_config,
 				km,
 				Some(tor_config),
 				a,

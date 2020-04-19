@@ -484,6 +484,9 @@ pub fn init_start_mwcmqs_listener<L, C, K>(
 	config: WalletConfig,
 	wallet: Arc<Mutex<Box<dyn WalletInst<'static, L, C, K>>>>,
 	keychain_mask: Arc<Mutex<Option<SecretKey>>>,
+	slate_send_channel: Option<Sender<Slate>>,
+	message_receive_channel: Option<Receiver<bool>>,
+	wait_for_thread: bool,
 ) -> Result<(MWCMQPublisher, MWCMQSubscriber), Error>
 where
 	L: WalletLCProvider<'static, C, K> + 'static,
@@ -499,9 +502,9 @@ where
 	start_mwcmqs_listener(
 		wallet.clone(),
 		config.max_auto_accept_invoice,
-		None,
-		None,
-		true,
+		slate_send_channel,
+		message_receive_channel,
+		wait_for_thread,
 		keychain_mask,
 	)
 	.map_err(|e| ErrorKind::GenericError(format!("cannot start mqs listener, {}", e)).into())
