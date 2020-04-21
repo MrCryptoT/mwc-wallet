@@ -16,7 +16,8 @@
 use std::fs::File;
 use std::io::{Read, Write};
 
-use crate::libwallet::{Error, ErrorKind, Slate, SlateVersion, VersionedSlate};
+use crate::error::{Error, ErrorKind};
+use crate::libwallet::{Slate, SlateVersion, VersionedSlate};
 use crate::{SlateGetter, SlatePutter};
 use std::path::PathBuf;
 
@@ -25,7 +26,10 @@ pub struct PathToSlate(pub PathBuf);
 
 impl SlatePutter for PathToSlate {
 	fn put_tx(&self, slate: &Slate) -> Result<(), Error> {
-		let mut pub_tx = File::create(&self.0)?;
+		let file_name = self.0.to_str().unwrap_or("INVALID PATH");
+		let mut pub_tx = File::create(&self.0).map_err(|e| {
+			ErrorKind::IO(format!("Unable to create proof file {}, {}", file_name, e))
+		})?;
 		let out_slate = {
 			if slate.payment_proof.is_some() || slate.ttl_cutoff_height.is_some() {
 				warn!("Transaction contains features that require mwc-wallet 3.0.0 or later");
@@ -38,21 +42,51 @@ impl SlatePutter for PathToSlate {
 				VersionedSlate::into_version(s, SlateVersion::V2)
 			}
 		};
-		pub_tx.write_all(
-			serde_json::to_string(&out_slate)
-				.map_err(|e| ErrorKind::SlateSer(format!("Failed convert Slate to Json, {}", e)))?
-				.as_bytes(),
-		)?;
-		pub_tx.sync_all()?;
+		pub_tx
+			.write_all(
+				serde_json::to_string(&out_slate)
+					.map_err(|e| {
+						ErrorKind::GenericError(format!("Failed convert Slate to Json, {}", e))
+					})?
+					.as_bytes(),
+			)
+			.map_err(|e| {
+				ErrorKind::IO(format!(
+					"Unable to store data at proof file {}, {}",
+					file_name, e
+				))
+			})?;
+
+		pub_tx.sync_all().map_err(|e| {
+			ErrorKind::IO(format!(
+				"Unable to store data at proof file {}, {}",
+				file_name, e
+			))
+		})?;
+
 		Ok(())
 	}
 }
 
 impl SlateGetter for PathToSlate {
 	fn get_tx(&self) -> Result<Slate, Error> {
-		let mut pub_tx_f = File::open(&self.0)?;
+		let file_name = self.0.to_str().unwrap_or("INVALID PATH");
+		let mut pub_tx_f = File::open(&self.0).map_err(|e| {
+			ErrorKind::IO(format!("Unable to open proof file {}, {}", file_name, e))
+		})?;
 		let mut content = String::new();
-		pub_tx_f.read_to_string(&mut content)?;
-		Ok(Slate::deserialize_upgrade(&content)?)
+		pub_tx_f.read_to_string(&mut content).map_err(|e| {
+			ErrorKind::IO(format!(
+				"Unable to read data from file {}, {}",
+				file_name, e
+			))
+		})?;
+
+		Ok(Slate::deserialize_upgrade(&content).map_err(|e| {
+			ErrorKind::IO(format!(
+				"Unable to build slate from json, file {}, {}",
+				file_name, e
+			))
+		})?)
 	}
 }

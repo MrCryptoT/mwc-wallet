@@ -18,7 +18,7 @@
 use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 
-use crate::error::{Error,ErrorKind};
+use crate::error::{Error, ErrorKind};
 use crate::grin_core::consensus::reward;
 use crate::grin_core::core::{Output, TxKernel};
 use crate::grin_core::global;
@@ -97,16 +97,22 @@ where
 		if out.status == OutputStatus::Unconfirmed
 			&& !tx_log_is_active
 				.get(&out.tx_log_entry.clone().unwrap_or(std::u32::MAX))
-				.unwrap_or(&true) {
+				.unwrap_or(&true)
+		{
 			continue;
 		}
 
 		let commit = match out.commit.clone() {
-			Some(c) => pedersen::Commitment::from_vec(util::from_hex(&c).map_err(|e| ErrorKind::GenericError(format!("Unable to parse HEX commit {}, {}", c,e)))?),
-			None => keychain  // TODO: proper support for different switch commitment schemes
+			Some(c) => pedersen::Commitment::from_vec(util::from_hex(&c).map_err(|e| {
+				ErrorKind::GenericError(format!("Unable to parse HEX commit {}, {}", c, e))
+			})?),
+			None => keychain // TODO: proper support for different switch commitment schemes
 				.commit(out.value, &out.key_id, &SwitchCommitmentType::Regular)?,
 		};
-		res.push( OutputCommitMapping { output: out, commit } );
+		res.push(OutputCommitMapping {
+			output: out,
+			commit,
+		});
 	}
 
 	if pagination_len.is_some() || pagination_start.is_some() {

@@ -93,10 +93,7 @@ impl Connect for Socksv5Connector {
 type HandshakeFutureConnected<T> = Box<dyn Future<Item = (T, Connected), Error = Error> + Send>;
 type HandshakeFuture<T> = Box<dyn Future<Item = T, Error = Error> + Send>;
 
-fn auth_negotiation(
-	socket: TcpStream,
-	creds: (Vec<u8>, Vec<u8>),
-) -> HandshakeFuture<TcpStream> {
+fn auth_negotiation(socket: TcpStream, creds: (Vec<u8>, Vec<u8>)) -> HandshakeFuture<TcpStream> {
 	let (username, password) = creds;
 	let mut creds_msg: Vec<u8> = Vec::with_capacity(username.len() + password.len() + 3);
 	creds_msg.push(1);
@@ -207,7 +204,15 @@ fn read_response(socket: TcpStream, response: [u8; 3]) -> HandshakeFuture<TcpStr
 				Err(Error::new(ErrorKind::Other, "address kind not supported")).into_future(),
 			)
 		}
-		_ => return Box::new(Err(Error::new(ErrorKind::Other, format!("unknown handshake error {}", response[1]))).into_future()),
+		_ => {
+			return Box::new(
+				Err(Error::new(
+					ErrorKind::Other,
+					format!("unknown handshake error {}", response[1]),
+				))
+				.into_future(),
+			)
+		}
 	};
 
 	if response[2] != 0 {

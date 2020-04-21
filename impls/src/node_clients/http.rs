@@ -193,10 +193,17 @@ impl NodeClient for HTTPNodeClient {
 			.ok_or(libwallet::ErrorKind::ClientCallback(
 				"Unable to get version".into(),
 			))?;
-		let version = Version::parse(&version.node_version)
-			.map_err(|e| libwallet::ErrorKind::ClientCallback(format!("Unable to parse version {}, {}", version.node_version, e)))?;
+		let version = Version::parse(&version.node_version).map_err(|e| {
+			libwallet::ErrorKind::ClientCallback(format!(
+				"Unable to parse version {}, {}",
+				version.node_version, e
+			))
+		})?;
 		if version <= Version::new(2, 0, 0) {
-			return Err(libwallet::ErrorKind::ClientCallback("Kernel lookup not supported by node, please upgrade it".into()).into());
+			return Err(libwallet::ErrorKind::ClientCallback(
+				"Kernel lookup not supported by node, please upgrade it".into(),
+			)
+			.into());
 		}
 
 		let mut query = String::new();
@@ -222,7 +229,9 @@ impl NodeClient for HTTPNodeClient {
 		let client = Client::new();
 		let res: Option<LocatedTxKernel> = client
 			.get(url.as_str(), self.node_api_secret())
-			.map_err(|e| libwallet::ErrorKind::ClientCallback(format!("Kernel lookup {}, error {}", url, e)))?;
+			.map_err(|e| {
+				libwallet::ErrorKind::ClientCallback(format!("Kernel lookup {}, error {}", url, e))
+			})?;
 
 		Ok(res.map(|k| (k.tx_kernel, k.height, k.mmr_index)))
 	}
@@ -339,7 +348,10 @@ impl NodeClient for HTTPNodeClient {
 			}
 			Err(e) => {
 				// if we got anything other than 200 back from server, bye
-				error!("get_outputs_by_pmmr_index: error contacting {}. Error: {}", url, e);
+				error!(
+					"get_outputs_by_pmmr_index: error contacting {}. Error: {}",
+					url, e
+				);
 				let report = format!("outputs by pmmr index: {}, {}", url, e);
 				Err(libwallet::ErrorKind::ClientCallback(report))?
 			}
@@ -383,7 +395,10 @@ impl NodeClient for HTTPNodeClient {
 		threads_number: usize,
 		include_proof: bool,
 	) -> Result<Vec<api::BlockPrintable>, libwallet::Error> {
-		debug!("Requesting blocks from heights {}-{}", start_height, end_height);
+		debug!(
+			"Requesting blocks from heights {}-{}",
+			start_height, end_height
+		);
 		assert!(threads_number>0 && threads_number<20, "Please use a sane positive number for the wallet that can be connected to the shareable node");
 		assert!(start_height <= end_height);
 
@@ -412,7 +427,10 @@ impl NodeClient for HTTPNodeClient {
 			match res {
 				Ok(blocks) => result_blocks.extend(blocks),
 				Err(e) => {
-					let report = format!("get_blocks_by_height: error contacting {}. Error: {}", addr, e);
+					let report = format!(
+						"get_blocks_by_height: error contacting {}. Error: {}",
+						addr, e
+					);
 					error!("{}", report);
 					return Err(libwallet::ErrorKind::ClientCallback(report).into());
 				}

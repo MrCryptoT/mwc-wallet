@@ -14,8 +14,9 @@
 
 /// HTTP Wallet 'plugin' implementation
 use crate::client_utils::{Client, ClientError};
+use crate::error::{Error, ErrorKind};
 use crate::libwallet::slate_versions::{SlateVersion, VersionedSlate};
-use crate::libwallet::{Error, ErrorKind, Slate};
+use crate::libwallet::Slate;
 use crate::SlateSender;
 use serde::Serialize;
 use serde_json::{json, Value};
@@ -38,10 +39,7 @@ pub struct HttpSlateSender {
 
 impl HttpSlateSender {
 	/// Create, return Err if scheme is not "http"
-	pub fn new(
-		base_url: &str,
-		apisecret: Option<String>,
-	) -> Result<HttpSlateSender, Error> {
+	pub fn new(base_url: &str, apisecret: Option<String>) -> Result<HttpSlateSender, Error> {
 		if !base_url.starts_with("http") && !base_url.starts_with("https") {
 			Err(ErrorKind::GenericError(format!("Invalid http url: {}", base_url)).into())
 		} else {
@@ -64,7 +62,9 @@ impl HttpSlateSender {
 	) -> Result<HttpSlateSender, Error> {
 		let mut ret = Self::new(base_url, apisecret)?;
 		ret.use_socks = true;
-		let addr = proxy_addr.parse().map_err(|e| ErrorKind::GenericError(format!("Anable to parse address {}, {}", proxy_addr,e)))?;
+		let addr = proxy_addr.parse().map_err(|e| {
+			ErrorKind::GenericError(format!("Anable to parse address {}, {}", proxy_addr, e))
+		})?;
 		ret.socks_proxy_addr = Some(SocketAddr::V4(addr));
 		ret.tor_config_dir = tor_config_dir.into();
 		Ok(ret)
@@ -93,8 +93,9 @@ impl HttpSlateSender {
 			ErrorKind::ClientCallback(report)
 		})?;
 
-		let res: Value = serde_json::from_str(&res_str)
-			.map_err(|e| ErrorKind::GenericError(format!("Unable to parse respond {}, {}", res_str,e)))?;
+		let res: Value = serde_json::from_str(&res_str).map_err(|e| {
+			ErrorKind::GenericError(format!("Unable to parse respond {}, {}", res_str, e))
+		})?;
 		trace!("Response: {}", res);
 		if res["error"] != json!(null) {
 			let report = format!(
@@ -108,11 +109,21 @@ impl HttpSlateSender {
 		let resp_value = res["result"]["Ok"].clone();
 		trace!("resp_value: {}", resp_value.clone());
 		let foreign_api_version: u16 =
-			serde_json::from_value(resp_value["foreign_api_version"].clone())
-				.map_err(|e| ErrorKind::GenericError(format!("Unable to read respond foreign_api_version value {}, {}", res_str,e)))?;
-		let supported_slate_versions: Vec<String> =
-			serde_json::from_value(resp_value["supported_slate_versions"].clone())
-				.map_err(|e| ErrorKind::GenericError(format!("Unable to read respond supported_slate_versions value {}, {}", res_str,e)))?;
+			serde_json::from_value(resp_value["foreign_api_version"].clone()).map_err(|e| {
+				ErrorKind::GenericError(format!(
+					"Unable to read respond foreign_api_version value {}, {}",
+					res_str, e
+				))
+			})?;
+		let supported_slate_versions: Vec<String> = serde_json::from_value(
+			resp_value["supported_slate_versions"].clone(),
+		)
+		.map_err(|e| {
+			ErrorKind::GenericError(format!(
+				"Unable to read respond supported_slate_versions value {}, {}",
+				res_str, e
+			))
+		})?;
 
 		// trivial tests for now, but will be expanded later
 		if foreign_api_version < 2 {
@@ -175,7 +186,12 @@ impl SlateSender for HttpSlateSender {
 			);
 			tor_config::output_tor_sender_config(
 				&tor_dir,
-				&self.socks_proxy_addr.ok_or( ErrorKind::GenericError("Not found socks_proxy_addr value".to_string()))?.to_string(),
+				&self
+					.socks_proxy_addr
+					.ok_or(ErrorKind::GenericError(
+						"Not found socks_proxy_addr value".to_string(),
+					))?
+					.to_string(),
 			)
 			.map_err(|e| ErrorKind::TorConfig(format!("Failed to config tor, {}", e).into()))?;
 			// Start TOR process
@@ -185,7 +201,11 @@ impl SlateSender for HttpSlateSender {
 				.timeout(20)
 				.completion_percent(100)
 				.launch()
-				.map_err(|e| ErrorKind::TorProcess(format!("Unable to start tor process {}, {:?}", tor_cmd, e).into()))?;
+				.map_err(|e| {
+					ErrorKind::TorProcess(
+						format!("Unable to start tor process {}, {:?}", tor_cmd, e).into(),
+					)
+				})?;
 		}
 
 		let slate_send = match self.check_other_version(&url_str)? {
@@ -224,8 +244,9 @@ impl SlateSender for HttpSlateSender {
 				ErrorKind::ClientCallback(report)
 			})?;
 
-		let res: Value = serde_json::from_str(&res_str)
-			.map_err(|e| ErrorKind::GenericError(format!("Unable to parse respond {}, {}", res_str,e)))?;
+		let res: Value = serde_json::from_str(&res_str).map_err(|e| {
+			ErrorKind::GenericError(format!("Unable to parse respond {}, {}", res_str, e))
+		})?;
 		trace!("Response: {}", res);
 		if res["error"] != json!(null) {
 			let report = format!(
@@ -238,11 +259,14 @@ impl SlateSender for HttpSlateSender {
 
 		let slate_value = res["result"]["Ok"].clone();
 		trace!("slate_value: {}", slate_value);
-		let slate = Slate::deserialize_upgrade(&serde_json::to_string(&slate_value)
-			.map_err(|e| ErrorKind::GenericError(format!("Unable to build slate form values, {}",e)))?)
-			.map_err(|e| ErrorKind::SlateDeser(format!("{}", e)))?;
+		let slate =
+			Slate::deserialize_upgrade(&serde_json::to_string(&slate_value).map_err(|e| {
+				ErrorKind::GenericError(format!("Unable to build slate from values, {}", e))
+			})?)
+			.map_err(|e| {
+				ErrorKind::GenericError(format!("Unable to build slate from json, {}", e))
+			})?;
 
 		Ok(slate)
 	}
 }
-

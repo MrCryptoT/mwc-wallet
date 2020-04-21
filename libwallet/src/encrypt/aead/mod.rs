@@ -248,6 +248,7 @@ const KEY_CTX_BUF_ELEMS: usize = (KEY_CTX_BUF_LEN + 7) / 8;
 const AES_MAX_ROUNDS: usize = 14;
 const AES_KEY_BUF_LEN: usize = (4 * 4 * (AES_MAX_ROUNDS + 1)) + 8;
 const GCM128_SERIALIZED_LEN: usize = 16 * 16;
+///
 pub const AES_KEY_CTX_BUF_LEN: usize = AES_KEY_BUF_LEN + GCM128_SERIALIZED_LEN;
 
 // Keep this in sync with `aead_aes_gcm_ctx` in e_aes.c.

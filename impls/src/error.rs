@@ -86,6 +86,38 @@ pub enum ErrorKind {
 	#[fail(display = "Address is not an Onion v3 Address: {}", _0)]
 	NotOnion(String),
 
+	/// API Error
+	#[fail(display = "Adapter Callback Error, {}", _0)]
+	ClientCallback(String),
+
+	/// Tor Configuration Error
+	#[fail(display = "Tor Config Error: {}", _0)]
+	TorConfig(String),
+
+	/// Tor Process error
+	#[fail(display = "Tor Process Error: {}", _0)]
+	TorProcess(String),
+
+	/// Error contacting wallet API
+	#[fail(display = "Wallet Communication Error: {}", _0)]
+	WalletComms(String),
+
+	/// Listener is closed issue
+	#[fail(display = "{} listener is closed! consider using `listen` first.", _0)]
+	ClosedListener(String),
+
+	/// MQS generic error
+	#[fail(display = "MQS error: {}", _0)]
+	MqsGenericError(String),
+
+	/// Keybase generic error
+	#[fail(display = "Keybase error: {}", _0)]
+	KeybaseGenericError(String),
+
+	/// Get MQS invalid response
+	#[fail(display = "{} Sender returned invalid response.", _0)]
+	MqsInvalidRespose(String),
+
 	/// Other
 	#[fail(display = "Generic error: {}", _0)]
 	GenericError(String),

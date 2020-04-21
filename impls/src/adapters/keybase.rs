@@ -16,9 +16,10 @@
 
 use crate::adapters::{SlateReceiver, SlateSender};
 use crate::config::WalletConfig;
+use crate::error::{Error, ErrorKind};
 use crate::keychain::ExtKeychain;
 use crate::libwallet::api_impl::foreign;
-use crate::libwallet::{Error, ErrorKind, Slate, WalletInst};
+use crate::libwallet::{Slate, WalletInst};
 use crate::util::ZeroingString;
 use crate::{DefaultLCProvider, DefaultWalletImpl, HTTPNodeClient};
 use serde::Serialize;
@@ -45,11 +46,17 @@ impl KeybaseChannel {
 	pub fn new(channel: String) -> Result<KeybaseChannel, Error> {
 		// Limit only one recipient
 		if channel.matches(",").count() > 0 {
-			return Err(ErrorKind::GenericError("Only one recipient is supported!".to_owned()).into());
+			return Err(
+				ErrorKind::GenericError("Only one recipient is supported!".to_owned()).into(),
+			);
 		}
 
 		if !keybase_installed() {
-			return Err(ErrorKind::GenericError("Keybase executable not found, make sure it is installed and in your PATH".to_owned()).into());
+			return Err(ErrorKind::GenericError(
+				"Keybase executable not found, make sure it is installed and in your PATH"
+					.to_owned(),
+			)
+			.into());
 		}
 
 		Ok(KeybaseChannel(channel))
@@ -115,7 +122,9 @@ fn whoami() -> Result<String, Error> {
 			Ok(s.to_string())
 		} else {
 			error!("keybase username query fail, {}", keybase_respond);
-			Err(ErrorKind::GenericError("keybase username query fail".to_owned()))?
+			Err(ErrorKind::GenericError(
+				"keybase username query fail".to_owned(),
+			))?
 		}
 	}
 }
@@ -304,13 +313,21 @@ impl SlateSender for KeybaseChannel {
 		// Send original slate to recipient with the SLATE_NEW topic
 		match send(&slate, &self.0, SLATE_NEW, TTL) {
 			true => (),
-			false => return Err(ErrorKind::ClientCallback("Failed to post transaction slate to keybase".to_owned()))?,
+			false => {
+				return Err(ErrorKind::ClientCallback(
+					"Failed to post transaction slate to keybase".to_owned(),
+				))?
+			}
 		}
 		info!("tx request has been sent to @{}, tx uuid: {}", &self.0, id);
 		// Wait for response from recipient with SLATE_SIGNED topic
 		match poll(TTL as u64, &self.0) {
 			Some(slate) => return Ok(slate),
-			None => return Err(ErrorKind::ClientCallback("Keybase failed to receive reply slate from recipient".to_owned()))?,
+			None => {
+				return Err(ErrorKind::ClientCallback(
+					"Keybase failed to receive reply slate from recipient".to_owned(),
+				))?
+			}
 		}
 	}
 }
@@ -324,7 +341,11 @@ impl KeybaseAllChannels {
 	/// Create a KeybaseAllChannels, return error if keybase executable is not present
 	pub fn new() -> Result<KeybaseAllChannels, Error> {
 		if !keybase_installed() {
-			Err(ErrorKind::GenericError("Keybase executable not found, make sure it is installed and in your PATH".to_owned()).into())
+			Err(ErrorKind::GenericError(
+				"Keybase executable not found, make sure it is installed and in your PATH"
+					.to_owned(),
+			)
+			.into())
 		} else {
 			Ok(KeybaseAllChannels { _priv: () })
 		}
@@ -343,8 +364,14 @@ impl SlateReceiver for KeybaseAllChannels {
 	) -> Result<(), Error> {
 		let node_client = HTTPNodeClient::new(&config.check_node_api_http_addr, node_api_secret);
 		let mut wallet = Box::new(
-			DefaultWalletImpl::<'static, HTTPNodeClient>::new(node_client.clone())
-				.map_err(|e| ErrorKind::GenericError(format!("Unable to create a listener's wallet instance, {}",e)))?,
+			DefaultWalletImpl::<'static, HTTPNodeClient>::new(node_client.clone()).map_err(
+				|e| {
+					ErrorKind::GenericError(format!(
+						"Unable to create a listener's wallet instance, {}",
+						e
+					))
+				},
+			)?,
 		)
 			as Box<
 				dyn WalletInst<
@@ -401,13 +428,16 @@ impl SlateReceiver for KeybaseAllChannels {
 							tx_uuid,
 						);
 						if let Err(e) = slate.verify_messages() {
-							error!("Error validating participant messages: {}", e);
-							return Err(e);
+							let err_msg = format!("Error validating participant messages: {}", e);
+							error!("{}", err_msg);
+							return Err(ErrorKind::KeybaseGenericError(err_msg).into());
 						}
 						let res = {
 							let r = foreign::receive_tx(
 								&mut **wallet_inst,
-								Some(mask.as_ref().ok_or(ErrorKind::GenericError("Expected mask is not generated".to_string()))?),
+								Some(mask.as_ref().ok_or(ErrorKind::GenericError(
+									"Expected mask is not generated".to_string(),
+								))?),
 								&slate,
 								Some(format!("keybase {}", channel)), // mwc-wallet doesn't support it yes, mwc713 does
 								None,
@@ -436,7 +466,10 @@ impl SlateReceiver for KeybaseAllChannels {
 							}
 
 							Err(e) => {
-								error!("Error on receiving tx via keybase: {}. Incoming tx failed",e);
+								error!(
+									"Error on receiving tx via keybase: {}. Incoming tx failed",
+									e
+								);
 							}
 						}
 					}

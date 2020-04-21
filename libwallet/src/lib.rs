@@ -48,8 +48,11 @@ extern crate grin_api;
 
 pub mod address;
 pub mod api_impl;
+/// Ring prev version internals that are needed for our internal encription functionality
+pub mod encrypt;
 mod error;
 pub mod internal;
+pub mod proof;
 mod slate;
 pub mod slate_versions;
 mod types;

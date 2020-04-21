@@ -1,4 +1,4 @@
-// Copyright 2019 The Grin Developers
+// Copyright 2020 The MWC Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,7 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Crate wrapping up the Grin binary and configuration file
+//! lower-level wallet functions which build upon core::libtx to perform wallet
+//! operations
 
 #![deny(non_upper_case_globals)]
 #![deny(non_camel_case_types)]
@@ -20,33 +21,13 @@
 #![deny(unused_mut)]
 #![warn(missing_docs)]
 
-#[macro_use]
-extern crate serde_derive;
-extern crate serde_json;
-
-#[allow(missing_docs)]
-pub mod backend;
-mod base58;
-#[allow(missing_docs)]
+/// Some crypto releted utils.
 pub mod crypto;
-mod encrypt;
-#[allow(missing_docs)]
-mod error_kind;
-#[allow(missing_docs)]
-pub mod hasher;
-#[allow(missing_docs)]
+/// Proff messages
 pub mod message;
-#[allow(missing_docs)]
-pub mod mwcmq;
-#[allow(missing_docs)]
+/// Addresses
+pub mod proofaddress;
+/// Proofs that come froom mwc713. Expected that they will be used for all transports
 pub mod tx_proof;
-#[allow(missing_docs)]
-pub mod types;
 
-///
-pub const COLORED_PROMPT: &'static str = "\x1b[36mmwc-wallet>\x1b[0m ";
-
-pub use self::error_kind::ErrorKind;
-pub use failure::Error;
-pub use parking_lot::{Mutex, MutexGuard};
-pub use std::sync::Arc;
+mod base58;

@@ -22,8 +22,8 @@ use rand::{thread_rng, Rng};
 use serde_json;
 use util::ZeroingString;
 
-use crate::encrypt;
 use crate::keychain::{mnemonic, Keychain};
+use crate::libwallet::encrypt;
 use crate::util;
 use crate::{Error, ErrorKind};
 use std::num::NonZeroU32;
@@ -50,7 +50,11 @@ impl WalletSeed {
 		let res = mnemonic::to_entropy(&word_list);
 		match res {
 			Ok(s) => Ok(WalletSeed::from_bytes(&s)),
-			Err(e) => Err(ErrorKind::Mnemonic(format!("Unable to convert mnemonic passphrase into seed, {}", e)).into()),
+			Err(e) => Err(ErrorKind::Mnemonic(format!(
+				"Unable to convert mnemonic passphrase into seed, {}",
+				e
+			))
+			.into()),
 		}
 	}
 
@@ -68,7 +72,9 @@ impl WalletSeed {
 		let result = mnemonic::from_entropy(&self.0);
 		match result {
 			Ok(r) => Ok(r),
-			Err(e) => Err(ErrorKind::Mnemonic(format!("Unable convert seed to menmonic, {}", e)).into()),
+			Err(e) => {
+				Err(ErrorKind::Mnemonic(format!("Unable convert seed to menmonic, {}", e)).into())
+			}
 		}
 	}
 
@@ -115,8 +121,9 @@ impl WalletSeed {
 			i += 1;
 		}
 		path.push(backup_seed_file_name.clone());
-		fs::rename(seed_file_name, backup_seed_file_name.as_str())
-			.map_err(|e| ErrorKind::GenericError(format!("Unable rename wallet seed file, {}", e)))?;
+		fs::rename(seed_file_name, backup_seed_file_name.as_str()).map_err(|e| {
+			ErrorKind::GenericError(format!("Unable rename wallet seed file, {}", e))
+		})?;
 
 		warn!("{} backed up as {}", seed_file_name, backup_seed_file_name);
 		Ok(backup_seed_file_name)
@@ -134,14 +141,26 @@ impl WalletSeed {
 			WalletSeed::backup_seed(data_file_dir)?;
 		}
 		if !Path::new(&data_file_dir).exists() {
-			return Err(ErrorKind::WalletDoesntExist(data_file_dir.to_owned(),"To create a new wallet from a recovery phrase, use 'mwc-wallet init -r'".to_owned()))?;
+			return Err(ErrorKind::WalletDoesntExist(
+				data_file_dir.to_owned(),
+				"To create a new wallet from a recovery phrase, use 'mwc-wallet init -r'"
+					.to_owned(),
+			))?;
 		}
 		let seed = WalletSeed::from_mnemonic(word_list)?;
 		let enc_seed = EncryptedWalletSeed::from_seed(&seed, password)?;
-		let enc_seed_json = serde_json::to_string_pretty(&enc_seed).map_err(|e| ErrorKind::Format(format!("EncryptedWalletSeed to json convert error, {}", e)))?;
-		let mut file = File::create(seed_file_path).map_err(|e| ErrorKind::IO(format!("Unable to crate file {}, {}", seed_file_path, e)) )?;
-		file.write_all(&enc_seed_json.as_bytes())
-			.map_err(|e| ErrorKind::IO(format!("Unable to store data to file {}, {}", seed_file_path,e)))?;
+		let enc_seed_json = serde_json::to_string_pretty(&enc_seed).map_err(|e| {
+			ErrorKind::Format(format!("EncryptedWalletSeed to json convert error, {}", e))
+		})?;
+		let mut file = File::create(seed_file_path).map_err(|e| {
+			ErrorKind::IO(format!("Unable to crate file {}, {}", seed_file_path, e))
+		})?;
+		file.write_all(&enc_seed_json.as_bytes()).map_err(|e| {
+			ErrorKind::IO(format!(
+				"Unable to store data to file {}, {}",
+				seed_file_path, e
+			))
+		})?;
 		warn!("Seed created from word list");
 		Ok(())
 	}
@@ -176,14 +195,18 @@ impl WalletSeed {
 		passed_seed: Option<WalletSeed>,
 	) -> Result<WalletSeed, Error> {
 		// create directory if it doesn't exist
-		fs::create_dir_all(data_file_dir).map_err(|e| ErrorKind::IO(format!("Unable create dir {}, {}", data_file_dir, e)))?;
+		fs::create_dir_all(data_file_dir)
+			.map_err(|e| ErrorKind::IO(format!("Unable create dir {}, {}", data_file_dir, e)))?;
 
 		let seed_file_path = &format!("{}{}{}", data_file_dir, MAIN_SEPARATOR, SEED_FILE,);
 
 		warn!("Generating wallet seed file at: {}", seed_file_path);
 		let exists = WalletSeed::seed_file_exists(data_file_dir)?;
 		if exists {
-			return Err(ErrorKind::WalletSeedExists(format!("Wallet seed already exists at: {}", data_file_dir)))?;
+			return Err(ErrorKind::WalletSeedExists(format!(
+				"Wallet seed already exists at: {}",
+				data_file_dir
+			)))?;
 		}
 
 		let mut seed = match recovery_phrase {
@@ -197,11 +220,18 @@ impl WalletSeed {
 
 		if write_seed {
 			let enc_seed = EncryptedWalletSeed::from_seed(&seed, password)?;
-			let enc_seed_json =
-				serde_json::to_string_pretty(&enc_seed).map_err(|e| ErrorKind::Format(format!("EncryptedWalletSeed to json conversion error, {}", e)))?;
-			let mut file = File::create(seed_file_path).map_err(|e| ErrorKind::IO(format!("Unable to create file {}, {}", seed_file_path, e)))?;
-			file.write_all(&enc_seed_json.as_bytes())
-				.map_err(|e| ErrorKind::IO(format!("Unable to save data to {}, {}", seed_file_path,e)))?;
+			let enc_seed_json = serde_json::to_string_pretty(&enc_seed).map_err(|e| {
+				ErrorKind::Format(format!(
+					"EncryptedWalletSeed to json conversion error, {}",
+					e
+				))
+			})?;
+			let mut file = File::create(seed_file_path).map_err(|e| {
+				ErrorKind::IO(format!("Unable to create file {}, {}", seed_file_path, e))
+			})?;
+			file.write_all(&enc_seed_json.as_bytes()).map_err(|e| {
+				ErrorKind::IO(format!("Unable to save data to {}, {}", seed_file_path, e))
+			})?;
 		}
 
 		if show_seed {
@@ -216,18 +246,30 @@ impl WalletSeed {
 		password: util::ZeroingString,
 	) -> Result<WalletSeed, Error> {
 		// create directory if it doesn't exist
-		fs::create_dir_all(data_file_dir).map_err(|e| ErrorKind::IO(format!("Unable to create dir {}, {}", data_file_dir, e)))?;
+		fs::create_dir_all(data_file_dir)
+			.map_err(|e| ErrorKind::IO(format!("Unable to create dir {}, {}", data_file_dir, e)))?;
 
 		let seed_file_path = &format!("{}{}{}", data_file_dir, MAIN_SEPARATOR, SEED_FILE,);
 
 		debug!("Using wallet seed file at: {}", seed_file_path);
 
 		if Path::new(seed_file_path).exists() {
-			let mut file = File::open(seed_file_path).map_err(|e| ErrorKind::IO(format!("Unable to open file {}, {}", seed_file_path, e)))?;
+			let mut file = File::open(seed_file_path).map_err(|e| {
+				ErrorKind::IO(format!("Unable to open file {}, {}", seed_file_path, e))
+			})?;
 			let mut buffer = String::new();
-			file.read_to_string(&mut buffer).map_err(|e| ErrorKind::IO(format!("Unable to read from file {}, {}", seed_file_path, e)))?;
-			let enc_seed: EncryptedWalletSeed =
-				serde_json::from_str(&buffer).map_err(|e| ErrorKind::Format(format!("Json to EncryptedWalletSeed conversion error, {}", e)))?;
+			file.read_to_string(&mut buffer).map_err(|e| {
+				ErrorKind::IO(format!(
+					"Unable to read from file {}, {}",
+					seed_file_path, e
+				))
+			})?;
+			let enc_seed: EncryptedWalletSeed = serde_json::from_str(&buffer).map_err(|e| {
+				ErrorKind::Format(format!(
+					"Json to EncryptedWalletSeed conversion error, {}",
+					e
+				))
+			})?;
 			let wallet_seed = enc_seed.decrypt(&password)?;
 			Ok(wallet_seed)
 		} else {
@@ -244,7 +286,9 @@ impl WalletSeed {
 		let seed_file_path = &format!("{}{}{}", data_file_dir, MAIN_SEPARATOR, SEED_FILE,);
 		if Path::new(seed_file_path).exists() {
 			debug!("Deleting wallet seed file at: {}", seed_file_path);
-			fs::remove_file(seed_file_path).map_err(|e| ErrorKind::IO(format!("Unable to remove file {}, {}", seed_file_path, e)))?;
+			fs::remove_file(seed_file_path).map_err(|e| {
+				ErrorKind::IO(format!("Unable to remove file {}, {}", seed_file_path, e))
+			})?;
 		}
 		Ok(())
 	}

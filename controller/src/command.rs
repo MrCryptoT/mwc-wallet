@@ -27,7 +27,6 @@ use crate::libwallet::{
 use crate::util::secp::key::SecretKey;
 use crate::util::{to_hex, Mutex, ZeroingString};
 use crate::{controller, display};
-use grin_wallet_libwallet::ErrorKind as LibWalletErrorKind;
 use grin_wallet_libwallet::TxLogEntry;
 use serde_json as json;
 use std::fs::File;
@@ -133,23 +132,34 @@ where
 	C: NodeClient + 'static,
 	K: keychain::Keychain + 'static,
 {
-	let res = match args.method.as_str() {
+	match args.method.as_str() {
 		"http" => controller::foreign_listener(
 			wallet.clone(),
 			keychain_mask,
 			&config.api_listen_addr(),
 			g_args.tls_conf.clone(),
 			tor_config.use_tor_listener,
-		),
-		"keybase" => KeybaseAllChannels::new()?.listen(
-			config.clone(),
-			g_args.password.clone().unwrap_or(ZeroingString::from("")),
-			&g_args.account,
-			g_args.node_api_secret.clone(),
-		),
+		)
+		.map_err(|e| ErrorKind::ListenerError(format!("Unable to start http listener, {}", e)))?,
+		"keybase" => KeybaseAllChannels::new()?
+			.listen(
+				config.clone(),
+				g_args.password.clone().unwrap_or(ZeroingString::from("")),
+				&g_args.account,
+				g_args.node_api_secret.clone(),
+			)
+			.map_err(|e| {
+				ErrorKind::ListenerError(format!("Unable to start keybase listener, {}", e))
+			})?,
 		"mwcmqs" => {
-			controller::init_start_mwcmqs_listener(config.clone(), wallet.clone(), keychain_mask)
-				.map(|_o| ())
+			let _ = controller::init_start_mwcmqs_listener(
+				config.clone(),
+				wallet.clone(),
+				keychain_mask,
+			)
+			.map_err(|e| {
+				ErrorKind::ListenerError(format!("Unable to start mwcmqs listener, {}", e))
+			})?;
 		}
 		method => {
 			return Err(
@@ -157,10 +167,6 @@ where
 			);
 		}
 	};
-
-	if let Err(e) = res {
-		return Err(ErrorKind::LibWallet(e.kind(), "Unable to start listener".to_string()).into());
-	}
 	Ok(())
 }
 
@@ -179,7 +185,7 @@ where
 	// keychain mask needs to be a sinlge instance, in case the foreign API is
 	// also being run at the same time
 	let km = Arc::new(Mutex::new(keychain_mask));
-	let res = controller::owner_listener(
+	controller::owner_listener(
 		wallet,
 		km,
 		config.owner_api_listen_addr().as_str(),
@@ -189,10 +195,8 @@ where
 		config.owner_api_include_mqs_listener.clone(),
 		config.clone(),
 		Some(tor_config.clone()),
-	);
-	if let Err(e) = res {
-		return Err(ErrorKind::LibWallet(e.kind(), "Unable to start Listener".to_string()).into());
-	}
+	)
+	.map_err(|e| ErrorKind::LibWallet(format!("Unable to start Listener, {}", e)))?;
 	Ok(())
 }
 
@@ -222,7 +226,7 @@ where
 		if let Err(e) = res {
 			let err_str = format!("Error listing accounts: {}", e);
 			error!("{}", err_str);
-			return Err(ErrorKind::LibWallet(e.kind(), err_str).into());
+			return Err(ErrorKind::LibWallet(err_str).into());
 		}
 	} else {
 		let label = args.create.unwrap();
@@ -236,7 +240,7 @@ where
 			thread::sleep(Duration::from_millis(200));
 			let err_str = format!("Error creating account '{}': {}", label, e);
 			error!("{}", err_str);
-			return Err(ErrorKind::LibWallet(e.kind(), err_str).into());
+			return Err(ErrorKind::LibWallet(err_str).into());
 		}
 	}
 	Ok(())
@@ -287,8 +291,7 @@ where
 					selection_strategy_is_use_all: strategy == "all",
 					estimate_only: Some(true),
 					exclude_change_outputs: Some(args.exclude_change_outputs),
-					minimum_confirmations_change_outputs: args
-						.minimum_confirmations_change_outputs,
+					minimum_confirmations_change_outputs: args.minimum_confirmations_change_outputs,
 					..Default::default()
 				};
 				let slate = api.init_send_tx(m, init_args, None, 1)?;
@@ -329,13 +332,24 @@ where
 				}
 				Err(e) => {
 					info!("Tx not created: {}", e);
-					return Err(e);
+					return Err(ErrorKind::LibWallet(format!(
+						"Unable to create send slate , {}",
+						e
+					))
+					.into());
 				}
 			};
 
 			match args.method.as_str() {
 				"file" => {
-					PathToSlate((&args.dest).into()).put_tx(&slate)?;
+					PathToSlate((&args.dest).into())
+						.put_tx(&slate)
+						.map_err(|e| {
+							ErrorKind::IO(format!(
+								"Unable to store the file at {}, {}",
+								args.dest, e
+							))
+						})?;
 					api.tx_lock_outputs(m, &slate, Some(String::from("file")), 0)?;
 					return Ok(());
 				}
@@ -366,8 +380,20 @@ where
 				}
 				method => {
 					let sender =
-						create_sender(method, &args.dest, &args.apisecret, tor_config, None)?;
-					slate = sender.send_tx(&slate)?;
+						create_sender(method, &args.dest, &args.apisecret, tor_config, None)
+							.map_err(|e| {
+								ErrorKind::GenericError(format!(
+									"Unable create sender {}, {}",
+									method, e
+								))
+							})?;
+					slate = sender.send_tx(&slate).map_err(|e| {
+						ErrorKind::GenericError(format!(
+							"Unable send slate with method {}, {}",
+							method, e
+						))
+					})?;
+
 					api.tx_lock_outputs(m, &slate, Some(args.dest.clone()), 0)?;
 				}
 			}
@@ -385,7 +411,7 @@ where
 				}
 				Err(e) => {
 					error!("Tx sent fail: {}", e);
-					return Err(e);
+					return Err(ErrorKind::LibWallet(format!("Unable to post slate, {}", e)).into());
 				}
 			}
 		}
@@ -419,7 +445,9 @@ where
 	controller::foreign_single_use(wallet, km, |api| {
 		if let Err(e) = api.verify_slate_messages(&slate) {
 			error!("Error validating participant messages: {}", e);
-			return Err(e);
+			return Err(
+				ErrorKind::LibWallet(format!("Unable to validate slate messages, {}", e)).into(),
+			);
 		}
 		slate = api.receive_tx(
 			&slate,
@@ -470,7 +498,11 @@ where
 		controller::foreign_single_use(wallet.clone(), km, |api| {
 			if let Err(e) = api.verify_slate_messages(&slate) {
 				error!("Error validating participant messages: {}", e);
-				return Err(e);
+				return Err(ErrorKind::LibWallet(format!(
+					"Unable to validate slate messages, {}",
+					e
+				))
+				.into());
 			}
 			slate = api.finalize_invoice_tx(&mut slate)?;
 			Ok(())
@@ -479,7 +511,11 @@ where
 		controller::owner_single_use(wallet.clone(), keychain_mask, |api, m| {
 			if let Err(e) = api.verify_slate_messages(m, &slate) {
 				error!("Error validating participant messages: {}", e);
-				return Err(e);
+				return Err(ErrorKind::LibWallet(format!(
+					"Unable to validate slate messages, {}",
+					e
+				))
+				.into());
 			}
 			slate = api.finalize_tx(m, &mut slate)?;
 			Ok(())
@@ -498,7 +534,7 @@ where
 				}
 				Err(e) => {
 					error!("Tx not sent: {}", e);
-					Err(e)
+					return Err(ErrorKind::LibWallet(format!("Unable to post slate, {}", e)).into());
 				}
 			}
 		})?;
@@ -597,7 +633,11 @@ where
 			};
 			if let Err(e) = api.verify_slate_messages(m, &slate) {
 				error!("Error validating participant messages: {}", e);
-				return Err(e);
+				return Err(ErrorKind::LibWallet(format!(
+					"Unable to validate slate messages, {}",
+					e
+				))
+				.into());
 			}
 			let result = api.process_invoice_tx(m, &slate, init_args);
 			let mut slate = match result {
@@ -612,7 +652,9 @@ where
 				}
 				Err(e) => {
 					info!("Tx not created: {}", e);
-					return Err(e);
+					return Err(
+						ErrorKind::LibWallet(format!("Unable to process invoice, {}", e)).into(),
+					);
 				}
 			};
 
@@ -845,12 +887,18 @@ where
 				return Ok(());
 			}
 			Some(f) => {
-				let mut tx_file = File::create(f.clone())?;
-				let tx_as_str = json::to_string(&stored_tx).map_err(|e| {
-					LibWalletErrorKind::GenericError(format!("Unable convert Tx to Json, {}", e))
+				let mut tx_file = File::create(f.clone()).map_err(|e| {
+					ErrorKind::IO(format!("Unable to create tx dump file {}, {}", f, e))
 				})?;
-				tx_file.write_all(tx_as_str.as_bytes())?;
-				tx_file.sync_all()?;
+				let tx_as_str = json::to_string(&stored_tx).map_err(|e| {
+					ErrorKind::GenericError(format!("Unable convert Tx to Json, {}", e))
+				})?;
+				tx_file.write_all(tx_as_str.as_bytes()).map_err(|e| {
+					ErrorKind::IO(format!("Unable to save tx to the file {}, {}", f, e))
+				})?;
+				tx_file.sync_all().map_err(|e| {
+					ErrorKind::IO(format!("Unable to save tx to the file {}, {}", f, e))
+				})?;
 				info!("Dumped transaction data for tx {} to {}", args.id, f);
 				return Ok(());
 			}
@@ -885,7 +933,11 @@ where
 			}
 			Err(e) => {
 				error!("TX Cancellation failed: {}", e);
-				Err(e)
+				Err(ErrorKind::LibWallet(format!(
+					"Unable to cancel Transaction {}, {}",
+					args.tx_id_string, e
+				))
+				.into())
 			}
 		}
 	})?;
@@ -919,7 +971,7 @@ where
 			Err(e) => {
 				error!("Wallet check failed: {}", e);
 				error!("Backtrace: {}", e.backtrace().unwrap());
-				Err(e)
+				Err(ErrorKind::LibWallet(format!("Wallet check failed, {}", e)).into())
 			}
 		}
 	})?;
@@ -957,7 +1009,10 @@ where
 			Err(e) => {
 				error!("Addres retrieval failed: {}", e);
 				error!("Backtrace: {}", e.backtrace().unwrap());
-				Err(e)
+				Err(
+					ErrorKind::LibWallet(format!("Addres pruuf address retrieval failed, {}", e))
+						.into(),
+				)
 			}
 		}
 	})?;
@@ -984,8 +1039,7 @@ where
 			}
 			Err(e) => {
 				error!("Wallet Data dump failed: {}", e);
-				error!("Backtrace: {}", e.backtrace().unwrap());
-				Err(e)
+				Err(ErrorKind::LibWallet(format!("Wallet Data dump failed, {}", e)).into())
 			}
 		}
 	})?;

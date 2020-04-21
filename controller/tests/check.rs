@@ -47,7 +47,7 @@ macro_rules! wallet_info {
 }
 
 /// Various tests on checking functionality
-fn scan_impl(test_dir: &'static str) -> Result<(), libwallet::Error> {
+fn scan_impl(test_dir: &'static str) -> Result<(), wallet::Error> {
 	// Create a new proxy to simulate server and wallet responses
 	let mut wallet_proxy = create_wallet_proxy(test_dir);
 	let chain = wallet_proxy.chain.clone();
@@ -221,7 +221,7 @@ fn scan_impl(test_dir: &'static str) -> Result<(), libwallet::Error> {
 	Ok(())
 }
 
-fn two_wallets_one_seed_impl(test_dir: &'static str) -> Result<(), libwallet::Error> {
+fn two_wallets_one_seed_impl(test_dir: &'static str) -> Result<(), wallet::Error> {
 	setup(test_dir);
 	let seed_phrase = "affair pistol cancel crush garment candy ancient flag work \
 	                   market crush dry stand focus mutual weapon offer ceiling rival turn team spring \
@@ -760,7 +760,7 @@ fn two_wallets_one_seed_impl(test_dir: &'static str) -> Result<(), libwallet::Er
 
 // Testing output scanning functionality, easier here as the testing framework
 // is all here
-fn output_scanning_impl(test_dir: &'static str) -> Result<(), libwallet::Error> {
+fn output_scanning_impl(test_dir: &'static str) -> Result<(), wallet::Error> {
 	let mut wallet_proxy = create_wallet_proxy(test_dir);
 	let chain = wallet_proxy.chain.clone();
 	// Create a new wallet test client, and set its queues to communicate with the

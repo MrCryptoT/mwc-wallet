@@ -35,7 +35,6 @@ use grin_wallet_config as config;
 mod adapters;
 mod backends;
 mod client_utils;
-pub mod encrypt;
 mod error;
 pub mod lifecycle;
 pub mod node_clients;
@@ -43,8 +42,9 @@ pub mod test_framework;
 pub mod tor;
 
 pub use crate::adapters::{
-	create_sender, HttpSlateSender, KeybaseAllChannels, KeybaseChannel, MwcMqsChannel, PathToSlate,
-	SlateGetter, SlatePutter, SlateReceiver, SlateSender,
+	create_sender, CloseReason, HttpSlateSender, KeybaseAllChannels, KeybaseChannel,
+	MWCMQPublisher, MWCMQSAddress, MWCMQSubscriber, MwcMqsChannel, PathToSlate, SlateGetter,
+	SlatePutter, SlateReceiver, SlateSender, SubscriptionHandler,
 };
 pub use crate::backends::{wallet_db_exists, LMDBBackend};
 pub use crate::error::{Error, ErrorKind};

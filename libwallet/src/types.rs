@@ -474,9 +474,14 @@ pub struct OutputData {
 
 impl ser::Writeable for OutputData {
 	fn write<W: ser::Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		let output_vct = serde_json::to_vec(self).map_err(|e| ser::Error::CorruptedData(format!("OutputData to json conversion failed, {}",e)))?;
-		if output_vct.len()>ser::READ_CHUNK_LIMIT {
-			return Err(ser::Error::TooLargeWriteErr(format!("Output data length is {}",output_vct.len())));
+		let output_vct = serde_json::to_vec(self).map_err(|e| {
+			ser::Error::CorruptedData(format!("OutputData to json conversion failed, {}", e))
+		})?;
+		if output_vct.len() > ser::READ_CHUNK_LIMIT {
+			return Err(ser::Error::TooLargeWriteErr(format!(
+				"Output data length is {}",
+				output_vct.len()
+			)));
 		}
 		writer.write_bytes(&output_vct)
 	}
@@ -485,7 +490,8 @@ impl ser::Writeable for OutputData {
 impl ser::Readable for OutputData {
 	fn read(reader: &mut dyn ser::Reader) -> Result<OutputData, ser::Error> {
 		let data = reader.read_bytes_len_prefix()?;
-		serde_json::from_slice(&data[..]).map_err(|e| ser::Error::CorruptedData(format!("json to OutputData failed, {}",e)))
+		serde_json::from_slice(&data[..])
+			.map_err(|e| ser::Error::CorruptedData(format!("json to OutputData failed, {}", e)))
 	}
 }
 
@@ -689,9 +695,14 @@ impl Context {
 
 impl ser::Writeable for Context {
 	fn write<W: ser::Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		let data = serde_json::to_vec(self).map_err(|e| ser::Error::CorruptedData(format!("Context to json conversion failed, {}", e)))?;
-		if data.len()>ser::READ_CHUNK_LIMIT {
-			return Err(ser::Error::TooLargeWriteErr(format!("Context data length is {}",data.len())));
+		let data = serde_json::to_vec(self).map_err(|e| {
+			ser::Error::CorruptedData(format!("Context to json conversion failed, {}", e))
+		})?;
+		if data.len() > ser::READ_CHUNK_LIMIT {
+			return Err(ser::Error::TooLargeWriteErr(format!(
+				"Context data length is {}",
+				data.len()
+			)));
 		}
 
 		writer.write_bytes(&data)
@@ -701,7 +712,9 @@ impl ser::Writeable for Context {
 impl ser::Readable for Context {
 	fn read(reader: &mut dyn ser::Reader) -> Result<Context, ser::Error> {
 		let data = reader.read_bytes_len_prefix()?;
-		serde_json::from_slice(&data[..]).map_err(|e| ser::Error::CorruptedData(format!("json to Context conversion failed, {}", e)))
+		serde_json::from_slice(&data[..]).map_err(|e| {
+			ser::Error::CorruptedData(format!("json to Context conversion failed, {}", e))
+		})
 	}
 }
 
@@ -717,8 +730,9 @@ impl BlockIdentifier {
 
 	/// convert to hex string
 	pub fn from_hex(hex: &str) -> Result<BlockIdentifier, Error> {
-		let hash =
-			Hash::from_hex(hex).map_err( |e| ErrorKind::GenericError(format!("BlockIdentifier Invalid hex {}, {}", hex, e)))?;
+		let hash = Hash::from_hex(hex).map_err(|e| {
+			ErrorKind::GenericError(format!("BlockIdentifier Invalid hex {}, {}", hex, e))
+		})?;
 		Ok(BlockIdentifier(hash))
 	}
 }
@@ -889,9 +903,14 @@ pub struct TxLogEntry {
 
 impl ser::Writeable for TxLogEntry {
 	fn write<W: ser::Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		let data  = serde_json::to_vec(self).map_err(|e| ser::Error::CorruptedData(format!("TxLogEntry to json conversion failed, {}",e)))?;
-		if data.len()>ser::READ_CHUNK_LIMIT {
-			return Err(ser::Error::TooLargeWriteErr(format!("TxLogEntry data length is {}",data.len())));
+		let data = serde_json::to_vec(self).map_err(|e| {
+			ser::Error::CorruptedData(format!("TxLogEntry to json conversion failed, {}", e))
+		})?;
+		if data.len() > ser::READ_CHUNK_LIMIT {
+			return Err(ser::Error::TooLargeWriteErr(format!(
+				"TxLogEntry data length is {}",
+				data.len()
+			)));
 		}
 		writer.write_bytes(&data)
 	}
@@ -900,7 +919,9 @@ impl ser::Writeable for TxLogEntry {
 impl ser::Readable for TxLogEntry {
 	fn read(reader: &mut dyn ser::Reader) -> Result<TxLogEntry, ser::Error> {
 		let data = reader.read_bytes_len_prefix()?;
-		serde_json::from_slice(&data[..]).map_err(|e| ser::Error::CorruptedData(format!("json to TxLogEntry conversion failed, {}", e)))
+		serde_json::from_slice(&data[..]).map_err(|e| {
+			ser::Error::CorruptedData(format!("json to TxLogEntry conversion failed, {}", e))
+		})
 	}
 }
 
@@ -1055,9 +1076,14 @@ pub struct StoredProofInfo {
 
 impl ser::Writeable for StoredProofInfo {
 	fn write<W: ser::Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		let data = serde_json::to_vec(self).map_err(|e| ser::Error::CorruptedData(format!("StoredProofInfo to json conversion failed, {}", e)))?;
-		if data.len()>ser::READ_CHUNK_LIMIT {
-			return Err(ser::Error::TooLargeWriteErr(format!("StoredProofInfo data length is {}",data.len())));
+		let data = serde_json::to_vec(self).map_err(|e| {
+			ser::Error::CorruptedData(format!("StoredProofInfo to json conversion failed, {}", e))
+		})?;
+		if data.len() > ser::READ_CHUNK_LIMIT {
+			return Err(ser::Error::TooLargeWriteErr(format!(
+				"StoredProofInfo data length is {}",
+				data.len()
+			)));
 		}
 		writer.write_bytes(&data)
 	}
@@ -1066,7 +1092,9 @@ impl ser::Writeable for StoredProofInfo {
 impl ser::Readable for StoredProofInfo {
 	fn read(reader: &mut dyn ser::Reader) -> Result<StoredProofInfo, ser::Error> {
 		let data = reader.read_bytes_len_prefix()?;
-		serde_json::from_slice(&data[..]).map_err(|e| ser::Error::CorruptedData(format!("json to StoredProofInfo conversion failed, {}", e)))
+		serde_json::from_slice(&data[..]).map_err(|e| {
+			ser::Error::CorruptedData(format!("json to StoredProofInfo conversion failed, {}", e))
+		})
 	}
 }
 
@@ -1081,9 +1109,14 @@ pub struct AcctPathMapping {
 
 impl ser::Writeable for AcctPathMapping {
 	fn write<W: ser::Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		let data = serde_json::to_vec(self).map_err(|e| ser::Error::CorruptedData(format!("AcctPathMapping to json conversion failed, {}", e)))?;
-		if data.len()>ser::READ_CHUNK_LIMIT {
-			return Err(ser::Error::TooLargeWriteErr(format!("AcctPathMapping data length is {}",data.len())));
+		let data = serde_json::to_vec(self).map_err(|e| {
+			ser::Error::CorruptedData(format!("AcctPathMapping to json conversion failed, {}", e))
+		})?;
+		if data.len() > ser::READ_CHUNK_LIMIT {
+			return Err(ser::Error::TooLargeWriteErr(format!(
+				"AcctPathMapping data length is {}",
+				data.len()
+			)));
 		}
 		writer.write_bytes(&data)
 	}
@@ -1092,7 +1125,9 @@ impl ser::Writeable for AcctPathMapping {
 impl ser::Readable for AcctPathMapping {
 	fn read(reader: &mut dyn ser::Reader) -> Result<AcctPathMapping, ser::Error> {
 		let data = reader.read_bytes_len_prefix()?;
-		serde_json::from_slice(&data[..]).map_err(|e| ser::Error::CorruptedData(format!("json to AcctPathMapping conversion failed, {}",e)))
+		serde_json::from_slice(&data[..]).map_err(|e| {
+			ser::Error::CorruptedData(format!("json to AcctPathMapping conversion failed, {}", e))
+		})
 	}
 }
 
@@ -1125,9 +1160,17 @@ impl ScannedBlockInfo {
 
 impl ser::Writeable for ScannedBlockInfo {
 	fn write<W: ser::Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		let data = serde_json::to_vec(self).map_err(|e| ser::Error::CorruptedData(format!("ScannedBlockInfo for json conversion failed, {}", e)))?;
-		if data.len()>ser::READ_CHUNK_LIMIT {
-			return Err(ser::Error::TooLargeWriteErr(format!("ScannedBlockInfo data length is {}",data.len())));
+		let data = serde_json::to_vec(self).map_err(|e| {
+			ser::Error::CorruptedData(format!(
+				"ScannedBlockInfo for json conversion failed, {}",
+				e
+			))
+		})?;
+		if data.len() > ser::READ_CHUNK_LIMIT {
+			return Err(ser::Error::TooLargeWriteErr(format!(
+				"ScannedBlockInfo data length is {}",
+				data.len()
+			)));
 		}
 		writer.write_bytes(&data)
 	}
@@ -1136,7 +1179,9 @@ impl ser::Writeable for ScannedBlockInfo {
 impl ser::Readable for ScannedBlockInfo {
 	fn read(reader: &mut dyn ser::Reader) -> Result<ScannedBlockInfo, ser::Error> {
 		let data = reader.read_bytes_len_prefix()?;
-		serde_json::from_slice(&data[..]).map_err(|e| ser::Error::CorruptedData(format!("json to ScannedBlockInfo conversion failed, {}", e)))
+		serde_json::from_slice(&data[..]).map_err(|e| {
+			ser::Error::CorruptedData(format!("json to ScannedBlockInfo conversion failed, {}", e))
+		})
 	}
 }
 

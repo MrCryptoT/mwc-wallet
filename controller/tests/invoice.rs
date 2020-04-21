@@ -30,7 +30,7 @@ mod common;
 use common::{clean_output_dir, create_wallet_proxy, setup};
 
 /// self send impl
-fn invoice_tx_impl(test_dir: &'static str) -> Result<(), libwallet::Error> {
+fn invoice_tx_impl(test_dir: &'static str) -> Result<(), wallet::Error> {
 	// Create a new proxy to simulate server and wallet responses
 	let mut wallet_proxy = create_wallet_proxy(test_dir);
 	let chain = wallet_proxy.chain.clone();
@@ -207,7 +207,7 @@ fn invoice_tx_impl(test_dir: &'static str) -> Result<(), libwallet::Error> {
 }
 
 #[test]
-fn wallet_invoice_tx() -> Result<(), libwallet::Error> {
+fn wallet_invoice_tx() -> Result<(), wallet::Error> {
 	let test_dir = "test_output/invoice_tx";
 	setup(test_dir);
 	invoice_tx_impl(test_dir)?;

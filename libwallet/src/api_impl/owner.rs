@@ -590,10 +590,7 @@ where
 }
 
 /// Loads a stored transaction from a file
-pub fn load_stored_tx<'a, T: ?Sized, C, K>(
-	w: &T,
-	file: &String,
-) -> Result<Transaction, Error>
+pub fn load_stored_tx<'a, T: ?Sized, C, K>(w: &T, file: &String) -> Result<Transaction, Error>
 where
 	T: WalletBackend<'a, C, K>,
 	C: NodeClient + 'a,

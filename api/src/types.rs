@@ -20,10 +20,10 @@ use crate::util::secp::key::{PublicKey, SecretKey};
 use crate::util::secp::pedersen;
 use crate::util::{from_hex, to_hex};
 
+use crate::libwallet::encrypt;
 use base64;
 use chrono::{DateTime, Utc};
 use ed25519_dalek::PublicKey as DalekPublicKey;
-use grin_wallet_impls::encrypt;
 use rand::{thread_rng, Rng};
 use ring::aead;
 use serde_json::{self, Value};

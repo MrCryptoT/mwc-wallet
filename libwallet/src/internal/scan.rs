@@ -262,7 +262,7 @@ where
 					);
 					ts.log_id
 				}
-				None => 0
+				None => 0,
 			}
 		} else {
 			0
@@ -683,12 +683,16 @@ where
 		}
 		if block_heights[0] != start_height || block_heights[block_heights.len() - 1] != end_height
 		{
-			return Err(ErrorKind::Node("Get not expected blocks from the node".to_string()))?;
+			return Err(ErrorKind::Node(
+				"Get not expected blocks from the node".to_string(),
+			))?;
 		}
 		if block_heights.len() > 1 {
 			for i in 1..block_heights.len() {
 				if block_heights[i - 1] != block_heights[i] - 1 {
-					return Err(ErrorKind::Node("Get duplicated blocks from the node".to_string()))?;
+					return Err(ErrorKind::Node(
+						"Get duplicated blocks from the node".to_string(),
+					))?;
 				}
 			}
 		}
@@ -848,10 +852,10 @@ where
 		let wallet_outputs_to_check: Vec<pedersen::Commitment> = outputs
 			.values()
 			.filter(|out| out.output.is_spendable() && !out.commit.is_empty())
-            // Parsing Commtment string into the binary, how API needed
-			.map( |out| util::from_hex(&out.output.commit.as_ref().unwrap()))
-			.filter(|out| out.is_ok() )
-			.map(|out|pedersen::Commitment::from_vec(out.unwrap()) )
+			// Parsing Commtment string into the binary, how API needed
+			.map(|out| util::from_hex(&out.output.commit.as_ref().unwrap()))
+			.filter(|out| out.is_ok())
+			.map(|out| pedersen::Commitment::from_vec(out.unwrap()))
 			.collect();
 
 		// get_outputs_from_nodefor large number will take a time. Chunk size is 200 ids.
@@ -955,7 +959,11 @@ where
 			client.get_outputs_from_node(wallet_outputs_to_check)?;
 
 		for (active_commit, _, _) in active_commits.values() {
-			let output = outputs.get_mut(active_commit).ok_or(ErrorKind::GenericError("Node return unknown commit value".to_string()))?;
+			let output = outputs
+				.get_mut(active_commit)
+				.ok_or(ErrorKind::GenericError(
+					"Node return unknown commit value".to_string(),
+				))?;
 			if output.output.status != OutputStatus::Locked {
 				output.output.status = OutputStatus::Locked;
 				output.updated = true;
@@ -1356,7 +1364,12 @@ fn validate_outputs_ownership(
 		let in_cancelled_uuid: HashSet<String> = w_out
 			.tx_input_uuid
 			.iter()
-			.filter(|tx_uuid| transactions.get(*tx_uuid).map( |tx| tx.tx_log.is_cancelled()).unwrap_or(false))
+			.filter(|tx_uuid| {
+				transactions
+					.get(*tx_uuid)
+					.map(|tx| tx.tx_log.is_cancelled())
+					.unwrap_or(false)
+			})
 			.map(|tx_uuid| format!("{}", tx_uuid.split('/').next().unwrap_or("????")))
 			.collect();
 
@@ -1371,7 +1384,12 @@ fn validate_outputs_ownership(
 		let out_cancelled_uuid: HashSet<String> = w_out
 			.tx_output_uuid
 			.iter()
-			.filter(|tx_uuid| transactions.get(*tx_uuid).map( |tx| tx.tx_log.is_cancelled()).unwrap_or(false))
+			.filter(|tx_uuid| {
+				transactions
+					.get(*tx_uuid)
+					.map(|tx| tx.tx_log.is_cancelled())
+					.unwrap_or(false)
+			})
 			.map(|tx_uuid| format!("{}", tx_uuid.split('/').next().unwrap_or("????")))
 			.collect();
 
@@ -1660,7 +1678,11 @@ where
 			if let Some(ref s) = status_send_channel {
 				let _ = s.send(StatusMessage::Warning(format!(
 					"Deleting unconfirmed Output without any transaction. Commit: {}",
-					output.output.commit.clone().unwrap_or("UNKNOWN_COMMIT".to_string())
+					output
+						.output
+						.commit
+						.clone()
+						.unwrap_or("UNKNOWN_COMMIT".to_string())
 				)));
 			}
 			batch.delete(&output.output.key_id, &output.output.mmr_index)?;
@@ -1696,7 +1718,9 @@ where
 				let secp = secp.lock();
 				let over_commit = secp.commit_value(w_out.output.value)?;
 				let commit = pedersen::Commitment::from_vec(
-					util::from_hex(w_out.output.commit.as_ref().unwrap()).map_err(|e| ErrorKind::GenericError(format!("Output commit parse error, {}",e)))?,
+					util::from_hex(w_out.output.commit.as_ref().unwrap()).map_err(|e| {
+						ErrorKind::GenericError(format!("Output commit parse error, {}", e))
+					})?,
 				);
 				t.output_commits = vec![commit.clone()];
 				let excess = secp.commit_sum(vec![commit], vec![over_commit])?;
@@ -1809,13 +1833,16 @@ fn report_transaction_collision(
 		tx_uuid
 			.iter()
 			.map(|tx_uuid| transactions.get(tx_uuid))
-			.filter(|wtx| wtx.map(|tx| !tx.tx_log.is_cancelled()).unwrap_or(false) )
+			.filter(|wtx| wtx.map(|tx| !tx.tx_log.is_cancelled()).unwrap_or(false))
 			.for_each(|wtx| {
 				if cancelled_tx.len() > 0 {
 					cancelled_tx.push_str(", ");
 				}
 				let tx = wtx.unwrap();
-				cancelled_tx.push_str(&format!("{}", tx.tx_uuid.split('/').next().unwrap_or("????")));
+				cancelled_tx.push_str(&format!(
+					"{}",
+					tx.tx_uuid.split('/').next().unwrap_or("????")
+				));
 			});
 
 		let inputs = if inputs { "inputs" } else { "outputs" };

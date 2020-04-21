@@ -181,7 +181,11 @@ where
 		if let Some(ref p) = slate.payment_proof {
 			let sender_address_path = match context.payment_proof_derivation_index {
 				Some(p) => p,
-				None => return Err(ErrorKind::PaymentProof("Payment proof derivation index required".to_owned()))?,
+				None => {
+					return Err(ErrorKind::PaymentProof(
+						"Payment proof derivation index required".to_owned(),
+					))?
+				}
 			};
 			let sender_key = address::address_from_derivation_path(
 				&keychain,
@@ -258,10 +262,7 @@ where
 		let mut sum = 0;
 		for oaui in output_amounts_unwrapped {
 			sum = sum + oaui;
-			key_vec_amounts.push((
-				keys::next_available_key(wallet, keychain_mask)?,
-				oaui,
-			));
+			key_vec_amounts.push((keys::next_available_key(wallet, keychain_mask)?, oaui));
 			i = i + 1;
 		}
 		if sum != slate.amount {
@@ -320,8 +321,7 @@ where
 	// Add blinding sum to our context
 	let mut context = Context::new(
 		keychain.secp(),
-		blinding
-			.secret_key(wallet.keychain(keychain_mask)?.secp())?,
+		blinding.secret_key(wallet.keychain(keychain_mask)?.secp())?,
 		&parent_key_id,
 		use_test_rng,
 		participant_id,
@@ -338,7 +338,9 @@ where
 	for kva in &key_vec_amounts {
 		let commit = wallet.calc_commit_for_cache(keychain_mask, kva.1, &kva.0)?;
 		if let Some(cm) = commit.clone() {
-			commit_ped.push(Commitment::from_vec(util::from_hex(&cm).map_err(|e| ErrorKind::GenericError(format!("Output commit parse error, {}",e)))? ));
+			commit_ped.push(Commitment::from_vec(util::from_hex(&cm).map_err(|e| {
+				ErrorKind::GenericError(format!("Output commit parse error, {}", e))
+			})?));
 		}
 		commit_vec.push(commit);
 	}

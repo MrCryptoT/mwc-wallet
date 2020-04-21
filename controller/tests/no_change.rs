@@ -29,7 +29,7 @@ use std::time::Duration;
 mod common;
 use common::{clean_output_dir, create_wallet_proxy, setup};
 
-fn no_change_test_impl(test_dir: &'static str) -> Result<(), libwallet::Error> {
+fn no_change_test_impl(test_dir: &'static str) -> Result<(), wallet::Error> {
 	let mut wallet_proxy = create_wallet_proxy(test_dir);
 	let chain = wallet_proxy.chain.clone();
 

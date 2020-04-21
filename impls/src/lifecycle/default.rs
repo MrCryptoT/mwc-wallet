@@ -125,7 +125,11 @@ where
 		data_dir_name.push(wallet_data_dir.as_str());
 
 		if config_file_name.exists() && data_dir_name.exists() {
-			let msg = format!("{} already exists in the target directory ({}). Please remove it first",file_name,config_file_name.to_str().unwrap());
+			let msg = format!(
+				"{} already exists in the target directory ({}). Please remove it first",
+				file_name,
+				config_file_name.to_str().unwrap()
+			);
 			return Err(ErrorKind::Lifecycle(msg).into());
 		}
 
@@ -140,18 +144,29 @@ where
 		default_config.update_paths(&PathBuf::from(abs_path), Some(wallet_data_dir.as_str()));
 		let res = default_config.write_to_file(config_file_name.to_str().unwrap());
 		if let Err(e) = res {
-			let msg = format!("Error creating config file as ({}): {}",config_file_name.to_str().unwrap(),e);
+			let msg = format!(
+				"Error creating config file as ({}): {}",
+				config_file_name.to_str().unwrap(),
+				e
+			);
 			return Err(ErrorKind::Lifecycle(msg).into());
 		}
 
-		info!("File {} configured and created",config_file_name.to_str().unwrap());
+		info!(
+			"File {} configured and created",
+			config_file_name.to_str().unwrap()
+		);
 
 		let mut api_secret_path = PathBuf::from(self.data_dir.clone());
 		api_secret_path.push(PathBuf::from(config::API_SECRET_FILE_NAME));
 		if !api_secret_path.exists() {
-			config::init_api_secret(&api_secret_path).map_err(|e| ErrorKind::GenericError(format!("Unable to init api secret, {}", e)))?;
+			config::init_api_secret(&api_secret_path).map_err(|e| {
+				ErrorKind::GenericError(format!("Unable to init api secret, {}", e))
+			})?;
 		} else {
-			config::check_api_secret(&api_secret_path).map_err(|e| ErrorKind::GenericError(format!("Unable to read api secret, {}", e)))?;
+			config::check_api_secret(&api_secret_path).map_err(|e| {
+				ErrorKind::GenericError(format!("Unable to read api secret, {}", e))
+			})?;
 		}
 
 		Ok(())
@@ -213,11 +228,15 @@ where
 				}
 				Ok(d) => d,
 			};
-		let wallet_seed = WalletSeed::from_file(&data_dir_name, password)
-			.map_err(|e| ErrorKind::Lifecycle(format!("Error opening wallet (is password correct?), {}",e)))?;
+		let wallet_seed = WalletSeed::from_file(&data_dir_name, password).map_err(|e| {
+			ErrorKind::Lifecycle(format!(
+				"Error opening wallet (is password correct?), {}",
+				e
+			))
+		})?;
 		let keychain = wallet_seed
 			.derive_keychain(global::is_floonet())
-			.map_err(|e| ErrorKind::Lifecycle(format!("Error deriving keychain, {}",e)))?;
+			.map_err(|e| ErrorKind::Lifecycle(format!("Error deriving keychain, {}", e)))?;
 
 		let mask = wallet.set_keychain(Box::new(keychain), create_mask, use_test_rng)?;
 		self.backend = Some(Box::new(wallet));
@@ -241,8 +260,9 @@ where
 		let mut data_dir_name = PathBuf::from(self.data_dir.clone());
 		data_dir_name.push(wallet_data_dir.unwrap_or(GRIN_WALLET_DIR));
 		let data_dir_name = data_dir_name.to_str().unwrap();
-		let res = WalletSeed::seed_file_exists(&data_dir_name)
-            .map_err(|e| ErrorKind::CallbackImpl(format!("Error checking for wallet existence, {}",e)))?;
+		let res = WalletSeed::seed_file_exists(&data_dir_name).map_err(|e| {
+			ErrorKind::CallbackImpl(format!("Error checking for wallet existence, {}", e))
+		})?;
 		Ok(res)
 	}
 
@@ -256,7 +276,7 @@ where
 		data_dir_name.push(wallet_data_dir.unwrap_or(GRIN_WALLET_DIR));
 		let data_dir_name = data_dir_name.to_str().unwrap();
 		let wallet_seed = WalletSeed::from_file(&data_dir_name, password)
-			.map_err(|e| ErrorKind::Lifecycle(format!("Error opening wallet seed file, {}",e)))?;
+			.map_err(|e| ErrorKind::Lifecycle(format!("Error opening wallet seed file, {}", e)))?;
 		let res = wallet_seed
 			.to_mnemonic()
 			.map_err(|e| ErrorKind::Lifecycle(format!("Error recovering wallet seed, {}", e)))?;
@@ -266,7 +286,10 @@ where
 	fn validate_mnemonic(&self, mnemonic: ZeroingString) -> Result<(), Error> {
 		match WalletSeed::from_mnemonic(mnemonic) {
 			Ok(_) => Ok(()),
-			Err(e) => Err(ErrorKind::GenericError(format!("Validating mnemonic, {}", e)))?,
+			Err(e) => Err(ErrorKind::GenericError(format!(
+				"Validating mnemonic, {}",
+				e
+			)))?,
 		}
 	}
 
@@ -296,21 +319,29 @@ where
 		let data_dir_name = data_dir_name.to_str().unwrap();
 		// get seed for later check
 
-		let orig_wallet_seed = WalletSeed::from_file(&data_dir_name, old)
-			.map_err(|e| ErrorKind::Lifecycle(format!("Error opening wallet seed file {}, {}", data_dir_name, e)),
-		)?;
+		let orig_wallet_seed = WalletSeed::from_file(&data_dir_name, old).map_err(|e| {
+			ErrorKind::Lifecycle(format!(
+				"Error opening wallet seed file {}, {}",
+				data_dir_name, e
+			))
+		})?;
 		let orig_mnemonic = orig_wallet_seed
 			.to_mnemonic()
 			.map_err(|e| ErrorKind::Lifecycle(format!("Error recovering mnemonic, {}", e)))?;
 
 		// Back up existing seed, and keep track of filename as we're deleting it
 		// once the password change is confirmed
-		let backup_name = WalletSeed::backup_seed(data_dir_name)
-			.map_err(|e| ErrorKind::Lifecycle(format!("Error temporarily backing up existing seed, {}", e)))?;
+		let backup_name = WalletSeed::backup_seed(data_dir_name).map_err(|e| {
+			ErrorKind::Lifecycle(format!("Error temporarily backing up existing seed, {}", e))
+		})?;
 
 		// Delete seed file
-		WalletSeed::delete_seed_file(data_dir_name)
-			.map_err(|e| ErrorKind::Lifecycle(format!("Unable to delete seed file {} for password change, {}",data_dir_name, e)))?;
+		WalletSeed::delete_seed_file(data_dir_name).map_err(|e| {
+			ErrorKind::Lifecycle(format!(
+				"Unable to delete seed file {} for password change, {}",
+				data_dir_name, e
+			))
+		})?;
 
 		// Init a new file
 		let _ = WalletSeed::init_file(
@@ -321,16 +352,23 @@ where
 		);
 		info!("Wallet seed file created");
 
-		let new_wallet_seed = WalletSeed::from_file(&data_dir_name, new)
-			.map_err(|e| ErrorKind::Lifecycle(format!("Error opening wallet seed file {}, {}", data_dir_name, e)))?;
+		let new_wallet_seed = WalletSeed::from_file(&data_dir_name, new).map_err(|e| {
+			ErrorKind::Lifecycle(format!(
+				"Error opening wallet seed file {}, {}",
+				data_dir_name, e
+			))
+		})?;
 
 		if orig_wallet_seed != new_wallet_seed {
-			let msg = format!("New and Old wallet seeds are not equal on password change, not removing backups.");
+			let msg = format!(
+				"New and Old wallet seeds are not equal on password change, not removing backups."
+			);
 			return Err(ErrorKind::Lifecycle(msg).into());
 		}
 		// Removing
 		info!("Password change confirmed, removing old seed file.");
-		fs::remove_file(backup_name).map_err(|e| ErrorKind::IO(format!("Failed to remove old seed file, {}", e)))?;
+		fs::remove_file(backup_name)
+			.map_err(|e| ErrorKind::IO(format!("Failed to remove old seed file, {}", e)))?;
 
 		Ok(())
 	}
@@ -338,8 +376,9 @@ where
 	fn delete_wallet(&self, _name: Option<&str>) -> Result<(), Error> {
 		let data_dir_name = PathBuf::from(self.data_dir.clone());
 		let data_dir_path = data_dir_name.to_str().unwrap();
-		warn!("Removing all wallet data from: {}",data_dir_path);
-		fs::remove_dir_all(data_dir_name).map_err(|e| ErrorKind::IO(format!("Failed to remove wallet data, {}", e)))?;
+		warn!("Removing all wallet data from: {}", data_dir_path);
+		fs::remove_dir_all(data_dir_name)
+			.map_err(|e| ErrorKind::IO(format!("Failed to remove wallet data, {}", e)))?;
 		Ok(())
 	}
 

@@ -58,7 +58,12 @@ where
 pub fn ed25519_keypair(sec_key: &SecretKey) -> Result<(DalekSecretKey, DalekPublicKey), Error> {
 	let d_skey = match DalekSecretKey::from_bytes(&sec_key.0) {
 		Ok(k) => k,
-		Err(e) => return Err(ErrorKind::ED25519Key(format!("Unable to build Dalek key, {}", e)))?,
+		Err(e) => {
+			return Err(ErrorKind::ED25519Key(format!(
+				"Unable to build Dalek key, {}",
+				e
+			)))?
+		}
 	};
 	let d_pub_key: DalekPublicKey = (&d_skey).into();
 	Ok((d_skey, d_pub_key))
@@ -66,11 +71,17 @@ pub fn ed25519_keypair(sec_key: &SecretKey) -> Result<(DalekSecretKey, DalekPubl
 
 /// Output ed25519 pubkey represented by string
 pub fn ed25519_parse_pubkey(pub_key: &str) -> Result<DalekPublicKey, Error> {
-	let bytes = from_hex(pub_key)
-		.map_err(|e| ErrorKind::AddressDecoding(format!("Can't parse pubkey {}, {}", pub_key,e)))?;
+	let bytes = from_hex(pub_key).map_err(|e| {
+		ErrorKind::AddressDecoding(format!("Can't parse pubkey {}, {}", pub_key, e))
+	})?;
 	match DalekPublicKey::from_bytes(&bytes) {
 		Ok(k) => Ok(k),
-		Err(e) => return Err(ErrorKind::AddressDecoding(format!("Not a valid public key {}, {}",pub_key, e)))?,
+		Err(e) => {
+			return Err(ErrorKind::AddressDecoding(format!(
+				"Not a valid public key {}, {}",
+				pub_key, e
+			)))?
+		}
 	}
 }
 
@@ -87,22 +98,37 @@ pub fn pubkey_from_onion_v3(onion_address: &str) -> Result<DalekPublicKey, Error
 	let orig_address_raw = input.clone();
 	// for now, just check input is the right length and try and decode from base32
 	if input.len() != 56 {
-		return Err(ErrorKind::AddressDecoding(format!("Input address {} is wrong length, expected 56 symbols", input)))?;
+		return Err(ErrorKind::AddressDecoding(format!(
+			"Input address {} is wrong length, expected 56 symbols",
+			input
+		)))?;
 	}
 	let mut address = BASE32
 		.decode(input.as_bytes())
-		.map_err(|e| ErrorKind::AddressDecoding(format!("Input address {} is not base 32, {}", input, e)))?
+		.map_err(|e| {
+			ErrorKind::AddressDecoding(format!("Input address {} is not base 32, {}", input, e))
+		})?
 		.to_vec();
 
 	address.split_off(32);
-	let key = DalekPublicKey::from_bytes(&address)
-		.map_err(|e| ErrorKind::AddressDecoding(format!("Provided onion V3 address is invalid (parsing dalek key), {}", e)))?;
+	let key = DalekPublicKey::from_bytes(&address).map_err(|e| {
+		ErrorKind::AddressDecoding(format!(
+			"Provided onion V3 address is invalid (parsing dalek key), {}",
+			e
+		))
+	})?;
 
-	let test_v3 = onion_v3_from_pubkey(&key)
-		.map_err(|e| ErrorKind::AddressDecoding(format!("Provided onion V3 address is invalid (converting from pubkey), {}", e)))?;
+	let test_v3 = onion_v3_from_pubkey(&key).map_err(|e| {
+		ErrorKind::AddressDecoding(format!(
+			"Provided onion V3 address is invalid (converting from pubkey), {}",
+			e
+		))
+	})?;
 
 	if test_v3.to_uppercase() != orig_address_raw.to_uppercase() {
-		return Err(ErrorKind::AddressDecoding("Provided onion V3 address is invalid (no match)".to_string()))?;
+		return Err(ErrorKind::AddressDecoding(
+			"Provided onion V3 address is invalid (no match)".to_string(),
+		))?;
 	}
 	Ok(key)
 }

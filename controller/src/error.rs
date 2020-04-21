@@ -33,56 +33,56 @@ pub struct Error {
 #[derive(Clone, Eq, PartialEq, Debug, Fail)]
 pub enum ErrorKind {
 	/// LibTX Error
-	#[fail(display = "LibTx Error")]
+	#[fail(display = "LibTx Error, {}", _0)]
 	LibTX(libtx::ErrorKind),
 
 	/// Impls error
-	#[fail(display = "Impls Error")]
+	#[fail(display = "Impls Error, {}", _0)]
 	Impls(impls::ErrorKind),
 
 	/// LibWallet Error
-	#[fail(display = "LibWallet Error: {}", _1)]
-	LibWallet(libwallet::ErrorKind, String),
+	#[fail(display = "LibWallet Error, {}", _0)]
+	LibWallet(String),
 
 	/// Keychain error
-	#[fail(display = "Keychain error")]
+	#[fail(display = "Keychain error, {}", _0)]
 	Keychain(keychain::Error),
 
 	/// Transaction Error
-	#[fail(display = "Transaction error")]
+	#[fail(display = "Transaction error, {}", _0)]
 	Transaction(transaction::Error),
 
 	/// Secp Error
-	#[fail(display = "Secp error")]
-	Secp,
+	#[fail(display = "Secp error, {}", _0)]
+	Secp(String),
 
 	/// Filewallet error
 	#[fail(display = "Wallet data error: {}", _0)]
 	FileWallet(&'static str),
 
 	/// Error when formatting json
-	#[fail(display = "IO error")]
-	IO,
+	#[fail(display = "Controller IO error, {}", _0)]
+	IO(String),
 
 	/// Error when formatting json
-	#[fail(display = "Serde JSON error")]
-	Format,
+	#[fail(display = "Serde JSON error, {}", _0)]
+	Format(String),
 
 	/// Error when contacting a node through its API
-	#[fail(display = "Node API error")]
+	#[fail(display = "Node API error, {}", _0)]
 	Node(api::ErrorKind),
 
 	/// Error originating from hyper.
-	#[fail(display = "Hyper error")]
-	Hyper,
+	#[fail(display = "Hyper error, {}", _0)]
+	Hyper(String),
 
 	/// Error originating from hyper uri parsing.
 	#[fail(display = "Uri parsing error")]
 	Uri,
 
 	/// Attempt to use duplicate transaction id in separate transactions
-	#[fail(display = "Duplicate transaction ID error")]
-	DuplicateTransactionId,
+	#[fail(display = "Duplicate transaction ID error, {}", _0)]
+	DuplicateTransactionId(String),
 
 	/// Wallet seed already exists
 	#[fail(display = "Wallet seed file exists: {}", _0)]
@@ -107,6 +107,30 @@ pub enum ErrorKind {
 	/// Other
 	#[fail(display = "Generic error: {}", _0)]
 	GenericError(String),
+
+	/// Listener error
+	#[fail(display = "Listener error: {}", _0)]
+	ListenerError(String),
+
+	/// Tor Configuration Error
+	#[fail(display = "Tor Config Error: {}", _0)]
+	TorConfig(String),
+
+	/// Tor Process error
+	#[fail(display = "Tor Process Error: {}", _0)]
+	TorProcess(String),
+
+	///rejecting invoice as auto invoice acceptance is turned off
+	#[fail(display = "rejecting invoice as auto invoice acceptance is turned off!")]
+	DoesNotAcceptInvoices,
+
+	///when invoice amount is too big(added with mqs feature)
+	#[fail(display = "error: rejecting invoice as amount '{}' is too big!", _0)]
+	InvoiceAmountTooBig(u64),
+
+	/// Verify slate messages call failure
+	#[fail(display = "failed verifying slate messages, {}", _0)]
+	VerifySlateMessagesError(String),
 }
 
 impl Fail for Error {
@@ -201,7 +225,7 @@ impl From<transaction::Error> for Error {
 impl From<libwallet::Error> for Error {
 	fn from(error: libwallet::Error) -> Error {
 		Error {
-			inner: Context::new(ErrorKind::LibWallet(error.kind(), format!("{}", error))),
+			inner: Context::new(ErrorKind::LibWallet(format!("{}", error))),
 		}
 	}
 }

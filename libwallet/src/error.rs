@@ -112,10 +112,6 @@ pub enum ErrorKind {
 	#[fail(display = "Node not ready or not available")]
 	NodeNotReady,
 
-	/// Error contacting wallet API
-	#[fail(display = "Wallet Communication Error: {}", _0)]
-	WalletComms(String),
-
 	/// Error originating from hyper.
 	#[fail(display = "Hyper error")]
 	Hyper,
@@ -232,14 +228,6 @@ pub enum ErrorKind {
 	#[fail(display = "Supplied Keychain Mask Token is incorrect")]
 	InvalidKeychainMask,
 
-	/// Tor Process error
-	#[fail(display = "Tor Process Error: {}", _0)]
-	TorProcess(String),
-
-	/// Tor Configuration Error
-	#[fail(display = "Tor Config Error: {}", _0)]
-	TorConfig(String),
-
 	/// Generating ED25519 Public Key
 	#[fail(display = "Error generating ed25519 secret key: {}", _0)]
 	ED25519Key(String),
@@ -276,39 +264,36 @@ pub enum ErrorKind {
 	#[fail(display = "Generic error, {}", _0)]
 	GenericError(String),
 
-	///when invoice amount is too big(added with mqs feature)
+	/// Fail to parse any type of proofable address
+	#[fail(display = "Unable to parse address {}", _0)]
+	ProofableAddressParsingError(String),
+
+	/// Tx Proof error
+	#[fail(display = "Tx Proof error, {}", _0)]
+	TxProofGenericError(String),
+
+	/// Unable to verify signature for the proof
+	#[fail(display = "Tx Proof unable to verify signature, {}", _0)]
+	TxProofVerifySignature(String),
+
+	/// Expected destinatin address doesn't match expected value
 	#[fail(
-		display = "\x1b[31;1merror:\x1b[0m rejecting invoice as amount '{}' is too big!",
-		0
+		display = "Tx Proof unable to verify destination address. Expected {}, found {}",
+		_0, _1
 	)]
-	InvoiceAmountTooBig(u64),
+	TxProofVerifyDestination(String, String),
 
-	///Receiving slate failed(added with mqs feature).
-	#[fail(display = "\x1b[31;1merror:\x1b[0m failed receiving slate!")]
-	GrinWalletReceiveError,
+	/// Not found Tx Proof file
+	#[fail(display = "transaction doesn't have a proof, file {} not found", _0)]
+	TransactionHasNoProof(String),
 
-	///Failed verifying slate message(added with mqs feature)
-	#[fail(display = "\x1b[31;1merror:\x1b[0m failed verifying slate messages!")]
-	GrinWalletVerifySlateMessagesError,
+	/// Base58 generic error
+	#[fail(display = "Base58 error, {}", _0)]
+	Base58Error(String),
 
-	///added with mqs feature
-	#[fail(display = "\x1b[31;1merror:\x1b[0m general error of mqs feature!")]
-	GrinWalletMwcMqsGeneralError,
-	///added with mqs feature
-	#[fail(display = "\x1b[31;1merror:\x1b[0m failed finalizing slate!")]
-	GrinWalletFinalizeError,
-
-	///added with mqs feature
-	#[fail(display = "\x1b[31;1merror:\x1b[0m failed creating proof file!")]
-	GrinWalletProofError,
-
-	///added with mqs feature
-	#[fail(display = "\x1b[31;1merror:\x1b[0m failed posting transaction!")]
-	GrinWalletPostError,
-
-	///rejecting invoice as auto invoice acceptance is turned off
-	#[fail(display = "rejecting invoice as auto invoice acceptance is turned off!")]
-	DoesNotAcceptInvoices,
+	/// Hex conversion error
+	#[fail(display = "Hex conversion error, {}", _0)]
+	HexError(String),
 }
 
 impl Display for Error {
@@ -342,13 +327,6 @@ impl Error {
 	pub fn kind(&self) -> ErrorKind {
 		self.inner.get_context().clone()
 	}
-	/// get cause string
-	pub fn cause_string(&self) -> String {
-		match self.cause() {
-			Some(k) => format!("{}", k),
-			None => format!("Unknown"),
-		}
-	}
 	/// get cause
 	pub fn cause(&self) -> Option<&dyn Fail> {
 		self.inner.cause()
@@ -376,7 +354,7 @@ impl From<Context<ErrorKind>> for Error {
 impl From<io::Error> for Error {
 	fn from(error: io::Error) -> Error {
 		Error {
-			inner: Context::new(ErrorKind::IO(format!("{}",error))),
+			inner: Context::new(ErrorKind::IO(format!("{}", error))),
 		}
 	}
 }

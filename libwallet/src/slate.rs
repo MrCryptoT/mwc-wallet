@@ -223,8 +223,12 @@ pub struct ParticipantMessages {
 impl Slate {
 	/// Attempt to find slate version
 	pub fn parse_slate_version(slate_json: &str) -> Result<u16, Error> {
-		let probe: SlateVersionProbe =
-			serde_json::from_str(slate_json).map_err(|e| ErrorKind::SlateVersionParse(format!("Unable to find slate version at {}, {}", slate_json, e)))?;
+		let probe: SlateVersionProbe = serde_json::from_str(slate_json).map_err(|e| {
+			ErrorKind::SlateVersionParse(format!(
+				"Unable to find slate version at {}, {}",
+				slate_json, e
+			))
+		})?;
 		Ok(probe.version())
 	}
 
@@ -232,10 +236,19 @@ impl Slate {
 	pub fn deserialize_upgrade(slate_json: &str) -> Result<Slate, Error> {
 		let version = Slate::parse_slate_version(slate_json)?;
 		let v3: SlateV3 = match version {
-			3 => serde_json::from_str(slate_json).map_err(|e| ErrorKind::SlateDeser(format!("Json to SlateV3 conversion failed for {}, {}",slate_json, e)))?,
+			3 => serde_json::from_str(slate_json).map_err(|e| {
+				ErrorKind::SlateDeser(format!(
+					"Json to SlateV3 conversion failed for {}, {}",
+					slate_json, e
+				))
+			})?,
 			2 => {
-				let v2: SlateV2 =
-					serde_json::from_str(slate_json).map_err(|e| ErrorKind::SlateDeser(format!("Json to SlateV2 conversion failed for {}, {}",slate_json, e)))?;
+				let v2: SlateV2 = serde_json::from_str(slate_json).map_err(|e| {
+					ErrorKind::SlateDeser(format!(
+						"Json to SlateV2 conversion failed for {}, {}",
+						slate_json, e
+					))
+				})?;
 				SlateV3::from(v2)
 			}
 			_ => return Err(ErrorKind::SlateVersion(version).into()),
@@ -432,7 +445,10 @@ impl Slate {
 	fn part_sigs(&self) -> Vec<&Signature> {
 		self.participant_data
 			.iter()
-			.filter(|p| {debug_assert!(p.part_sig.is_some()); p.part_sig.is_some()} )
+			.filter(|p| {
+				debug_assert!(p.part_sig.is_some());
+				p.part_sig.is_some()
+			})
 			.map(|p| p.part_sig.as_ref().unwrap())
 			.collect()
 	}
@@ -551,7 +567,11 @@ impl Slate {
 		);
 
 		if fee > self.tx.fee() {
-			return Err(ErrorKind::Fee(format!("Fee Dispute Error: {}, {}", self.tx.fee(), fee,)))?;
+			return Err(ErrorKind::Fee(format!(
+				"Fee Dispute Error: {}, {}",
+				self.tx.fee(),
+				fee,
+			)))?;
 		}
 
 		if fee > self.amount + self.fee {

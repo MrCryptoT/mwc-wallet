@@ -35,9 +35,8 @@ use crate::util::logger::LoggingConfig;
 use crate::util::secp::key::SecretKey;
 use crate::util::{from_hex, static_secp_instance, Mutex, ZeroingString};
 use colored::Colorize;
-use grin_wallet_mwcmqs::mwcmq::MWCMQPublisher;
-use grin_wallet_mwcmqs::mwcmq::MWCMQSubscriber;
-use grin_wallet_mwcmqs::tx_proof::TxProof;
+use grin_wallet_impls::{MWCMQPublisher, MWCMQSubscriber};
+use grin_wallet_libwallet::proof::tx_proof::TxProof;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::Arc;
@@ -89,8 +88,8 @@ where
 	// Atomic to stop the thread
 	updater_log_running_state: Arc<AtomicBool>,
 	mwcmqs_broker: Arc<Mutex<Option<(MWCMQPublisher, MWCMQSubscriber)>>>,
-	rx_withlock: Arc<Mutex<Option<Receiver<Box<Slate>>>>>,
-	tx_withlock: Arc<Mutex<Option<Sender<Box<bool>>>>>,
+	rx_withlock: Arc<Mutex<Option<Receiver<Slate>>>>,
+	tx_withlock: Arc<Mutex<Option<Sender<bool>>>>,
 }
 
 // Owner need to release the resources. We have a thread that is running in background
@@ -249,8 +248,8 @@ where
 	pub fn set_mqs_broker(
 		&mut self,
 		mwcmqs_broker: Arc<Mutex<Option<(MWCMQPublisher, MWCMQSubscriber)>>>,
-		rx_withlock: Arc<Mutex<Option<Receiver<Box<Slate>>>>>,
-		tx_withlock: Arc<Mutex<Option<Sender<Box<bool>>>>>,
+		rx_withlock: Arc<Mutex<Option<Receiver<Slate>>>>,
+		tx_withlock: Arc<Mutex<Option<Sender<bool>>>>,
 	) {
 		//		let mut lock = self.mwcmqs_broker.lock();
 		//		*lock = mwcmqs_broker;
@@ -763,8 +762,16 @@ where
 								sa.finalize.clone(),
 							)),
 						)
-                        .map_err(|e| ErrorKind::GenericError(format!("Unable to crete a sender, {}", e)))?;
-						slate = comm_adapter.send_tx(&slate)?;
+						.map_err(|e| {
+							ErrorKind::GenericError(format!("Unable to crete a sender, {}", e))
+						})?;
+
+						slate = comm_adapter.send_tx(&slate).map_err(|e| {
+							ErrorKind::ClientCallback(format!(
+								"Unable to send slate {} with {}, {}",
+								slate.id, sa.method, e
+							))
+						})?;
 					}
 					_ => {
 						error!("unsupported payment method: {}", sa.method);
@@ -1084,9 +1091,7 @@ where
 				proof.outputs.push(output.clone());
 			}
 
-			proof
-				.store_tx_proof(w.get_data_file_dir(), &slate_res.id.to_string())
-				.map_err(|_e| ErrorKind::GrinWalletProofError)?;
+			proof.store_tx_proof(w.get_data_file_dir(), &slate_res.id.to_string())?;
 		};
 
 		Ok(slate_res)

@@ -35,9 +35,18 @@ pub mod dalek_pubkey_serde {
 	{
 		use serde::de::Error;
 		String::deserialize(deserializer)
-			.and_then(|string| from_hex(&string).map_err(|err| Error::custom( format!("DalekPublicKey, Unable to parse HEX {}, {}", string, err))))
+			.and_then(|string| {
+				from_hex(&string).map_err(|err| {
+					Error::custom(format!(
+						"DalekPublicKey, Unable to parse HEX {}, {}",
+						string, err
+					))
+				})
+			})
 			.and_then(|bytes: Vec<u8>| {
-				DalekPublicKey::from_bytes(&bytes).map_err(|err| Error::custom( format!("Unable to build DalekPublicKey, {}", err) ))
+				DalekPublicKey::from_bytes(&bytes).map_err(|err| {
+					Error::custom(format!("Unable to build DalekPublicKey, {}", err))
+				})
 			})
 	}
 }
@@ -68,13 +77,20 @@ pub mod option_dalek_pubkey_serde {
 	{
 		Option::<String>::deserialize(deserializer).and_then(|res| match res {
 			Some(string) => from_hex(&string)
-				.map_err(|err| Error::custom(format!("DalekPublicKey, Unable to parse HEX {}, {}", string, err)))
+				.map_err(|err| {
+					Error::custom(format!(
+						"DalekPublicKey, Unable to parse HEX {}, {}",
+						string, err
+					))
+				})
 				.and_then(|bytes: Vec<u8>| {
 					let mut b = [0u8; 32];
 					b.copy_from_slice(&bytes[0..32]);
 					DalekPublicKey::from_bytes(&b)
 						.map(|val| Some(val))
-						.map_err(|err| Error::custom(format!("Unable to build DalekPublicKey, {}", err)))
+						.map_err(|err| {
+							Error::custom(format!("Unable to build DalekPublicKey, {}", err))
+						})
 				}),
 			None => Ok(None),
 		})
@@ -107,13 +123,20 @@ pub mod option_dalek_sig_serde {
 	{
 		Option::<String>::deserialize(deserializer).and_then(|res| match res {
 			Some(string) => from_hex(&string)
-				.map_err(|err| Error::custom(format!("DalekPublicKey, Unable to parse HEX {}, {}", string, err)))
+				.map_err(|err| {
+					Error::custom(format!(
+						"DalekPublicKey, Unable to parse HEX {}, {}",
+						string, err
+					))
+				})
 				.and_then(|bytes: Vec<u8>| {
 					let mut b = [0u8; 64];
 					b.copy_from_slice(&bytes[0..64]);
 					DalekSignature::from_bytes(&b)
 						.map(|val| Some(val))
-						.map_err(|err| Error::custom(format!("Unable to build DalekPublicKey, {}", err)))
+						.map_err(|err| {
+							Error::custom(format!("Unable to build DalekPublicKey, {}", err))
+						})
 				}),
 			None => Ok(None),
 		})

@@ -15,23 +15,21 @@
 mod file;
 pub mod http;
 mod keybase;
+mod mwcmq;
 
 pub use self::file::PathToSlate;
 pub use self::http::HttpSlateSender;
 pub use self::keybase::{KeybaseAllChannels, KeybaseChannel};
 
 use crate::config::{TorConfig, WalletConfig};
-use crate::libwallet::{Error, ErrorKind, Slate};
+use crate::error::{Error, ErrorKind};
+use crate::libwallet::Slate;
 use crate::tor::config::complete_tor_address;
 use crate::util::ZeroingString;
+pub use mwcmq::{CloseReason, MWCMQPublisher, MWCMQSAddress, MWCMQSubscriber, SubscriptionHandler};
 
 //todo Yang may need to move to other places.
 use crate::util::Mutex;
-use grin_wallet_mwcmqs::mwcmq::MWCMQPublisher;
-use grin_wallet_mwcmqs::mwcmq::MWCMQSubscriber;
-use grin_wallet_mwcmqs::mwcmq::Publisher;
-use grin_wallet_mwcmqs::types::Address;
-use grin_wallet_mwcmqs::types::MWCMQSAddress;
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::Arc;
 use std::time::Duration;
@@ -99,7 +97,9 @@ pub fn create_sender(
 		"http" => Box::new(HttpSlateSender::new(&dest, apisecret.clone()).map_err(|e| invalid(e))?),
 		"tor" => match tor_config {
 			None => {
-				return Err(ErrorKind::WalletComms("Tor Configuration required".to_string()).into());
+				return Err(
+					ErrorKind::WalletComms("Tor Configuration required".to_string()).into(),
+				);
 			}
 			Some(tc) => Box::new(
 				HttpSlateSender::with_socks_proxy(
@@ -112,15 +112,32 @@ pub fn create_sender(
 			),
 		},
 		"keybase" => Box::new(KeybaseChannel::new(dest.to_owned())?),
-		"mwcmqs" => Box::new(mqs_channel.unwrap()),
+		"mwcmqs" => {
+			if mqs_channel.is_none() {
+				return Err(
+					ErrorKind::WalletComms("No MQS channel found for mwcmqs".to_string()).into(),
+				);
+			}
+			Box::new(mqs_channel.unwrap())
+		}
 		"self" => {
-			return Err(ErrorKind::WalletComms("No sender implementation for \"self\".".to_string()).into());
+			return Err(ErrorKind::WalletComms(
+				"No sender implementation for \"self\".".to_string(),
+			)
+			.into());
 		}
 		"file" => {
-			return Err(ErrorKind::WalletComms("File based transactions must be performed asynchronously.".to_string()).into());
+			return Err(ErrorKind::WalletComms(
+				"File based transactions must be performed asynchronously.".to_string(),
+			)
+			.into());
 		}
 		_ => {
-			return Err(ErrorKind::WalletComms(format!("Wallet comm method \"{}\" does not exist.",method)).into());
+			return Err(ErrorKind::WalletComms(format!(
+				"Wallet comm method \"{}\" does not exist.",
+				method
+			))
+			.into());
 		}
 	})
 }
@@ -129,8 +146,8 @@ pub fn create_sender(
 //may need to move to other place later
 pub struct MwcMqsChannel {
 	mwcmqs_broker: Arc<Mutex<Option<(MWCMQPublisher, MWCMQSubscriber)>>>,
-	rx: Arc<Mutex<Option<Receiver<Box<Slate>>>>>,
-	tx: Arc<Mutex<Option<Sender<Box<bool>>>>>,
+	rx: Arc<Mutex<Option<Receiver<Slate>>>>,
+	tx: Arc<Mutex<Option<Sender<bool>>>>,
 	des_address: String,
 	finalize: bool,
 }
@@ -138,8 +155,8 @@ pub struct MwcMqsChannel {
 impl MwcMqsChannel {
 	pub fn new(
 		mwcmqs_broker: Arc<Mutex<Option<(MWCMQPublisher, MWCMQSubscriber)>>>,
-		rx_withlock: Arc<Mutex<Option<Receiver<Box<Slate>>>>>,
-		tx_withlock: Arc<Mutex<Option<Sender<Box<bool>>>>>,
+		rx_withlock: Arc<Mutex<Option<Receiver<Slate>>>>,
+		tx_withlock: Arc<Mutex<Option<Sender<bool>>>>,
 		des_address: String,
 		finalize: bool,
 	) -> Self {
@@ -159,20 +176,29 @@ impl SlateSender for MwcMqsChannel {
 		let tx_lock = self.tx.lock();
 		//notify the mqs thread to do finalizing and proof.
 		if let Some(i) = &*tx_lock {
-			i.send(Box::new(self.finalize));
+			i.send(self.finalize).map_err(|e| {
+				ErrorKind::MqsGenericError(format!("Unable to contact MQS worker, {}", e))
+			})?;
 		}
 
 		if let Some(i) = &*mwcmqs_broker_lock {
 			let mwcmqs_publisher = &i.0;
-			let des_address = MWCMQSAddress::from_str(self.des_address.as_ref());
-			if des_address.is_ok() {
-				let des_address = des_address.unwrap();
-				let _res = mwcmqs_publisher.post_slate(&slate, &des_address);
-			}
+			let des_address = MWCMQSAddress::from_str(self.des_address.as_ref()).map_err(|e| {
+				ErrorKind::MqsGenericError(format!("Invalid destination address, {}", e))
+			})?;
+			mwcmqs_publisher
+				.post_slate(&slate, &des_address)
+				.map_err(|e| {
+					ErrorKind::MqsGenericError(format!(
+						"MQS unable to transfer slate {} to the worker, {}",
+						slate.id, e
+					))
+				})?;
 		} else {
-			return Err(ErrorKind::ClientCallback(
-				"mqs is not started, not able to send the request".to_owned(),
-			)
+			return Err(ErrorKind::MqsGenericError(format!(
+				"MQS is not started, not able to send the slate {}",
+				slate.id
+			))
 			.into());
 		}
 
@@ -180,19 +206,22 @@ impl SlateSender for MwcMqsChannel {
 		let rx_withlock = self.rx.lock();
 		if let Some(i) = &*rx_withlock {
 			let rx = &i;
-			let slate_returned = rx.recv_timeout(Duration::from_secs(30));
-			match slate_returned {
-				Ok(s) => {
-					return Ok(*s);
-				}
-				_ => {
-					return Err(ErrorKind::ClientCallback(
-						"request timeout, please use txs api to check the status".to_owned(),
-					)
-					.into())
-				}
-			}
+			let _ = rx.recv_timeout(Duration::from_secs(120)).map_err(|e| {
+				ErrorKind::MqsGenericError(format!(
+					"MQS unable to process slate {}, {}",
+					slate.id, e
+				))
+			})?;
+		} else {
+			return Err(ErrorKind::MqsGenericError(format!(
+				"MQS receive channel is broken, failed to process slate {}",
+				slate.id
+			))
+			.into());
 		}
-		return Err(Error::from(ErrorKind::GrinWalletMwcMqsGeneralError));
+		return Err(Error::from(ErrorKind::MqsGenericError(format!(
+			"MQS send for slate {} failed",
+			slate.id
+		))));
 	}
 }

@@ -381,7 +381,9 @@ where
 
 		match path.to_str() {
 			Some(s) => Ok(Some(self.load_stored_tx(s)?)),
-			None => Err(ErrorKind::GenericError("Unable to build transaction path".to_string()))?,
+			None => Err(ErrorKind::GenericError(
+				"Unable to build transaction path".to_string(),
+			))?,
 		}
 	}
 
@@ -395,7 +397,9 @@ where
 					.join(TX_SAVE_DIR)
 					.join(filename);
 
-				let trans = self.load_stored_tx(path.to_str().ok_or(ErrorKind::GenericError("Unable to build transaction path".to_string()))? )?;
+				let trans = self.load_stored_tx(path.to_str().ok_or(
+					ErrorKind::GenericError("Unable to build transaction path".to_string()),
+				)?)?;
 				Ok(trans)
 			};
 
@@ -408,9 +412,19 @@ where
 		let mut tx_f = File::open(tx_file)?;
 		let mut content = String::new();
 		tx_f.read_to_string(&mut content)?;
-		let tx_bin = util::from_hex(&content).map_err(|e| ErrorKind::StoredTransactionError(format!("Unable to decode the data, {}", e)))?;
-		Ok(ser::deserialize::<Transaction>(&mut &tx_bin[..], ser::ProtocolVersion(1))
-			.map_err(|e| ErrorKind::StoredTransactionError(format!("Unable to deserialize the data, {}", e)))?)
+		let tx_bin = util::from_hex(&content).map_err(|e| {
+			ErrorKind::StoredTransactionError(format!("Unable to decode the data, {}", e))
+		})?;
+		Ok(
+			ser::deserialize::<Transaction>(&mut &tx_bin[..], ser::ProtocolVersion(1)).map_err(
+				|e| {
+					ErrorKind::StoredTransactionError(format!(
+						"Unable to deserialize the data, {}",
+						e
+					))
+				},
+			)?,
+		)
 	}
 
 	fn batch<'a>(
