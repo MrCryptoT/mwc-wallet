@@ -199,12 +199,13 @@ where
 }
 
 /// Respore missing outputs. Shared with mwc713
-pub fn restore_missing_output<'a, L, C, K>(
+fn restore_missing_output<'a, L, C, K>(
 	wallet_inst: Arc<Mutex<Box<dyn WalletInst<'a, L, C, K>>>>,
 	keychain_mask: Option<&SecretKey>,
 	output: OutputResult,
+	commit2transactionuuid: &HashMap<String, String>,
+	transaction: &HashMap<String, WalletTxInfo>,
 	found_parents: &mut HashMap<Identifier, u32>,
-	tx_stats: &mut Option<&mut HashMap<Identifier, RestoredTxStats>>,
 ) -> Result<(), Error>
 where
 	L: WalletLCProvider<'a, C, K>,
@@ -217,55 +218,33 @@ where
 	let mut batch = w.batch(keychain_mask)?;
 
 	let parent_key_id = output.key_id.parent_path();
+
 	if !found_parents.contains_key(&parent_key_id) {
 		found_parents.insert(parent_key_id.clone(), 0);
-		if let Some(ref mut s) = tx_stats {
-			s.insert(
-				parent_key_id.clone(),
-				RestoredTxStats {
-					log_id: batch.next_tx_log_id(&parent_key_id)?,
-					amount_credited: 0,
-					num_outputs: 0,
-					output_height: 0,
-				},
-			);
-		}
 	}
 
-	let log_id = if tx_stats.is_none() || output.is_coinbase {
-		let log_id = batch.next_tx_log_id(&parent_key_id)?;
-		let entry_type = match output.is_coinbase {
-			true => TxLogEntryType::ConfirmedCoinbase,
-			false => TxLogEntryType::TxReceived,
-		};
-		let mut t = TxLogEntry::new(parent_key_id.clone(), entry_type, log_id);
-		t.confirmed = true;
-		t.output_height = output.height;
-		t.amount_credited = output.value;
-		t.num_outputs = 1;
-		t.output_commits = vec![output.commit.clone()];
-		t.update_confirmation_ts();
-		batch.save_tx_log_entry(t, &parent_key_id)?;
-		log_id
-	} else {
-		if let Some(ref mut s) = tx_stats {
-			match s.get(&parent_key_id).map(|t| t.clone()) {
-				Some(ts) => {
-					s.insert(
-						parent_key_id.clone(),
-						RestoredTxStats {
-							log_id: ts.log_id,
-							amount_credited: ts.amount_credited + output.value,
-							num_outputs: ts.num_outputs + 1,
-							output_height: output.height,
-						},
-					);
-					ts.log_id
-				}
-				None => 0,
-			}
+	let log_id = {
+		if let Some(uuid) =
+			commit2transactionuuid.get(&commit.clone().unwrap_or("None".to_string()))
+		{
+			// Transaction already exist. using it...
+			transaction.get(uuid).unwrap().tx_log.id
 		} else {
-			0
+			// Creating new transaction
+			let log_id = batch.next_tx_log_id(&parent_key_id)?;
+			let entry_type = match output.is_coinbase {
+				true => TxLogEntryType::ConfirmedCoinbase,
+				false => TxLogEntryType::TxReceived,
+			};
+			let mut t = TxLogEntry::new(parent_key_id.clone(), entry_type, log_id);
+			t.confirmed = true;
+			t.output_height = output.height;
+			t.amount_credited = output.value;
+			t.num_outputs = 1;
+			t.output_commits = vec![output.commit.clone()];
+			t.update_confirmation_ts();
+			batch.save_tx_log_entry(t, &parent_key_id)?;
+			log_id
 		}
 	};
 
@@ -1039,6 +1018,7 @@ where
 		start_height,
 		&chain_outs,
 		&mut outputs,
+		&transactions,
 		status_send_channel,
 		&mut found_parents,
 	)?;
@@ -1171,6 +1151,7 @@ fn validate_outputs<'a, L, C, K>(
 	start_height: u64,
 	chain_outs: &Vec<OutputResult>,
 	outputs: &mut HashMap<String, WalletOutputInfo>,
+	transaction: &HashMap<String, WalletTxInfo>,
 	status_send_channel: &Option<Sender<StatusMessage>>,
 	found_parents: &mut HashMap<Identifier, u32>,
 ) -> Result<(), Error>
@@ -1179,6 +1160,13 @@ where
 	C: NodeClient + 'a,
 	K: Keychain + 'a,
 {
+	let mut commit2transactionuuid: HashMap<String, String> = HashMap::new();
+	for tx in transaction.values() {
+		for out in &tx.output_commit {
+			commit2transactionuuid.insert(out.clone(), tx.tx_uuid.clone());
+		}
+	}
+
 	// Update wallet outputs with found at the chain outputs
 	// Check how sync they are
 	for ch_out in chain_outs {
@@ -1240,8 +1228,9 @@ where
 					wallet_inst.clone(),
 					keychain_mask,
 					ch_out.clone(),
+					&commit2transactionuuid,
+					transaction,
 					found_parents,
-					&mut None,
 				)?;
 			}
 		}
