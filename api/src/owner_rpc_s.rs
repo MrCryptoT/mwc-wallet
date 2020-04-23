@@ -15,7 +15,7 @@
 //! JSON-RPC Stub generation for the Owner API
 use uuid::Uuid;
 
-use crate::config::{TorConfig, WalletConfig};
+use crate::config::{MQSConfig, TorConfig, WalletConfig};
 use crate::core::core::Transaction;
 use crate::core::global;
 use crate::keychain::{Identifier, Keychain};
@@ -1594,7 +1594,7 @@ pub trait OwnerRpcS {
 	/**
 	Networked version of [Owner::create_config](struct.Owner.html#method.create_config).
 
-	Both the `wallet_config` and `logging_config` parameters can be `null`, the examples
+	The `wallet_config` ,`logging_config` and `mqs_config` parameters can be `null`, the examples
 	below are for illustration. Note that the values provided for `log_file_path` and `data_file_dir`
 	will be ignored and replaced with the actual values based on the value of `get_top_level_directory`
 	```
@@ -1636,6 +1636,10 @@ pub trait OwnerRpcS {
 				"use_tor_listener": true,
 				"socks_proxy_addr": "127.0.0.1:9050",
 				"send_config_dir": "."
+			},
+			"mqs_config" : {
+				"mwcmqs_domain": "mqs.mwc.mw",
+				"mwcmqs_port": 443
 			}
 		},
 		"id": 1
@@ -1660,6 +1664,7 @@ pub trait OwnerRpcS {
 		wallet_config: Option<WalletConfig>,
 		logging_config: Option<LoggingConfig>,
 		tor_config: Option<TorConfig>,
+		mqs_config: Option<MQSConfig>,
 	) -> Result<(), ErrorKind>;
 
 	/**
@@ -2319,9 +2324,17 @@ where
 		wallet_config: Option<WalletConfig>,
 		logging_config: Option<LoggingConfig>,
 		tor_config: Option<TorConfig>,
+		mqs_config: Option<MQSConfig>,
 	) -> Result<(), ErrorKind> {
-		Owner::create_config(self, &chain_type, wallet_config, logging_config, tor_config)
-			.map_err(|e| e.kind())
+		Owner::create_config(
+			self,
+			&chain_type,
+			wallet_config,
+			logging_config,
+			tor_config,
+			mqs_config,
+		)
+		.map_err(|e| e.kind())
 	}
 
 	fn create_wallet(

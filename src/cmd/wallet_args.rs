@@ -20,7 +20,7 @@ use crate::util::{to_hex, Mutex, ZeroingString};
 /// Argument parsing and error handling for wallet commands
 use clap::ArgMatches;
 use failure::Fail;
-use grin_wallet_config::{TorConfig, WalletConfig};
+use grin_wallet_config::{MQSConfig, TorConfig, WalletConfig};
 use grin_wallet_controller::command;
 use grin_wallet_controller::{Error, ErrorKind};
 use grin_wallet_impls::tor::config::is_tor_address;
@@ -244,7 +244,10 @@ fn parse_required<'a>(args: &'a ArgMatches, name: &str) -> Result<&'a str, Parse
 	let arg = args.value_of(name);
 	match arg {
 		Some(ar) => Ok(ar),
-		None => Err(ParseError::ArgumentError(format!("Value for argument '{}' is required in this context", name))),
+		None => Err(ParseError::ArgumentError(format!(
+			"Value for argument '{}' is required in this context",
+			name
+		))),
 	}
 }
 
@@ -253,7 +256,10 @@ fn parse_u64(arg: &str, name: &str) -> Result<u64, ParseError> {
 	let val = arg.parse::<u64>();
 	match val {
 		Ok(v) => Ok(v),
-		Err(e) => Err(ParseError::ArgumentError(format!("Could not parse {} as a whole number, {}", name, e))),
+		Err(e) => Err(ParseError::ArgumentError(format!(
+			"Could not parse {} as a whole number, {}",
+			name, e
+		))),
 	}
 }
 
@@ -290,7 +296,11 @@ pub fn parse_global_args(
 		Some(file) => {
 			let key = match config.tls_certificate_key.clone() {
 				Some(k) => k,
-				None => return Err(ParseError::ArgumentError(format!("Private key for certificate is not set")))?,
+				None => {
+					return Err(ParseError::ArgumentError(format!(
+						"Private key for certificate is not set"
+					)))?
+				}
 			};
 			Some(TLSConfig::new(file, key))
 		}
@@ -373,7 +383,9 @@ pub fn parse_listen_args(
 	args: &ArgMatches,
 ) -> Result<command::ListenArgs, ParseError> {
 	if let Some(port) = args.value_of("port") {
-		config.api_listen_port = port.parse().map_err(|e| ParseError::ArgumentError(format!("Unable to parse port value, {}", e)) )?;
+		config.api_listen_port = port
+			.parse()
+			.map_err(|e| ParseError::ArgumentError(format!("Unable to parse port value, {}", e)))?;
 	}
 	let method = parse_required(args, "method")?;
 	if args.is_present("no_tor") {
@@ -389,7 +401,9 @@ pub fn parse_owner_api_args(
 	args: &ArgMatches,
 ) -> Result<(), ParseError> {
 	if let Some(port) = args.value_of("port") {
-		let port = port.parse().map_err(|e| ParseError::ArgumentError(format!("Unable to parse port value, {}", e)))?;
+		let port = port
+			.parse()
+			.map_err(|e| ParseError::ArgumentError(format!("Unable to parse port value, {}", e)))?;
 		config.owner_api_listen_port = Some(port);
 	}
 	if args.is_present("run_foreign") {
@@ -416,7 +430,12 @@ pub fn parse_send_args(args: &ArgMatches) -> Result<command::SendArgs, ParseErro
 	let amount = core::core::amount_from_hr_string(amount);
 	let amount = match amount {
 		Ok(a) => a,
-		Err(e) => return Err(ParseError::ArgumentError(format!("Could not parse amount as a number with optional decimal point, {}",e))),
+		Err(e) => {
+			return Err(ParseError::ArgumentError(format!(
+				"Could not parse amount as a number with optional decimal point, {}",
+				e
+			)))
+		}
 	};
 
 	// message
@@ -462,7 +481,10 @@ pub fn parse_send_args(args: &ArgMatches) -> Result<command::SendArgs, ParseErro
 		&& !dest.starts_with("https://")
 		&& is_tor_address(&dest).is_err()
 	{
-		return Err(ParseError::ArgumentError(format!("HTTP Destination should start with http://: or https://: {}",dest)))?;
+		return Err(ParseError::ArgumentError(format!(
+			"HTTP Destination should start with http://: or https://: {}",
+			dest
+		)))?;
 	}
 
 	// change_outputs
@@ -499,7 +521,7 @@ pub fn parse_send_args(args: &ArgMatches) -> Result<command::SendArgs, ParseErro
 					Err(e) => {
 						warn!("Unable to parse Onion address '{}', {}", dest, e);
 						Some(parse_required(args, "proof_address")?.to_owned())
-					},
+					}
 				}
 			}
 			false => None,
@@ -551,7 +573,10 @@ pub fn parse_receive_args(receive_args: &ArgMatches) -> Result<command::ReceiveA
 
 	// validate input
 	if !Path::new(&tx_file).is_file() {
-		return Err(ParseError::ArgumentError(format!("File {} not found.", &tx_file)));
+		return Err(ParseError::ArgumentError(format!(
+			"File {} not found.",
+			&tx_file
+		)));
 	}
 
 	Ok(command::ReceiveArgs {
@@ -566,7 +591,10 @@ pub fn parse_finalize_args(args: &ArgMatches) -> Result<command::FinalizeArgs, P
 	let tx_file = parse_required(args, "input")?;
 
 	if !Path::new(&tx_file).is_file() {
-		return Err(ParseError::ArgumentError(format!("File {} not found.", tx_file)));
+		return Err(ParseError::ArgumentError(format!(
+			"File {} not found.",
+			tx_file
+		)));
 	}
 
 	let dest_file = match args.is_present("dest") {
@@ -590,7 +618,10 @@ pub fn parse_issue_invoice_args(
 	let amount = match amount {
 		Ok(a) => a,
 		Err(e) => {
-			return Err(ParseError::ArgumentError(format!("Could not parse amount as a number with optional decimal point, {}",e)));
+			return Err(ParseError::ArgumentError(format!(
+				"Could not parse amount as a number with optional decimal point, {}",
+				e
+			)));
 		}
 	};
 	// message
@@ -666,7 +697,10 @@ pub fn parse_process_invoice_args(
 		&& !dest.starts_with("http://")
 		&& !dest.starts_with("https://")
 	{
-		return Err(ParseError::ArgumentError(format!("HTTP Destination should start with http://: or https://: {}", dest)));
+		return Err(ParseError::ArgumentError(format!(
+			"HTTP Destination should start with http://: or https://: {}",
+			dest
+		)));
 	}
 
 	// ttl_blocks
@@ -684,7 +718,12 @@ pub fn parse_process_invoice_args(
 
 		let slate = match PathToSlate((&tx_file).into()).get_tx() {
 			Ok(s) => s,
-			Err(e) => return Err(ParseError::ArgumentError(format!("Unable to parse 'input' value {}, {}", tx_file, e))),
+			Err(e) => {
+				return Err(ParseError::ArgumentError(format!(
+					"Unable to parse 'input' value {}, {}",
+					tx_file, e
+				)))
+			}
 		};
 
 		prompt_pay_invoice(&slate, method, dest)?;
@@ -730,11 +769,18 @@ pub fn parse_txs_args(args: &ArgMatches) -> Result<command::TxsArgs, ParseError>
 		None => None,
 		Some(tx) => match tx.parse() {
 			Ok(t) => Some(t),
-			Err(e) => return Err(ParseError::ArgumentError(format!("Could not parse txid parameter, {}", e))),
+			Err(e) => {
+				return Err(ParseError::ArgumentError(format!(
+					"Could not parse txid parameter, {}",
+					e
+				)))
+			}
 		},
 	};
 	if tx_id.is_some() && tx_slate_id.is_some() {
-		return Err(ParseError::ArgumentError(format!("At most one of 'id' (-i) or 'txid' (-t) may be provided.")));
+		return Err(ParseError::ArgumentError(format!(
+			"At most one of 'id' (-i) or 'txid' (-t) may be provided."
+		)));
 	}
 	Ok(command::TxsArgs {
 		id: tx_id,
@@ -758,7 +804,10 @@ pub fn parse_submit_args(args: &ArgMatches) -> Result<command::SubmitArgs, Parse
 
 	// validate input
 	if !Path::new(&tx_file).is_file() {
-		return Err(ParseError::ArgumentError(format!("File {} not found.", &tx_file)));
+		return Err(ParseError::ArgumentError(format!(
+			"File {} not found.",
+			&tx_file
+		)));
 	}
 
 	// check fluff flag
@@ -783,7 +832,9 @@ pub fn parse_repost_args(args: &ArgMatches) -> Result<command::RepostArgs, Parse
 	};
 
 	Ok(command::RepostArgs {
-		id: tx_id.ok_or( ParseError::ArgumentError("Please specify transaction id value".to_string()))?,
+		id: tx_id.ok_or(ParseError::ArgumentError(
+			"Please specify transaction id value".to_string(),
+		))?,
 		dump_file: dump_file,
 		fluff: fluff,
 	})
@@ -803,12 +854,17 @@ pub fn parse_cancel_args(args: &ArgMatches) -> Result<command::CancelArgs, Parse
 				Some(t)
 			}
 			Err(e) => {
-				return Err(ParseError::ArgumentError(format!("Could not parse txid parameter, {}", e)));
+				return Err(ParseError::ArgumentError(format!(
+					"Could not parse txid parameter, {}",
+					e
+				)));
 			}
 		},
 	};
 	if (tx_id.is_none() && tx_slate_id.is_none()) || (tx_id.is_some() && tx_slate_id.is_some()) {
-		return Err(ParseError::ArgumentError(format!("'id' (-i) or 'txid' (-t) argument is required.")));
+		return Err(ParseError::ArgumentError(format!(
+			"'id' (-i) or 'txid' (-t) argument is required."
+		)));
 	}
 	Ok(command::CancelArgs {
 		tx_id: tx_id,
@@ -821,6 +877,7 @@ pub fn wallet_command<C, F>(
 	wallet_args: &ArgMatches,
 	mut wallet_config: WalletConfig,
 	tor_config: Option<TorConfig>,
+	mqs_config: Option<MQSConfig>,
 	mut node_client: C,
 	test_mode: bool,
 	wallet_inst_cb: F,
@@ -880,6 +937,14 @@ where
 			let mut tc = TorConfig::default();
 			tc.send_config_dir = wallet_config.data_file_dir.clone();
 			tc
+		}
+	};
+
+	let mqs_config = match mqs_config {
+		Some(mqs) => mqs,
+		None => {
+			let mqs = MQSConfig::default();
+			mqs
 		}
 	};
 
@@ -965,12 +1030,14 @@ where
 		("listen", Some(args)) => {
 			let mut c = wallet_config.clone();
 			let mut t = tor_config.clone();
-			let a = arg_parse!(parse_listen_args(&mut c, &mut t, &args));
+			let m = mqs_config.clone();
+			let a = arg_parse!(parse_listen_args(&mut c, &mut t, &args)); //TODO: be able to pass in mqs domain and port.
 			command::listen(
 				wallet,
 				Arc::new(Mutex::new(keychain_mask)),
 				&c,
 				&t,
+				&m,
 				&a,
 				&global_wallet_args.clone(),
 			)
@@ -980,13 +1047,14 @@ where
 			let mut g = global_wallet_args.clone();
 			g.tls_conf = None;
 			arg_parse!(parse_owner_api_args(&mut c, &args));
-			command::owner_api(wallet, keychain_mask, &c, &tor_config, &g)
+			command::owner_api(wallet, keychain_mask, &c, &tor_config, &mqs_config, &&g)
 		}
 		("web", Some(_)) => command::owner_api(
 			wallet,
 			keychain_mask,
 			&wallet_config,
 			&tor_config,
+			&mqs_config,
 			&global_wallet_args,
 		),
 		("account", Some(args)) => {
@@ -1000,6 +1068,7 @@ where
 				&wallet_config,
 				km,
 				Some(tor_config),
+				Some(mqs_config),
 				a,
 				wallet_config.dark_background_color_scheme.unwrap_or(true),
 			)
@@ -1082,7 +1151,11 @@ where
 			command::dump_wallet_data(wallet, km, args.value_of("file").map(|s| String::from(s)))
 		}
 		(cmd, _) => {
-			return Err(ErrorKind::ArgumentError( format!("Unknown wallet command '{}', use 'mwc help wallet' for details", cmd) ).into());
+			return Err(ErrorKind::ArgumentError(format!(
+				"Unknown wallet command '{}', use 'mwc help wallet' for details",
+				cmd
+			))
+			.into());
 		}
 	};
 	if let Err(e) = res {

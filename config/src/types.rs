@@ -47,10 +47,10 @@ pub struct WalletConfig {
 	pub owner_api_include_mqs_listener: Option<bool>,
 	///To enable this amount for an invoice amount, for example if the value is 50000000000 that is 50 mwc or less,
 	pub max_auto_accept_invoice: Option<u64>,
-	/// mwcmqs domain
-	pub mwcmqs_domain: Option<String>,
-	/// mwcmqs port
-	pub mwcmqs_port: Option<u16>,
+	//	/// mwcmqs domain
+	//	pub mwcmqs_domain: Option<String>,
+	//	/// mwcmqs port
+	//	pub mwcmqs_port: Option<u16>,
 	//mqs address index
 	pub grinbox_address_index: Option<u32>,
 	/// The directory in which wallet files are stored
@@ -83,8 +83,8 @@ impl Default for WalletConfig {
 			check_node_api_http_addr: "http://127.0.0.1:3413".to_string(),
 			owner_api_include_foreign: Some(false),
 			owner_api_include_mqs_listener: Some(false),
-			mwcmqs_domain: None,
-			mwcmqs_port: None,
+			//			mwcmqs_domain: None,
+			//			mwcmqs_port: None,
 			max_auto_accept_invoice: Some(50000000000),
 			data_file_dir: ".".to_string(),
 			grinbox_address_index: None,
@@ -173,6 +173,24 @@ impl Default for TorConfig {
 		}
 	}
 }
+
+/// MQS configuration
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct MQSConfig {
+	/// mwcmqs domain
+	pub mwcmqs_domain: String,
+	/// mwcmqs port
+	pub mwcmqs_port: u16,
+}
+
+impl Default for MQSConfig {
+	fn default() -> MQSConfig {
+		MQSConfig {
+			mwcmqs_domain: "mqs.mwc.mw".to_owned(),
+			mwcmqs_port: 443,
+		}
+	}
+}
 impl From<io::Error> for ConfigError {
 	fn from(error: io::Error) -> ConfigError {
 		ConfigError::FileIOError(format!("Error loading config file, {}", error))
@@ -196,6 +214,8 @@ pub struct GlobalWalletConfigMembers {
 	pub wallet: WalletConfig,
 	/// Tor config
 	pub tor: Option<TorConfig>,
+	/// MQS config
+	pub mqs: Option<MQSConfig>,
 	/// Logging config
 	pub logging: Option<LoggingConfig>,
 }

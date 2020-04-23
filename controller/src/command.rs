@@ -15,7 +15,7 @@
 //! Grin wallet command-line function implementations
 
 use crate::api::TLSConfig;
-use crate::config::{TorConfig, WalletConfig, WALLET_CONFIG_FILE_NAME};
+use crate::config::{MQSConfig, TorConfig, WalletConfig, WALLET_CONFIG_FILE_NAME};
 use crate::core::{core, global};
 use crate::error::{Error, ErrorKind};
 use crate::impls::{
@@ -80,6 +80,7 @@ where
 		None,
 		None,
 		None,
+		None,
 	)?;
 	p.create_wallet(
 		None,
@@ -127,6 +128,7 @@ pub fn listen<L, C, K>(
 	keychain_mask: Arc<Mutex<Option<SecretKey>>>,
 	config: &WalletConfig,
 	tor_config: &TorConfig,
+	mqs_config: &MQSConfig,
 	args: &ListenArgs,
 	g_args: &GlobalArgs,
 ) -> Result<(), Error>
@@ -158,6 +160,7 @@ where
 			let _ = controller::init_start_mwcmqs_listener(
 				config.clone(),
 				wallet.clone(),
+				mqs_config.clone(),
 				keychain_mask,
 				None,
 				None,
@@ -181,6 +184,7 @@ pub fn owner_api<L, C, K>(
 	keychain_mask: Option<SecretKey>,
 	config: &WalletConfig,
 	tor_config: &TorConfig,
+	mqs_config: &MQSConfig,
 	g_args: &GlobalArgs,
 ) -> Result<(), Error>
 where
@@ -201,6 +205,7 @@ where
 		config.owner_api_include_mqs_listener.clone(),
 		config.clone(),
 		Some(tor_config.clone()),
+		Some(mqs_config.clone()),
 	)
 	.map_err(|e| ErrorKind::LibWallet(format!("Unable to start Listener, {}", e)))?;
 	Ok(())
@@ -277,6 +282,7 @@ pub fn send<L, C, K>(
 	config: &WalletConfig,
 	keychain_mask: Option<&SecretKey>,
 	tor_config: Option<TorConfig>,
+	mqs_config: Option<MQSConfig>,
 	args: SendArgs,
 	dark_scheme: bool,
 ) -> Result<(), Error>
@@ -348,14 +354,24 @@ where
 			};
 			//start the mqs listener if needed.
 			let mut mqs_broker = None;
-			let (tx, rx) = channel(); //this chaneel is used for listener thread to send message to other thread
+			let (tx, rx) = channel(); //this channel is used for listener thread to send message to other thread
 						  //this channel is used for listener thread to receive message from other thread
 			let (tx_from_others, rx_from_others) = channel();
 
 			//if it is mwcmqs, start listner first.
 			match args.method.as_str() {
 				"mwcmqs" => {
-					//api.tx_lock_outputs(m, &slate, Some(String::from("self")), 0)?;
+					//check to see if mqs_config is there, if not, return error
+					let mqs_config_unwrapped;
+					match mqs_config {
+						Some(s) => {
+							mqs_config_unwrapped = s;
+						}
+						None => {
+							return Err(ErrorKind::MQSConfig(format!("NO MQS config!")).into());
+						}
+					}
+
 					let km = match keychain_mask.as_ref() {
 						None => None,
 						Some(&m) => Some(m.to_owned()),
@@ -364,6 +380,7 @@ where
 					let result = controller::init_start_mwcmqs_listener(
 						config.clone(),
 						wallet.clone(),
+						mqs_config_unwrapped,
 						Arc::new(Mutex::new(km)),
 						Some(tx),
 						Some(rx_from_others),

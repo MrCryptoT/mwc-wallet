@@ -33,7 +33,8 @@ where
 	// just get defaults from the global config
 	let wallet_config = config.members.clone().unwrap().wallet;
 
-	let tor_config = config.members.unwrap().tor;
+	let tor_config = config.members.clone().unwrap().tor;
+	let mqs_config = config.members.unwrap().mqs;
 
 	// Check the node version info, and exit with report if we're not compatible
 	//let mut node_client = HTTPNodeClient::new(&wallet_config.check_node_api_http_addr, None);
@@ -63,6 +64,7 @@ where
 		wallet_args,
 		wallet_config,
 		tor_config,
+		mqs_config,
 		node_client,
 		false,
 		|_| {},

@@ -15,7 +15,8 @@
 //! Default wallet lifecycle provider
 
 use crate::config::{
-	config, GlobalWalletConfig, GlobalWalletConfigMembers, TorConfig, WalletConfig, GRIN_WALLET_DIR,
+	config, GlobalWalletConfig, GlobalWalletConfigMembers, MQSConfig, TorConfig, WalletConfig,
+	GRIN_WALLET_DIR,
 };
 use crate::core::global;
 use crate::keychain::Keychain;
@@ -74,6 +75,7 @@ where
 		wallet_config: Option<WalletConfig>,
 		logging_config: Option<LoggingConfig>,
 		tor_config: Option<TorConfig>,
+		mqs_config: Option<MQSConfig>,
 	) -> Result<(), Error> {
 		let mut default_config = GlobalWalletConfig::for_chain(chain_type);
 		let logging = match logging_config {
@@ -97,6 +99,13 @@ where
 				None => Some(TorConfig::default()),
 			},
 		};
+		let mqs = match mqs_config {
+			Some(q) => Some(q),
+			None => match default_config.members.as_ref() {
+				Some(m) => m.clone().mqs.clone(),
+				None => Some(MQSConfig::default()),
+			},
+		};
 
 		let wallet_data_dir = wallet
 			.wallet_data_dir
@@ -107,6 +116,7 @@ where
 			members: Some(GlobalWalletConfigMembers {
 				wallet,
 				tor,
+				mqs,
 				logging,
 			}),
 			..default_config

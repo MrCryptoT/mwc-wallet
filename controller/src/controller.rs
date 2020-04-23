@@ -39,7 +39,7 @@ use crate::apiwallet::{
 	EncryptedRequest, EncryptedResponse, EncryptionErrorResponse, Foreign,
 	ForeignCheckMiddlewareFn, ForeignRpc, Owner, OwnerRpc, OwnerRpcS,
 };
-use crate::config::{TorConfig, WalletConfig};
+use crate::config::{MQSConfig, TorConfig, WalletConfig};
 use crate::impls::tor::config as tor_config;
 use crate::impls::tor::process as tor_process;
 use crate::keychain::Keychain;
@@ -483,6 +483,7 @@ where
 pub fn init_start_mwcmqs_listener<L, C, K>(
 	config: WalletConfig,
 	wallet: Arc<Mutex<Box<dyn WalletInst<'static, L, C, K>>>>,
+	mqs_config: MQSConfig,
 	keychain_mask: Arc<Mutex<Option<SecretKey>>>,
 	slate_send_channel: Option<Sender<Slate>>,
 	message_receive_channel: Option<Receiver<bool>>,
@@ -494,13 +495,11 @@ where
 	K: Keychain + 'static,
 {
 	warn!("Starting MWCMQS Listener");
-	//create MQSConifg from the WalletConfig.
-
-	// TODO add MQS Options at mwc-wallet/config/src/types.rs  similar to TorConfig
 
 	//start mwcmqs listener
 	start_mwcmqs_listener(
-		wallet.clone(),
+		wallet,
+		mqs_config,
 		config.max_auto_accept_invoice,
 		slate_send_channel,
 		message_receive_channel,
@@ -513,6 +512,7 @@ where
 /// Start the mqs listener
 fn start_mwcmqs_listener<L, C, K>(
 	wallet: Arc<Mutex<Box<dyn WalletInst<'static, L, C, K>>>>,
+	mqs_config: MQSConfig,
 	max_auto_accept_invoice: Option<u64>,
 	slate_send_channel: Option<Sender<Slate>>,
 	message_receive_channel: Option<Receiver<bool>>,
@@ -528,11 +528,11 @@ where
 
 	println!("starting mwcmqs listener...");
 
-	// TODO Suppose to read domain and port fields below from the MQS settings
 	// TODO Index supose to be a global setting, should be used for txProofs for all protocols
 	let index: u32 = 3;
-	let mwcmqs_domain = "mqs.mwc.mw".to_string();
-	let mwcmqs_port: u16 = 443;
+
+	let mwcmqs_domain = mqs_config.mwcmqs_domain;
+	let mwcmqs_port = mqs_config.mwcmqs_port;
 
 	let mwcmqs_secret_key =
 		controller_derive_address_key(wallet.clone(), keychain_mask.lock().as_ref(), index)?;
@@ -606,6 +606,7 @@ pub fn owner_listener<L, C, K>(
 	owner_api_include_mqs_listener: Option<bool>,
 	config: WalletConfig,
 	tor_config: Option<TorConfig>,
+	mqs_config: Option<MQSConfig>,
 ) -> Result<(), Error>
 where
 	L: WalletLCProvider<'static, C, K> + 'static,
@@ -644,7 +645,16 @@ where
 	let mut mwcmqs_broker: Option<(MWCMQPublisher, MWCMQSubscriber)> = None;
 	if running_mqs {
 		warn!("Starting MWCMQS Listener");
-		//create MQSConifg from the WalletConfig.
+		//check if there is mqs_config
+		let mqs_config_unwrapped;
+		match mqs_config {
+			Some(s) => {
+				mqs_config_unwrapped = s;
+			}
+			None => {
+				return Err(ErrorKind::MQSConfig(format!("NO MQS config!")).into());
+			}
+		}
 
 		//create the tx_proof dir inside the wallet_data folder.
 		{
@@ -657,6 +667,7 @@ where
 		//start mwcmqs listener
 		let result = start_mwcmqs_listener(
 			wallet.clone(),
+			mqs_config_unwrapped,
 			config.max_auto_accept_invoice,
 			Some(tx),
 			Some(rx_from_others),

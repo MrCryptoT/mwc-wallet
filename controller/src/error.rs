@@ -120,6 +120,10 @@ pub enum ErrorKind {
 	#[fail(display = "Tor Process Error: {}", _0)]
 	TorProcess(String),
 
+	/// MQS Configuration Error
+	#[fail(display = "MQS Config Error: {}", _0)]
+	MQSConfig(String),
+
 	///rejecting invoice as auto invoice acceptance is turned off
 	#[fail(display = "rejecting invoice as auto invoice acceptance is turned off!")]
 	DoesNotAcceptInvoices,

@@ -18,7 +18,7 @@ use chrono::prelude::*;
 use ed25519_dalek::PublicKey as DalekPublicKey;
 use uuid::Uuid;
 
-use crate::config::{TorConfig, WalletConfig};
+use crate::config::{MQSConfig, TorConfig, WalletConfig};
 use crate::core::core::Transaction;
 use crate::core::global;
 use crate::impls::create_sender;
@@ -1627,7 +1627,7 @@ where
 	/// let api_owner = Owner::new(wallet.clone());
 	/// let _ = api_owner.set_top_level_directory(dir);
 	///
-	/// let result = api_owner.create_config(&ChainTypes::Mainnet, None, None, None );
+	/// let result = api_owner.create_config(&ChainTypes::Mainnet, None, None, None, None );
 	///
 	/// if let Ok(_) = result {
 	///		//...
@@ -1640,6 +1640,7 @@ where
 		wallet_config: Option<WalletConfig>,
 		logging_config: Option<LoggingConfig>,
 		tor_config: Option<TorConfig>,
+		mqs_config: Option<MQSConfig>,
 	) -> Result<(), Error> {
 		let mut w_lock = self.wallet_inst.lock();
 		let lc = w_lock.lc_provider()?;
@@ -1649,6 +1650,7 @@ where
 			wallet_config,
 			logging_config,
 			tor_config,
+			mqs_config,
 		)
 	}
 
@@ -1697,7 +1699,7 @@ where
 	/// let _ = api_owner.set_top_level_directory(dir);
 	///
 	/// // Create configuration
-	/// let result = api_owner.create_config(&ChainTypes::Mainnet, None, None, None);
+	/// let result = api_owner.create_config(&ChainTypes::Mainnet,None,  None, None, None);
 	///
 	///	// create new wallet wirh random seed
 	///	let pw = ZeroingString::from("my_password");
@@ -1766,7 +1768,7 @@ where
 	/// let _ = api_owner.set_top_level_directory(dir);
 	///
 	/// // Create configuration
-	/// let result = api_owner.create_config(&ChainTypes::Mainnet, None, None, None);
+	/// let result = api_owner.create_config(&ChainTypes::Mainnet, None,  None, None, None);
 	///
 	///	// create new wallet wirh random seed
 	///	let pw = ZeroingString::from("my_password");

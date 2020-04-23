@@ -28,7 +28,7 @@ use toml;
 use crate::comments::insert_comments;
 use crate::core::global;
 use crate::types::{ConfigError, GlobalWalletConfig, GlobalWalletConfigMembers};
-use crate::types::{TorConfig, WalletConfig};
+use crate::types::{MQSConfig, TorConfig, WalletConfig};
 use crate::util::logger::LoggingConfig;
 
 /// Wallet configuration file name
@@ -155,6 +155,7 @@ impl Default for GlobalWalletConfigMembers {
 		GlobalWalletConfigMembers {
 			logging: Some(LoggingConfig::default()),
 			tor: Some(TorConfig::default()),
+			mqs: Some(MQSConfig::default()),
 			wallet: WalletConfig::default(),
 		}
 	}
@@ -199,7 +200,9 @@ impl GlobalWalletConfig {
 		// Config file path is given but not valid
 		let config_file = return_value.config_file_path.clone().unwrap();
 		if !config_file.exists() {
-			return Err(ConfigError::FileNotFoundError(config_file.to_str().unwrap().to_string()));
+			return Err(ConfigError::FileNotFoundError(
+				config_file.to_str().unwrap().to_string(),
+			));
 		}
 
 		// Try to parse the config file if it exists, explode if it does exist but
@@ -274,7 +277,12 @@ impl GlobalWalletConfig {
 			toml::to_string(self.members.as_mut().unwrap());
 		match encoded {
 			Ok(enc) => return Ok(enc),
-			Err(e) => return Err(ConfigError::SerializationError(format!("Unable convert config to toml, {}",e))),
+			Err(e) => {
+				return Err(ConfigError::SerializationError(format!(
+					"Unable convert config to toml, {}",
+					e
+				)))
+			}
 		}
 	}
 
