@@ -124,6 +124,7 @@ pub struct MWCMQPublisher {
 	address: MWCMQSAddress,
 	broker: MWCMQSBroker,
 	secret_key: SecretKey,
+
 }
 
 impl MWCMQPublisher {
@@ -132,11 +133,13 @@ impl MWCMQPublisher {
 		secret_key: &SecretKey,
 		mwcmqs_domain: String,
 		mwcmqs_port: u16,
+		print_to_log: bool,
 	) -> Result<Self, Error> {
 		Ok(Self {
 			address,
-			broker: MWCMQSBroker::new(mwcmqs_domain, mwcmqs_port),
+			broker: MWCMQSBroker::new(mwcmqs_domain, mwcmqs_port, print_to_log),
 			secret_key: secret_key.clone(),
+
 		})
 	}
 
@@ -205,14 +208,16 @@ struct MWCMQSBroker {
 	running: Arc<AtomicBool>,
 	pub mwcmqs_domain: String,
 	pub mwcmqs_port: u16,
+	pub print_to_log : bool,
 }
 
 impl MWCMQSBroker {
-	fn new(mwcmqs_domain: String, mwcmqs_port: u16) -> Self {
+	fn new(mwcmqs_domain: String, mwcmqs_port: u16, print_to_log : bool ) -> Self {
 		Self {
 			running: Arc::new(AtomicBool::new(false)),
 			mwcmqs_domain,
 			mwcmqs_port,
+			print_to_log,
 		}
 	}
 
@@ -237,7 +242,7 @@ impl MWCMQSBroker {
 			&pkey,
 			&skey,
 		)
-		.map_err(|e| ErrorKind::GenericError(format!("Unable encrypt slate, {}", e)))?;
+			.map_err(|e| ErrorKind::GenericError(format!("Unable encrypt slate, {}", e)))?;
 
 		let message_ser = &serde_json::to_string(&message).map_err(|e| {
 			ErrorKind::MqsGenericError(format!("Unable convert Message to Json, {}", e))
@@ -291,12 +296,12 @@ impl MWCMQSBroker {
 					} else {
 						let last_seen = last_seen.unwrap();
 						if last_seen > 10000000000 {
-							println!("\nWARNING: [{}] has not been connected to mwcmqs recently. This user might not receive the slate.",
-                                  to.get_stripped());
+							self.do_log_warn(format!("\nWARNING: [{}] has not been connected to mwcmqs recently. This user might not receive the slate.",
+													 to.get_stripped()));
 						} else if last_seen > 150000 {
 							let seconds = last_seen / 1000;
-							println!("\nWARNING: [{}] has not been connected to mwcmqs for {} seconds. This user might not receive the slate.",
-                                  to.get_stripped(), seconds);
+							self.do_log_warn(format!("\nWARNING: [{}] has not been connected to mwcmqs for {} seconds. This user might not receive the slate.",
+													 to.get_stripped(), seconds));
 						}
 					}
 				}
@@ -307,10 +312,33 @@ impl MWCMQSBroker {
 	}
 
 	fn print_error(&mut self, messages: Vec<&str>, error: &str, code: i16) {
-		println!(
+		self.do_log_error(format!(
 			"ERROR: messages=[{:?}] produced error: {} (code={})",
 			messages, error, code
-		);
+		));
+	}
+	fn do_log_info(&self, message: String) {
+		if self.print_to_log {
+			info!("{}",message);
+		} else {
+			println!("{}", message);
+		}
+	}
+
+	fn do_log_warn(&self, message: String) {
+		if self.print_to_log {
+			warn!("{}",message);
+		} else {
+			println!("{}", message);
+		}
+	}
+
+	fn do_log_error(&self, message: String) {
+		if self.print_to_log {
+			error!("{}",message);
+		} else {
+			println!("{}", message);
+		}
 	}
 
 	fn subscribe(
@@ -450,8 +478,8 @@ impl MWCMQSBroker {
 						// This was not a timeout. Sleep first.
 						if connected {
 							is_in_warning = true;
-							println!("\nWARNING: mwcmqs listener [{}] lost connection. Will try to restore in the background. tid=[{}]",
-                                 cloned_cloned_address.get_stripped(), nanoid );
+							self.do_log_warn(format!("\nWARNING: mwcmqs listener [{}] lost connection. Will try to restore in the background. tid=[{}]",
+													 cloned_cloned_address.get_stripped(), nanoid ));
 						}
 
 						let second = time::Duration::from_millis(5000);
@@ -460,21 +488,21 @@ impl MWCMQSBroker {
 						connected = false;
 					} else if count == 1 {
 						delcount = 0;
-						println!(
+						self.do_log_warn(format!(
 							"\nmwcmqs listener started for [{}] tid=[{}]",
 							cloned_cloned_address.get_stripped(),
 							nanoid
-						);
+						));
 						connected = true;
 					} else {
 						delcount = 0;
 						if !connected {
 							if is_in_warning {
-								println!(
+								self.do_log_info(format!(
 									"INFO: mwcmqs listener [{}] reestablished connection. tid=[{}]",
 									cloned_cloned_address.get_stripped(),
 									nanoid
-								);
+								));
 								is_in_warning = false;
 								isnginxerror = false;
 							}
@@ -483,17 +511,17 @@ impl MWCMQSBroker {
 					}
 				} else {
 					if count == 1 {
-						println!(
+						self.do_log_warn(format!(
 							"\nmwcmqs listener started for [{}] tid=[{}]",
 							cloned_cloned_address.get_stripped(),
 							nanoid
-						);
+						));
 					} else if !connected && !isnginxerror {
 						if is_in_warning {
-							println!(
+							self.do_log_info(format!(
 								"INFO: listener [{}] reestablished connection.",
 								cloned_cloned_address.get_stripped()
-							);
+							));
 							is_in_warning = false;
 							isnginxerror = false;
 						}
@@ -506,9 +534,9 @@ impl MWCMQSBroker {
 					let read_resp = resp.read_to_string(&mut resp_str);
 					if !read_resp.is_ok() {
 						// read error occured. Sleep and try again in 5 seconds
-						println!("io error occured while trying to connect to {}. Will sleep for 5 second and will reconnect.",
-                                 &format!("https://{}:{}", self.mwcmqs_domain, self.mwcmqs_port));
-						println!("Error: {:?}", read_resp);
+						self.do_log_info(format!("io error occured while trying to connect to {}. Will sleep for 5 second and will reconnect.",
+												 &format!("https://{}:{}", self.mwcmqs_domain, self.mwcmqs_port)));
+						self.do_log_error(format!("Error: {:?}", read_resp));
 						let second = time::Duration::from_millis(5000);
 						thread::sleep(second);
 						continue;
@@ -533,20 +561,20 @@ impl MWCMQSBroker {
 									}
 
 									url = String::from(format!(
-                                        "https://{}:{}/listener?address={}&delTo={}&time_now={}&signature={}",
-                                        self.mwcmqs_domain,
+										"https://{}:{}/listener?address={}&delTo={}&time_now={}&signature={}",
+										self.mwcmqs_domain,
 										self.mwcmqs_port,
-                                        str::replace(&cloned_address.get_stripped(), "@", "%40"),
-                                        &last_message_id,
-                                        time_now,
-                                        time_now_signature
-                                    ));
+										str::replace(&cloned_address.get_stripped(), "@", "%40"),
+										&last_message_id,
+										time_now,
+										time_now_signature
+									));
 									ret.push(&params[1][index + 1..]);
 								} else if params[1] == "closenewlogin" {
 									if cloned_running.load(Ordering::SeqCst) {
-										print!(
+										self.do_log_error(format!(
 											"\nERROR: new login detected. mwcmqs listener will stop!"
-										);
+										));
 									}
 									break; // stop listener
 								} else {
@@ -570,14 +598,14 @@ impl MWCMQSBroker {
 							}
 
 							url = String::from(format!(
-                            "https://{}:{}/listener?address={}&delTo={}&time_now={}&signature={}",
-                            self.mwcmqs_domain,
-                            self.mwcmqs_port,
-                            str::replace(&cloned_address.get_stripped(), "@", "%40"),
-                            &last_message_id,
-                            time_now,
-                            time_now_signature
-                            ));
+								"https://{}:{}/listener?address={}&delTo={}&time_now={}&signature={}",
+								self.mwcmqs_domain,
+								self.mwcmqs_port,
+								str::replace(&cloned_address.get_stripped(), "@", "%40"),
+								&last_message_id,
+								time_now,
+								time_now_signature
+							));
 
 							vec![&resp_str[index + 1..]]
 						} else {
@@ -587,9 +615,9 @@ impl MWCMQSBroker {
 								connected = false;
 								if !isnginxerror {
 									is_in_warning = true;
-									println!("\nWARNING: mwcmqs listener [{}] lost connection. Will try to restore in the background. tid=[{}]",
-                                         cloned_cloned_address.get_stripped(),
-                                     nanoid);
+									self.do_log_warn(format!("\nWARNING: mwcmqs listener [{}] lost connection. Will try to restore in the background. tid=[{}]",
+															 cloned_cloned_address.get_stripped(),
+															 nanoid));
 								}
 								isnginxerror = true;
 								let second = time::Duration::from_millis(5000);
@@ -598,9 +626,9 @@ impl MWCMQSBroker {
 							} else {
 								if resp_str == "message: closenewlogin\n" {
 									if cloned_running.load(Ordering::SeqCst) {
-										print!(
+										self.do_log_error(format!(
 											"\nERROR: new login detected. mwcmqs listener will stop!",
-										);
+										));
 									}
 									break; // stop listener
 								} else if resp_str == "message: mapmessage=nil" {
@@ -661,9 +689,9 @@ impl MWCMQSBroker {
 								connected = false;
 								if !isnginxerror {
 									is_in_warning = true;
-									println!("\nWARNING: mwcmqs listener [{}] lost connection. Will try to restore in the background. tid=[{}]",
-                                     cloned_cloned_address.get_stripped(),
-                                     nanoid);
+									self.do_log_warn(format!("\nWARNING: mwcmqs listener [{}] lost connection. Will try to restore in the background. tid=[{}]",
+															 cloned_cloned_address.get_stripped(),
+															 nanoid));
 								}
 								isnginxerror = true;
 								let second = time::Duration::from_millis(5000);
@@ -749,7 +777,7 @@ impl MWCMQSBroker {
 								) {
 									Ok(x) => x,
 									Err(err) => {
-										println!("{}", err);
+										self.do_log_error(format!("{}", err));
 										continue;
 									}
 								};
@@ -768,11 +796,11 @@ impl MWCMQSBroker {
 		}
 
 		if !is_error {
-			println!(
+			self.do_log_info(format!(
 				"\nmwcmqs listener [{}] stopped. tid=[{}]",
 				address.get_stripped(),
 				nanoid
-			);
+			));
 		}
 
 		cloned_running.store(false, Ordering::SeqCst);

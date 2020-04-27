@@ -399,7 +399,7 @@ where
 	K: Keychain + 'static,
 {
 	fn on_open(&self) {
-		println!("listener started for [{}]", self.name);
+		warn!("listener started for [{}]", self.name);
 	}
 
 	fn on_slate(&self, from: &MWCMQSAddress, slate: &mut Slate, proof: Option<&mut TxProof>) {
@@ -408,7 +408,7 @@ where
 		if slate.num_participants > slate.participant_data.len() {
 			let message = &slate.participant_data[0].message;
 			if message.is_some() {
-				println!(
+				info!(
 					"slate [{}] received from [{}] for [{}] MWCs. Message: [\"{}\"]",
 					slate.id.to_string(),
 					display_from,
@@ -416,7 +416,7 @@ where
 					message.clone().unwrap()
 				);
 			} else {
-				println!(
+                info!(
 					"slate [{}] received from [{}] for [{}] MWCs.",
 					slate.id.to_string(),
 					display_from,
@@ -424,7 +424,7 @@ where
 				);
 			}
 		} else {
-			println!(
+            info!(
 				"slate [{}] received back from [{}] for [{}] MWCs",
 				slate.id.to_string(),
 				display_from,
@@ -439,17 +439,17 @@ where
 					self.publisher
 						.post_slate(slate, from)
 						.map_err(|e| {
-							println!("ERROR: Unable to send slate with MQS, {}", e);
+							error!("ERROR: Unable to send slate with MQS, {}", e);
 							e
 						})
 						.expect("failed posting slate!");
-					println!(
+					info!(
 						"slate [{}] sent back to [{}] successfully",
 						slate.id.to_string(),
 						display_from
 					);
 				} else {
-					println!("slate [{}] finalized successfully", slate.id.to_string());
+					info!("slate [{}] finalized successfully", slate.id.to_string());
 				}
 				Ok(())
 			});
@@ -458,25 +458,25 @@ where
 
 		match result {
 			Ok(()) => {}
-			Err(e) => println!("{}", e),
+			Err(e) => error!("{}", e),
 		}
 	}
 
 	fn on_close(&self, reason: CloseReason) {
 		match reason {
-			CloseReason::Normal => println!("listener [{}] stopped", self.name),
+			CloseReason::Normal => info!("listener [{}] stopped", self.name),
 			CloseReason::Abnormal(_) => {
-				println!("ERROR: listener [{}] stopped unexpectedly", self.name)
+				error!("ERROR: listener [{}] stopped unexpectedly", self.name)
 			}
 		}
 	}
 
 	fn on_dropped(&self) {
-		println!("WARNING: listener [{}] lost connection. it will keep trying to restore connection in the background.", self.name)
+		warn!("WARNING: listener [{}] lost connection. it will keep trying to restore connection in the background.", self.name)
 	}
 
 	fn on_reestablished(&self) {
-		println!("INFO: listener [{}] reestablished connection.", self.name)
+		info!("INFO: listener [{}] reestablished connection.", self.name)
 	}
 }
 
@@ -526,7 +526,7 @@ where
 {
 	// make sure wallet is not locked, if it is try to unlock with no passphrase
 
-	println!("starting mwcmqs listener...");
+	info!("starting mwcmqs listener...");
 
 	// TODO Index supose to be a global setting, should be used for txProofs for all protocols
 	let index: u32 = 3;
@@ -549,6 +549,7 @@ where
 		&mwcmqs_secret_key,
 		mwcmqs_domain,
 		mwcmqs_port,
+		true,
 	)?;
 
 	let mwcmqs_subscriber = MWCMQSubscriber::new(&mwcmqs_publisher)?;
@@ -613,7 +614,8 @@ where
 	C: NodeClient + 'static,
 	K: Keychain + 'static,
 {
-	println!("owner lisenter started {}", addr);
+	//I don't know why but it seems the warn message in controller.rs will get printed to console.
+	warn!("owner listener started {}", addr);
 	let mut router = Router::new();
 	if api_secret.is_some() {
 		let api_basic_auth =
@@ -660,7 +662,7 @@ where
 		{
 			wallet_lock!(wallet, w);
 			TxProof::init_proof_backend(w.get_data_file_dir()).unwrap_or_else(|e| {
-				println!("Unable to init proof_backend{}", e);
+				error!("Unable to init proof_backend{}", e);
 			});
 		}
 
@@ -676,7 +678,7 @@ where
 		);
 		match result {
 			Err(e) => {
-				warn!("Error starting MWCMQS listener: {}", e);
+				error!("Error starting MWCMQS listener: {}", e);
 			}
 			Ok((publisher, subscriber)) => {
 				mwcmqs_broker = Some((publisher, subscriber));
