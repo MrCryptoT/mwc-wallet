@@ -832,40 +832,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "grin_api"
-version = "3.1.4"
-source = "git+https://github.com/mwcproject/mwc-node#43506451f45115ae0e1b23e2951483f93a168237"
-dependencies = [
- "easy-jsonrpc-mw 0.5.4 (registry+https://github.com/rust-lang/crates.io-index)",
- "failure 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
- "failure_derive 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
- "futures 0.1.29 (registry+https://github.com/rust-lang/crates.io-index)",
- "grin_chain 3.1.4 (git+https://github.com/mwcproject/mwc-node)",
- "grin_core 3.1.4 (git+https://github.com/mwcproject/mwc-node)",
- "grin_p2p 3.1.4 (git+https://github.com/mwcproject/mwc-node)",
- "grin_pool 3.1.4 (git+https://github.com/mwcproject/mwc-node)",
- "grin_store 3.1.4 (git+https://github.com/mwcproject/mwc-node)",
- "grin_util 3.1.4 (git+https://github.com/mwcproject/mwc-node)",
- "http 0.1.21 (registry+https://github.com/rust-lang/crates.io-index)",
- "hyper 0.12.35 (registry+https://github.com/rust-lang/crates.io-index)",
- "hyper-rustls 0.16.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "hyper-timeout 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "lazy_static 1.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "log 0.4.8 (registry+https://github.com/rust-lang/crates.io-index)",
- "regex 1.3.4 (registry+https://github.com/rust-lang/crates.io-index)",
- "ring 0.14.6 (registry+https://github.com/rust-lang/crates.io-index)",
- "rustls 0.15.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "serde 1.0.104 (registry+https://github.com/rust-lang/crates.io-index)",
- "serde_derive 1.0.104 (registry+https://github.com/rust-lang/crates.io-index)",
- "serde_json 1.0.48 (registry+https://github.com/rust-lang/crates.io-index)",
- "tokio 0.1.22 (registry+https://github.com/rust-lang/crates.io-index)",
- "tokio-core 0.1.17 (registry+https://github.com/rust-lang/crates.io-index)",
- "tokio-rustls 0.9.4 (registry+https://github.com/rust-lang/crates.io-index)",
- "tokio-tcp 0.1.4 (registry+https://github.com/rust-lang/crates.io-index)",
- "url 1.7.2 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
 name = "grin_chain"
 version = "3.1.4"
 source = "git+https://github.com/mwcproject/mwc-node?tag=3.1.4#db35c0dec1f64dcfda5bb3fda3f737da82963e4e"
@@ -890,30 +856,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "grin_chain"
-version = "3.1.4"
-source = "git+https://github.com/mwcproject/mwc-node#43506451f45115ae0e1b23e2951483f93a168237"
-dependencies = [
- "bit-vec 0.6.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "bitflags 1.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "byteorder 1.3.4 (registry+https://github.com/rust-lang/crates.io-index)",
- "chrono 0.4.10 (registry+https://github.com/rust-lang/crates.io-index)",
- "croaring 0.4.4 (registry+https://github.com/rust-lang/crates.io-index)",
- "failure 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
- "failure_derive 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
- "grin_core 3.1.4 (git+https://github.com/mwcproject/mwc-node)",
- "grin_keychain 3.1.4 (git+https://github.com/mwcproject/mwc-node)",
- "grin_store 3.1.4 (git+https://github.com/mwcproject/mwc-node)",
- "grin_util 3.1.4 (git+https://github.com/mwcproject/mwc-node)",
- "lazy_static 1.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "log 0.4.8 (registry+https://github.com/rust-lang/crates.io-index)",
- "lru-cache 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "regex 1.3.4 (registry+https://github.com/rust-lang/crates.io-index)",
- "serde 1.0.104 (registry+https://github.com/rust-lang/crates.io-index)",
- "serde_derive 1.0.104 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
 name = "grin_core"
 version = "3.1.4"
 source = "git+https://github.com/mwcproject/mwc-node?tag=3.1.4#db35c0dec1f64dcfda5bb3fda3f737da82963e4e"
@@ -941,33 +883,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "grin_core"
-version = "3.1.4"
-source = "git+https://github.com/mwcproject/mwc-node#43506451f45115ae0e1b23e2951483f93a168237"
-dependencies = [
- "blake2-rfc 0.2.18 (registry+https://github.com/rust-lang/crates.io-index)",
- "byteorder 1.3.4 (registry+https://github.com/rust-lang/crates.io-index)",
- "chrono 0.4.10 (registry+https://github.com/rust-lang/crates.io-index)",
- "croaring 0.4.4 (registry+https://github.com/rust-lang/crates.io-index)",
- "enum_primitive 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "failure 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
- "failure_derive 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
- "grin_keychain 3.1.4 (git+https://github.com/mwcproject/mwc-node)",
- "grin_util 3.1.4 (git+https://github.com/mwcproject/mwc-node)",
- "lazy_static 1.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "log 0.4.8 (registry+https://github.com/rust-lang/crates.io-index)",
- "lru-cache 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "num 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "num-bigint 0.2.6 (registry+https://github.com/rust-lang/crates.io-index)",
- "rand 0.6.5 (registry+https://github.com/rust-lang/crates.io-index)",
- "serde 1.0.104 (registry+https://github.com/rust-lang/crates.io-index)",
- "serde_derive 1.0.104 (registry+https://github.com/rust-lang/crates.io-index)",
- "siphasher 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
- "uuid 0.7.4 (registry+https://github.com/rust-lang/crates.io-index)",
- "zeroize 0.9.3 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
 name = "grin_keychain"
 version = "3.1.4"
 source = "git+https://github.com/mwcproject/mwc-node?tag=3.1.4#db35c0dec1f64dcfda5bb3fda3f737da82963e4e"
@@ -978,31 +893,6 @@ dependencies = [
  "failure 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "failure_derive 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "grin_util 3.1.4 (git+https://github.com/mwcproject/mwc-node?tag=3.1.4)",
- "hmac 0.6.3 (registry+https://github.com/rust-lang/crates.io-index)",
- "lazy_static 1.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "log 0.4.8 (registry+https://github.com/rust-lang/crates.io-index)",
- "pbkdf2 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
- "rand 0.6.5 (registry+https://github.com/rust-lang/crates.io-index)",
- "ripemd160 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "serde 1.0.104 (registry+https://github.com/rust-lang/crates.io-index)",
- "serde_derive 1.0.104 (registry+https://github.com/rust-lang/crates.io-index)",
- "serde_json 1.0.48 (registry+https://github.com/rust-lang/crates.io-index)",
- "sha2 0.7.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "uuid 0.6.5 (registry+https://github.com/rust-lang/crates.io-index)",
- "zeroize 0.9.3 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
-name = "grin_keychain"
-version = "3.1.4"
-source = "git+https://github.com/mwcproject/mwc-node#43506451f45115ae0e1b23e2951483f93a168237"
-dependencies = [
- "blake2-rfc 0.2.18 (registry+https://github.com/rust-lang/crates.io-index)",
- "byteorder 1.3.4 (registry+https://github.com/rust-lang/crates.io-index)",
- "digest 0.7.6 (registry+https://github.com/rust-lang/crates.io-index)",
- "failure 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
- "failure_derive 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
- "grin_util 3.1.4 (git+https://github.com/mwcproject/mwc-node)",
  "hmac 0.6.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "lazy_static 1.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.4.8 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1043,31 +933,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "grin_p2p"
-version = "3.1.4"
-source = "git+https://github.com/mwcproject/mwc-node#43506451f45115ae0e1b23e2951483f93a168237"
-dependencies = [
- "bitflags 1.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "bytes 0.4.12 (registry+https://github.com/rust-lang/crates.io-index)",
- "chrono 0.4.10 (registry+https://github.com/rust-lang/crates.io-index)",
- "enum_primitive 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "failure 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
- "failure_derive 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
- "grin_chain 3.1.4 (git+https://github.com/mwcproject/mwc-node)",
- "grin_core 3.1.4 (git+https://github.com/mwcproject/mwc-node)",
- "grin_store 3.1.4 (git+https://github.com/mwcproject/mwc-node)",
- "grin_util 3.1.4 (git+https://github.com/mwcproject/mwc-node)",
- "log 0.4.8 (registry+https://github.com/rust-lang/crates.io-index)",
- "lru-cache 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "net2 0.2.33 (registry+https://github.com/rust-lang/crates.io-index)",
- "num 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "rand 0.6.5 (registry+https://github.com/rust-lang/crates.io-index)",
- "serde 1.0.104 (registry+https://github.com/rust-lang/crates.io-index)",
- "serde_derive 1.0.104 (registry+https://github.com/rust-lang/crates.io-index)",
- "tempfile 3.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
 name = "grin_pool"
 version = "3.1.4"
 source = "git+https://github.com/mwcproject/mwc-node?tag=3.1.4#db35c0dec1f64dcfda5bb3fda3f737da82963e4e"
@@ -1081,26 +946,6 @@ dependencies = [
  "grin_keychain 3.1.4 (git+https://github.com/mwcproject/mwc-node?tag=3.1.4)",
  "grin_store 3.1.4 (git+https://github.com/mwcproject/mwc-node?tag=3.1.4)",
  "grin_util 3.1.4 (git+https://github.com/mwcproject/mwc-node?tag=3.1.4)",
- "log 0.4.8 (registry+https://github.com/rust-lang/crates.io-index)",
- "rand 0.6.5 (registry+https://github.com/rust-lang/crates.io-index)",
- "serde 1.0.104 (registry+https://github.com/rust-lang/crates.io-index)",
- "serde_derive 1.0.104 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
-name = "grin_pool"
-version = "3.1.4"
-source = "git+https://github.com/mwcproject/mwc-node#43506451f45115ae0e1b23e2951483f93a168237"
-dependencies = [
- "blake2-rfc 0.2.18 (registry+https://github.com/rust-lang/crates.io-index)",
- "chrono 0.4.10 (registry+https://github.com/rust-lang/crates.io-index)",
- "env_logger 0.5.13 (registry+https://github.com/rust-lang/crates.io-index)",
- "failure 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
- "failure_derive 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
- "grin_core 3.1.4 (git+https://github.com/mwcproject/mwc-node)",
- "grin_keychain 3.1.4 (git+https://github.com/mwcproject/mwc-node)",
- "grin_store 3.1.4 (git+https://github.com/mwcproject/mwc-node)",
- "grin_util 3.1.4 (git+https://github.com/mwcproject/mwc-node)",
  "log 0.4.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand 0.6.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde 1.0.104 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1145,28 +990,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "grin_store"
-version = "3.1.4"
-source = "git+https://github.com/mwcproject/mwc-node#43506451f45115ae0e1b23e2951483f93a168237"
-dependencies = [
- "bit-vec 0.6.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "byteorder 1.3.4 (registry+https://github.com/rust-lang/crates.io-index)",
- "croaring 0.4.4 (registry+https://github.com/rust-lang/crates.io-index)",
- "env_logger 0.5.13 (registry+https://github.com/rust-lang/crates.io-index)",
- "failure 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
- "failure_derive 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
- "grin_core 3.1.4 (git+https://github.com/mwcproject/mwc-node)",
- "grin_util 3.1.4 (git+https://github.com/mwcproject/mwc-node)",
- "libc 0.2.68 (registry+https://github.com/rust-lang/crates.io-index)",
- "lmdb-zero 0.4.4 (registry+https://github.com/rust-lang/crates.io-index)",
- "log 0.4.8 (registry+https://github.com/rust-lang/crates.io-index)",
- "memmap 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "serde 1.0.104 (registry+https://github.com/rust-lang/crates.io-index)",
- "serde_derive 1.0.104 (registry+https://github.com/rust-lang/crates.io-index)",
- "tempfile 3.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
 name = "grin_util"
 version = "3.1.4"
 source = "git+https://github.com/mwcproject/mwc-node?tag=3.1.4#db35c0dec1f64dcfda5bb3fda3f737da82963e4e"
@@ -1188,29 +1011,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "grin_util"
-version = "3.1.4"
-source = "git+https://github.com/mwcproject/mwc-node#43506451f45115ae0e1b23e2951483f93a168237"
-dependencies = [
- "backtrace 0.3.44 (registry+https://github.com/rust-lang/crates.io-index)",
- "base64 0.9.3 (registry+https://github.com/rust-lang/crates.io-index)",
- "byteorder 1.3.4 (registry+https://github.com/rust-lang/crates.io-index)",
- "grin_secp256k1zkp 0.7.7 (git+https://github.com/mwcproject/rust-secp256k1-zkp)",
- "lazy_static 1.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "log 0.4.8 (registry+https://github.com/rust-lang/crates.io-index)",
- "log4rs 0.8.3 (registry+https://github.com/rust-lang/crates.io-index)",
- "parking_lot 0.6.4 (registry+https://github.com/rust-lang/crates.io-index)",
- "rand 0.6.5 (registry+https://github.com/rust-lang/crates.io-index)",
- "serde 1.0.104 (registry+https://github.com/rust-lang/crates.io-index)",
- "serde_derive 1.0.104 (registry+https://github.com/rust-lang/crates.io-index)",
- "walkdir 2.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "zeroize 0.9.3 (registry+https://github.com/rust-lang/crates.io-index)",
- "zip 0.5.5 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
 name = "grin_wallet_api"
-version = "3.1.7-beta.1"
+version = "3.1.8-beta.1"
 dependencies = [
  "base64 0.9.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "chrono 0.4.10 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1219,10 +1021,10 @@ dependencies = [
  "ed25519-dalek 1.0.0-pre.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "failure 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "failure_derive 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
- "grin_wallet_config 3.1.7-beta.1",
- "grin_wallet_impls 3.1.7-beta.1",
- "grin_wallet_libwallet 3.1.7-beta.1",
- "grin_wallet_util 3.1.7-beta.1",
+ "grin_wallet_config 3.1.8-beta.1",
+ "grin_wallet_impls 3.1.8-beta.1",
+ "grin_wallet_libwallet 3.1.8-beta.1",
+ "grin_wallet_util 3.1.8-beta.1",
  "log 0.4.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand 0.6.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "ring 0.14.6 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1235,12 +1037,12 @@ dependencies = [
 
 [[package]]
 name = "grin_wallet_config"
-version = "3.1.7-beta.1"
+version = "3.1.8-beta.1"
 dependencies = [
  "dirs 1.0.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "failure 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "failure_derive 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
- "grin_wallet_util 3.1.7-beta.1",
+ "grin_wallet_util 3.1.8-beta.1",
  "pretty_assertions 0.5.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand 0.5.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde 1.0.104 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1250,7 +1052,7 @@ dependencies = [
 
 [[package]]
 name = "grin_wallet_controller"
-version = "3.1.7-beta.1"
+version = "3.1.8-beta.1"
 dependencies = [
  "chrono 0.4.10 (registry+https://github.com/rust-lang/crates.io-index)",
  "colored 1.9.3 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1258,11 +1060,11 @@ dependencies = [
  "failure 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "failure_derive 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "futures 0.1.29 (registry+https://github.com/rust-lang/crates.io-index)",
- "grin_wallet_api 3.1.7-beta.1",
- "grin_wallet_config 3.1.7-beta.1",
- "grin_wallet_impls 3.1.7-beta.1",
- "grin_wallet_libwallet 3.1.7-beta.1",
- "grin_wallet_util 3.1.7-beta.1",
+ "grin_wallet_api 3.1.8-beta.1",
+ "grin_wallet_config 3.1.8-beta.1",
+ "grin_wallet_impls 3.1.8-beta.1",
+ "grin_wallet_libwallet 3.1.8-beta.1",
+ "grin_wallet_util 3.1.8-beta.1",
  "hyper 0.12.35 (registry+https://github.com/rust-lang/crates.io-index)",
  "lazy_static 1.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.4.8 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1281,7 +1083,7 @@ dependencies = [
 
 [[package]]
 name = "grin_wallet_impls"
-version = "3.1.7-beta.1"
+version = "3.1.8-beta.1"
 dependencies = [
  "blake2-rfc 0.2.18 (registry+https://github.com/rust-lang/crates.io-index)",
  "byteorder 1.3.4 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1291,12 +1093,12 @@ dependencies = [
  "failure 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "failure_derive 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "futures 0.1.29 (registry+https://github.com/rust-lang/crates.io-index)",
- "grin_api 3.1.4 (git+https://github.com/mwcproject/mwc-node)",
- "grin_core 3.1.4 (git+https://github.com/mwcproject/mwc-node)",
- "grin_p2p 3.1.4 (git+https://github.com/mwcproject/mwc-node)",
- "grin_wallet_config 3.1.7-beta.1",
- "grin_wallet_libwallet 3.1.7-beta.1",
- "grin_wallet_util 3.1.7-beta.1",
+ "grin_api 3.1.4 (git+https://github.com/mwcproject/mwc-node?tag=3.1.4)",
+ "grin_core 3.1.4 (git+https://github.com/mwcproject/mwc-node?tag=3.1.4)",
+ "grin_p2p 3.1.4 (git+https://github.com/mwcproject/mwc-node?tag=3.1.4)",
+ "grin_wallet_config 3.1.8-beta.1",
+ "grin_wallet_libwallet 3.1.8-beta.1",
+ "grin_wallet_util 3.1.8-beta.1",
  "http 0.1.21 (registry+https://github.com/rust-lang/crates.io-index)",
  "hyper 0.12.35 (registry+https://github.com/rust-lang/crates.io-index)",
  "hyper-rustls 0.16.1 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1323,7 +1125,7 @@ dependencies = [
 
 [[package]]
 name = "grin_wallet_libwallet"
-version = "3.1.7-beta.1"
+version = "3.1.8-beta.1"
 dependencies = [
  "blake2-rfc 0.2.18 (registry+https://github.com/rust-lang/crates.io-index)",
  "byteorder 1.3.4 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1332,12 +1134,12 @@ dependencies = [
  "ed25519-dalek 1.0.0-pre.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "failure 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "failure_derive 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
- "grin_api 3.1.4 (git+https://github.com/mwcproject/mwc-node)",
- "grin_core 3.1.4 (git+https://github.com/mwcproject/mwc-node)",
- "grin_keychain 3.1.4 (git+https://github.com/mwcproject/mwc-node)",
- "grin_p2p 3.1.4 (git+https://github.com/mwcproject/mwc-node)",
- "grin_wallet_config 3.1.7-beta.1",
- "grin_wallet_util 3.1.7-beta.1",
+ "grin_api 3.1.4 (git+https://github.com/mwcproject/mwc-node?tag=3.1.4)",
+ "grin_core 3.1.4 (git+https://github.com/mwcproject/mwc-node?tag=3.1.4)",
+ "grin_keychain 3.1.4 (git+https://github.com/mwcproject/mwc-node?tag=3.1.4)",
+ "grin_p2p 3.1.4 (git+https://github.com/mwcproject/mwc-node?tag=3.1.4)",
+ "grin_wallet_config 3.1.8-beta.1",
+ "grin_wallet_util 3.1.8-beta.1",
  "lazy_static 1.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.4.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand 0.6.5 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1355,7 +1157,7 @@ dependencies = [
 
 [[package]]
 name = "grin_wallet_util"
-version = "3.1.7-beta.1"
+version = "3.1.8-beta.1"
 dependencies = [
  "dirs 1.0.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "grin_api 3.1.4 (git+https://github.com/mwcproject/mwc-node?tag=3.1.4)",
@@ -1855,7 +1657,7 @@ dependencies = [
 
 [[package]]
 name = "mwc_wallet"
-version = "3.1.7-beta.1"
+version = "3.1.8-beta.1"
 dependencies = [
  "built 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "clap 2.33.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1863,12 +1665,12 @@ dependencies = [
  "easy-jsonrpc 0.5.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "failure 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "failure_derive 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
- "grin_wallet_api 3.1.7-beta.1",
- "grin_wallet_config 3.1.7-beta.1",
- "grin_wallet_controller 3.1.7-beta.1",
- "grin_wallet_impls 3.1.7-beta.1",
- "grin_wallet_libwallet 3.1.7-beta.1",
- "grin_wallet_util 3.1.7-beta.1",
+ "grin_wallet_api 3.1.8-beta.1",
+ "grin_wallet_config 3.1.8-beta.1",
+ "grin_wallet_controller 3.1.8-beta.1",
+ "grin_wallet_impls 3.1.8-beta.1",
+ "grin_wallet_libwallet 3.1.8-beta.1",
+ "grin_wallet_util 3.1.8-beta.1",
  "linefeed 0.5.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.4.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "prettytable-rs 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -3705,22 +3507,14 @@ dependencies = [
 "checksum getrandom 0.1.14 (registry+https://github.com/rust-lang/crates.io-index)" = "7abc8dd8451921606d809ba32e95b6111925cd2906060d2dcc29c070220503eb"
 "checksum git2 0.10.2 (registry+https://github.com/rust-lang/crates.io-index)" = "7c1af51ea8a906616af45a4ce78eacf25860f7a13ae7bf8a814693f0f4037a26"
 "checksum glob 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)" = "9b919933a397b79c37e33b77bb2aa3dc8eb6e165ad809e58ff75bc7db2e34574"
-"checksum grin_api 3.1.4 (git+https://github.com/mwcproject/mwc-node)" = "<none>"
 "checksum grin_api 3.1.4 (git+https://github.com/mwcproject/mwc-node?tag=3.1.4)" = "<none>"
-"checksum grin_chain 3.1.4 (git+https://github.com/mwcproject/mwc-node)" = "<none>"
 "checksum grin_chain 3.1.4 (git+https://github.com/mwcproject/mwc-node?tag=3.1.4)" = "<none>"
-"checksum grin_core 3.1.4 (git+https://github.com/mwcproject/mwc-node)" = "<none>"
 "checksum grin_core 3.1.4 (git+https://github.com/mwcproject/mwc-node?tag=3.1.4)" = "<none>"
-"checksum grin_keychain 3.1.4 (git+https://github.com/mwcproject/mwc-node)" = "<none>"
 "checksum grin_keychain 3.1.4 (git+https://github.com/mwcproject/mwc-node?tag=3.1.4)" = "<none>"
-"checksum grin_p2p 3.1.4 (git+https://github.com/mwcproject/mwc-node)" = "<none>"
 "checksum grin_p2p 3.1.4 (git+https://github.com/mwcproject/mwc-node?tag=3.1.4)" = "<none>"
-"checksum grin_pool 3.1.4 (git+https://github.com/mwcproject/mwc-node)" = "<none>"
 "checksum grin_pool 3.1.4 (git+https://github.com/mwcproject/mwc-node?tag=3.1.4)" = "<none>"
 "checksum grin_secp256k1zkp 0.7.7 (git+https://github.com/mwcproject/rust-secp256k1-zkp)" = "<none>"
-"checksum grin_store 3.1.4 (git+https://github.com/mwcproject/mwc-node)" = "<none>"
 "checksum grin_store 3.1.4 (git+https://github.com/mwcproject/mwc-node?tag=3.1.4)" = "<none>"
-"checksum grin_util 3.1.4 (git+https://github.com/mwcproject/mwc-node)" = "<none>"
 "checksum grin_util 3.1.4 (git+https://github.com/mwcproject/mwc-node?tag=3.1.4)" = "<none>"
 "checksum h2 0.1.26 (registry+https://github.com/rust-lang/crates.io-index)" = "a5b34c246847f938a410a03c5458c7fee2274436675e76d8b903c08efc29c462"
 "checksum heck 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)" = "20564e78d53d2bb135c343b3f47714a56af2061f1c928fdb541dc7b9fdd94205"
