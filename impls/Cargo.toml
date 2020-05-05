@@ -51,14 +51,14 @@ grin_wallet_libwallet = { path = "../libwallet", version = "3.1.8-beta.1" }
 
 
 # Release
-grin_p2p = { git = "https://github.com/mwcproject/mwc-node", tag = "3.1.4" }
-grin_core = { git = "https://github.com/mwcproject/mwc-node", tag = "3.1.4" }
-grin_api = { git = "https://github.com/mwcproject/mwc-node", tag = "3.1.4" }
+#grin_p2p = { git = "https://github.com/mwcproject/mwc-node", tag = "3.1.4" }
+#grin_core = { git = "https://github.com/mwcproject/mwc-node", tag = "3.1.4" }
+#grin_api = { git = "https://github.com/mwcproject/mwc-node", tag = "3.1.4" }
 
 # For bleeding edge
-#grin_p2p = { git = "https://github.com/mwcproject/mwc-node", branch = "master" }
-#grin_core = { git = "https://github.com/mwcproject/mwc-node", branch = "master" }
-#grin_api = { git = "https://github.com/mwcproject/mwc-node", branch = "master" }
+grin_p2p = { git = "https://github.com/mwcproject/mwc-node", branch = "master" }
+grin_core = { git = "https://github.com/mwcproject/mwc-node", branch = "master" }
+grin_api = { git = "https://github.com/mwcproject/mwc-node", branch = "master" }
 
 # For local testing
 #grin_p2p = { path = "../../mwc-node/p2p", version= "3.1.3"}
