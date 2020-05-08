@@ -16,6 +16,7 @@ mod file;
 pub mod http;
 mod keybase;
 mod mwcmq;
+mod types;
 
 pub use self::file::PathToSlate;
 pub use self::http::HttpSlateSender;
@@ -26,9 +27,9 @@ use crate::error::{Error, ErrorKind};
 use crate::libwallet::Slate;
 use crate::tor::config::complete_tor_address;
 use crate::util::ZeroingString;
-pub use mwcmq::{CloseReason, MWCMQPublisher, MWCMQSAddress, MWCMQSubscriber, SubscriptionHandler};
+pub use mwcmq::{ MWCMQPublisher, MWCMQSAddress, MWCMQSubscriber};
+pub use types::{Publisher, Subscriber, Address, AddressType, CloseReason, SubscriptionHandler, KeybaseAddress, HttpsAddress,};
 
-//todo Yang may need to move to other places.
 use crate::util::Mutex;
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::Arc;

@@ -295,6 +295,9 @@ pub enum ErrorKind {
 	#[fail(display = "Hex conversion error, {}", _0)]
 	HexError(String),
 
+	/// Derive key error
+	#[fail(display = " Derive key error, {}", _0)]
+	DeriveKeyError(String),
 }
 
 impl Display for Error {

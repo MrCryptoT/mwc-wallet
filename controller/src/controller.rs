@@ -30,7 +30,8 @@ use serde::{Deserialize, Serialize};
 use serde_json;
 
 use grin_wallet_impls::{
-	CloseReason, MWCMQPublisher, MWCMQSAddress, MWCMQSubscriber, SubscriptionHandler,
+	Address, CloseReason, MWCMQPublisher, MWCMQSAddress, MWCMQSubscriber, Publisher, Subscriber,
+	SubscriptionHandler,
 };
 use grin_wallet_libwallet::wallet_lock;
 use grin_wallet_util::grin_core::core;
@@ -402,7 +403,7 @@ where
 		warn!("listener started for [{}]", self.name);
 	}
 
-	fn on_slate(&self, from: &MWCMQSAddress, slate: &mut Slate, proof: Option<&mut TxProof>) {
+	fn on_slate(&self, from: &dyn Address, slate: &mut Slate, proof: Option<&mut TxProof>) {
 		let display_from = from.get_stripped();
 
 		if slate.num_participants > slate.participant_data.len() {
@@ -416,7 +417,7 @@ where
 					message.clone().unwrap()
 				);
 			} else {
-                info!(
+				info!(
 					"slate [{}] received from [{}] for [{}] MWCs.",
 					slate.id.to_string(),
 					display_from,
@@ -424,16 +425,17 @@ where
 				);
 			}
 		} else {
-            info!(
+			info!(
 				"slate [{}] received back from [{}] for [{}] MWCs",
 				slate.id.to_string(),
 				display_from,
 				core::amount_to_hr_string(slate.amount, false)
 			);
 		};
+		let from_address_raw = format!("mwcmqs://{}", from.get_stripped());
 
 		let result = self
-			.process_incoming_slate(Some(from.to_string()), slate, None, proof)
+			.process_incoming_slate(Some(from_address_raw), slate, None, proof)
 			.and_then(|is_finalized| {
 				if !is_finalized {
 					self.publisher
@@ -501,6 +503,7 @@ where
 		wallet,
 		mqs_config,
 		config.max_auto_accept_invoice,
+		config.grinbox_address_index(),
 		slate_send_channel,
 		message_receive_channel,
 		wait_for_thread,
@@ -514,6 +517,7 @@ fn start_mwcmqs_listener<L, C, K>(
 	wallet: Arc<Mutex<Box<dyn WalletInst<'static, L, C, K>>>>,
 	mqs_config: MQSConfig,
 	max_auto_accept_invoice: Option<u64>,
+	address_index: u32,
 	slate_send_channel: Option<Sender<Slate>>,
 	message_receive_channel: Option<Receiver<bool>>,
 	wait_for_thread: bool,
@@ -526,16 +530,17 @@ where
 {
 	// make sure wallet is not locked, if it is try to unlock with no passphrase
 
-	info!("starting mwcmqs listener...");
-
-	// TODO Index supose to be a global setting, should be used for txProofs for all protocols
-	let index: u32 = 3;
+	info!("starting mwcmqs listener... ");
+	info!("the addres index is {}... ", address_index);
 
 	let mwcmqs_domain = mqs_config.mwcmqs_domain;
 	let mwcmqs_port = mqs_config.mwcmqs_port;
 
-	let mwcmqs_secret_key =
-		controller_derive_address_key(wallet.clone(), keychain_mask.lock().as_ref(), index)?;
+	let mwcmqs_secret_key = controller_derive_address_key(
+		wallet.clone(),
+		keychain_mask.lock().as_ref(),
+		address_index,
+	)?;
 	let mwc_pub_key = crypto::public_key_from_secret_key(&mwcmqs_secret_key)?;
 
 	let mwcmqs_address = MWCMQSAddress::new(
@@ -550,9 +555,12 @@ where
 		mwcmqs_domain,
 		mwcmqs_port,
 		true,
-	)?;
+	)
+	.map_err(|e| ErrorKind::GenericError(format!("Unable to create mwcmqs publisher, {}", e)))?;
 
-	let mwcmqs_subscriber = MWCMQSubscriber::new(&mwcmqs_publisher)?;
+	let mwcmqs_subscriber = MWCMQSubscriber::new(&mwcmqs_publisher).map_err(|e| {
+		ErrorKind::GenericError(format!("Unable to create mwcmqs subscriber, {}", e))
+	})?;
 
 	let cloned_publisher = mwcmqs_publisher.clone();
 	let mut cloned_subscriber = mwcmqs_subscriber.clone();
@@ -671,6 +679,7 @@ where
 			wallet.clone(),
 			mqs_config_unwrapped,
 			config.max_auto_accept_invoice,
+			config.grinbox_address_index(),
 			Some(tx),
 			Some(rx_from_others),
 			false,

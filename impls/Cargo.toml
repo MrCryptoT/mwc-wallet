@@ -33,6 +33,7 @@ hyper-rustls = "0.16"
 hyper-timeout = "0.2"
 reqwest = "0.9.22"
 nanoid = "0.1.3"
+url = "1.7"
 
 #Socks/Tor
 byteorder = "1"
