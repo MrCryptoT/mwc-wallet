@@ -1,4 +1,4 @@
-use crate::libwallet::Error;
+/*use crate::libwallet::Error;
 use futures::Future;
 use futures::Poll;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -94,3 +94,4 @@ impl Future for RunHandlerInThread {
 		}
 	}
 }
+*/

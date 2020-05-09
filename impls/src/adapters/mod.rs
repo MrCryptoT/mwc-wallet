@@ -81,7 +81,7 @@ pub fn create_sender(
 		))
 	};
 
-	let mut method = method.into();
+	let mut method = method;
 
 	// will test if this is a tor address and fill out
 	// the http://[].onion if missing
@@ -111,7 +111,7 @@ pub fn create_sender(
 				.map_err(|e| invalid(e))?,
 			),
 		},
-		"keybase" => Box::new(KeybaseChannel::new(dest.to_owned())?),
+		"keybase" => Box::new(KeybaseChannel::new(dest)?),
 		"mwcmqs" => {
 			if mqs_channel.is_none() {
 				return Err(

@@ -28,6 +28,8 @@ use grin_wallet_util::grin_keychain;
 use grin_wallet_util::grin_store;
 use grin_wallet_util::grin_util;
 
+use grin_wallet_util as util;
+
 use blake2_rfc as blake2;
 
 use failure;
@@ -49,7 +51,6 @@ extern crate grin_api;
 pub mod address;
 pub mod api_impl;
 /// Ring prev version internals that are needed for our internal encription functionality
-pub mod encrypt;
 mod error;
 pub mod internal;
 pub mod proof;
@@ -68,14 +69,14 @@ pub use api_impl::owner;
 pub use api_impl::owner_updater::StatusMessage;
 pub use api_impl::types::{
 	BlockFees, InitTxArgs, InitTxSendArgs, IssueInvoiceTxArgs, NodeHeightResult,
-	OutputCommitMapping, SendTXArgs, VersionInfo,
+	OutputCommitMapping, PaymentProof, SendTXArgs, VersionInfo,
 };
 pub use internal::scan::scan;
 pub use slate_versions::ser as dalek_ser;
 pub use types::{
 	AcctPathMapping, BlockIdentifier, CbData, Context, HeaderInfo, NodeClient, NodeVersionInfo,
 	OutputData, OutputStatus, ScannedBlockInfo, StoredProofInfo, TxLogEntry, TxLogEntryType,
-	TxWrapper, WalletBackend, WalletInfo, WalletInst, WalletLCProvider, WalletOutputBatch,
+	WalletBackend, WalletInfo, WalletInst, WalletLCProvider, WalletOutputBatch,
 };
 
 /// Helper for taking a lock on the wallet instance

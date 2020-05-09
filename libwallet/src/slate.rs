@@ -122,14 +122,14 @@ impl ParticipantMessageData {
 			id: p.id,
 			public_key: p.public_blind_excess,
 			message: p.message.clone(),
-			message_sig: p.message_sig.clone(),
+			message_sig: p.message_sig,
 		}
 	}
 }
 
 impl fmt::Display for ParticipantMessageData {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		writeln!(f, "")?;
+		writeln!(f)?;
 		write!(f, "Participant ID {} ", self.id)?;
 		if self.id == 0 {
 			writeln!(f, "(Sender)")?;
@@ -149,7 +149,7 @@ impl fmt::Display for ParticipantMessageData {
 			Some(m) => m,
 		};
 		writeln!(f, "Message: {}", message)?;
-		let message_sig = match self.message_sig.clone() {
+		let message_sig = match self.message_sig {
 			None => "None".to_owned(),
 			Some(m) => grin_util::to_hex(m.to_raw_data().to_vec()),
 		};
@@ -424,7 +424,7 @@ impl Slate {
 			.collect();
 		match PublicKey::from_combination(secp, pub_nonces) {
 			Ok(k) => Ok(k),
-			Err(e) => Err(ErrorKind::Secp(e))?,
+			Err(e) => Err(ErrorKind::Secp(e).into()),
 		}
 	}
 
@@ -437,7 +437,7 @@ impl Slate {
 			.collect();
 		match PublicKey::from_combination(secp, pub_blinds) {
 			Ok(k) => Ok(k),
-			Err(e) => Err(ErrorKind::Secp(e))?,
+			Err(e) => Err(ErrorKind::Secp(e).into()),
 		}
 	}
 
@@ -540,7 +540,7 @@ impl Slate {
 			}
 			true => {
 				// allow for consistent test results
-				let mut test_rng = StepRng::new(1234567890u64, 1);
+				let mut test_rng = StepRng::new(1_234_567_890_u64, 1);
 				BlindingFactor::from_secret_key(SecretKey::new(&keychain.secp(), &mut test_rng))
 			}
 		};
@@ -567,11 +567,9 @@ impl Slate {
 		);
 
 		if fee > self.tx.fee() {
-			return Err(ErrorKind::Fee(format!(
-				"Fee Dispute Error: {}, {}",
-				self.tx.fee(),
-				fee,
-			)))?;
+			return Err(
+				ErrorKind::Fee(format!("Fee Dispute Error: {}, {}", self.tx.fee(), fee,)).into(),
+			);
 		}
 
 		if fee > self.amount + self.fee {
@@ -581,7 +579,7 @@ impl Slate {
 				amount_to_hr_string(self.amount + self.fee, false)
 			);
 			info!("{}", reason);
-			return Err(ErrorKind::Fee(reason.to_string()))?;
+			return Err(ErrorKind::Fee(reason).into());
 		}
 
 		Ok(())
@@ -619,7 +617,8 @@ impl Slate {
 						   String::from_utf8_lossy(&msg.as_bytes()[..]));
 						return Err(ErrorKind::Signature(
 							"Optional participant messages doesn't have signature".to_owned(),
-						))?;
+						)
+						.into());
 					}
 					Some(s) => s,
 				};
@@ -636,7 +635,8 @@ impl Slate {
 						   String::from_utf8_lossy(&msg.as_bytes()[..]));
 					return Err(ErrorKind::Signature(
 						"Optional participant messages do not match signatures".to_owned(),
-					))?;
+					)
+					.into());
 				} else {
 					info!(
 						"verify_messages - signature verified ok. Participant message: \"{}\"",
@@ -739,7 +739,7 @@ impl Slate {
 		// confirm the overall transaction is valid (including the updated kernel)
 		// accounting for tx weight limits
 		let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
-		let _ = final_tx.validate(Weighting::AsTransaction, verifier_cache)?;
+		final_tx.validate(Weighting::AsTransaction, verifier_cache)?;
 
 		self.tx = final_tx;
 		Ok(())

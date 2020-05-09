@@ -27,8 +27,8 @@ use crate::keychain::{Identifier, Keychain};
 use crate::libwallet::api_impl::owner_updater::{start_updater_log_thread, StatusMessage};
 use crate::libwallet::api_impl::{owner, owner_updater};
 use crate::libwallet::{
-	address, AcctPathMapping, Error, ErrorKind, InitTxArgs, IssueInvoiceTxArgs, NodeClient,
-	NodeHeightResult, OutputCommitMapping, Slate, TxLogEntry, WalletInfo, WalletInst,
+	AcctPathMapping, Error, ErrorKind, InitTxArgs, IssueInvoiceTxArgs, NodeClient,
+	NodeHeightResult, OutputCommitMapping, PaymentProof, Slate, TxLogEntry, WalletInfo, WalletInst,
 	WalletLCProvider,
 };
 use crate::util::logger::LoggingConfig;
@@ -37,6 +37,8 @@ use crate::util::{from_hex, static_secp_instance, Mutex, ZeroingString};
 use colored::Colorize;
 use grin_wallet_impls::{MWCMQPublisher, MWCMQSubscriber};
 use grin_wallet_libwallet::proof::tx_proof::TxProof;
+use grin_wallet_util::OnionV3Address;
+use std::convert::TryFrom;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::Arc;
@@ -128,6 +130,8 @@ where
 	///
 	/// # Arguments
 	/// * `wallet_in` - A reference-counted mutex containing an implementation of the
+	/// * `custom_channel` - A custom MPSC Tx/Rx pair to capture status
+	/// updates
 	/// [`WalletBackend`](../grin_wallet_libwallet/types/trait.WalletBackend.html) trait.
 	///
 	/// # Returns
@@ -156,10 +160,10 @@ where
 	/// let mut wallet_config = WalletConfig::default();
 	/// # let dir = tempdir().map_err(|e| format!("{:#?}", e)).unwrap();
 	/// # let dir = dir
-	/// # 	.path()
-	/// # 	.to_str()
-	/// # 	.ok_or("Failed to convert tmpdir path to string.".to_owned())
-	/// # 	.unwrap();
+	/// #   .path()
+	/// #   .to_str()
+	/// #   .ok_or("Failed to convert tmpdir path to string.".to_owned())
+	/// #   .unwrap();
 	/// # wallet_config.data_file_dir = dir.to_owned();
 	///
 	/// // A NodeClient must first be created to handle communication between
@@ -172,7 +176,7 @@ where
 	/// // These traits can be replaced with alternative implementations if desired
 	///
 	/// let mut wallet = Box::new(DefaultWalletImpl::<'static, HTTPNodeClient>::new(node_client.clone()).unwrap())
-	///		as Box<dyn WalletInst<'static, DefaultLCProvider<HTTPNodeClient, ExtKeychain>, HTTPNodeClient, ExtKeychain>>;
+	///     as Box<WalletInst<'static, DefaultLCProvider<HTTPNodeClient, ExtKeychain>, HTTPNodeClient, ExtKeychain>>;
 	///
 	/// // Wallet LifeCycle Provider provides all functions init wallet and work with seeds, etc...
 	/// let lc = wallet.lc_provider().unwrap();
@@ -188,24 +192,33 @@ where
 	/// // All wallet functions operate on an Arc::Mutex to allow multithreading where needed
 	/// let mut wallet = Arc::new(Mutex::new(wallet));
 	///
-	/// let api_owner = Owner::new(wallet.clone());
+	/// let api_owner = Owner::new(wallet.clone(), None);
 	/// // .. perform wallet operations
 	///
 	/// ```
 
-	pub fn new(wallet_inst: Arc<Mutex<Box<dyn WalletInst<'static, L, C, K>>>>) -> Self {
-		let (tx, rx) = channel();
-
+	pub fn new(
+		wallet_inst: Arc<Mutex<Box<dyn WalletInst<'static, L, C, K>>>>,
+		custom_channel: Option<Sender<StatusMessage>>,
+	) -> Self {
 		let updater_running = Arc::new(AtomicBool::new(false));
 		let updater = Arc::new(Mutex::new(owner_updater::Updater::new(
 			wallet_inst.clone(),
 			updater_running.clone(),
 		)));
-
 		let updater_messages = Arc::new(Mutex::new(vec![]));
+
 		let running = Arc::new(AtomicBool::new(true));
-		let handle =
-			start_updater_log_thread(rx, updater_messages.clone(), running.clone()).unwrap();
+		let (tx, handle) = match custom_channel {
+			Some(c) => (c, None),
+			None => {
+				let (tx, rx) = channel();
+				let handle =
+					start_updater_log_thread(rx, updater_messages.clone(), running.clone())
+						.unwrap();
+				(tx, Some(handle))
+			}
+		};
 
 		Owner {
 			wallet_inst,
@@ -216,7 +229,7 @@ where
 			status_tx: Mutex::new(Some(tx)),
 			updater_messages,
 			tor_config: Mutex::new(None),
-			updater_log_thread: Some(handle),
+			updater_log_thread: handle,
 			updater_log_running_state: running,
 			mwcmqs_broker: Arc::new(Mutex::new(None)),
 			rx_withlock: Arc::new(Mutex::new(None)),
@@ -280,12 +293,12 @@ where
 	/// ```
 	/// # grin_wallet_api::doctest_helper_setup_doc_env!(wallet, wallet_config);
 	///
-	/// let api_owner = Owner::new(wallet.clone());
+	/// let api_owner = Owner::new(wallet.clone(), None);
 	///
 	/// let result = api_owner.accounts(None);
 	///
 	/// if let Ok(accts) = result {
-	///		//...
+	///     //...
 	/// }
 	/// ```
 
@@ -331,12 +344,12 @@ where
 	/// ```
 	/// # grin_wallet_api::doctest_helper_setup_doc_env!(wallet, wallet_config);
 	///
-	/// let api_owner = Owner::new(wallet.clone());
+	/// let api_owner = Owner::new(wallet.clone(), None);
 	///
 	/// let result = api_owner.create_account_path(None, "account1");
 	///
 	/// if let Ok(identifier) = result {
-	///		//...
+	///     //...
 	/// }
 	/// ```
 
@@ -378,13 +391,13 @@ where
 	/// ```
 	/// # grin_wallet_api::doctest_helper_setup_doc_env!(wallet, wallet_config);
 	///
-	/// let api_owner = Owner::new(wallet.clone());
+	/// let api_owner = Owner::new(wallet.clone(), None);
 	///
 	/// let result = api_owner.create_account_path(None, "account1");
 	///
 	/// if let Ok(identifier) = result {
-	///		// set the account active
-	///		let result2 = api_owner.set_active_account(None, "account1");
+	///     // set the account active
+	///     let result2 = api_owner.set_active_account(None, "account1");
 	/// }
 	/// ```
 
@@ -434,7 +447,7 @@ where
 	/// ```
 	/// # grin_wallet_api::doctest_helper_setup_doc_env!(wallet, wallet_config);
 	///
-	/// let api_owner = Owner::new(wallet.clone());
+	/// let api_owner = Owner::new(wallet.clone(), None);
 	/// let show_spent = false;
 	/// let update_from_node = true;
 	/// let tx_id = None;
@@ -442,7 +455,7 @@ where
 	/// let result = api_owner.retrieve_outputs(None, show_spent, update_from_node, tx_id);
 	///
 	/// if let Ok((was_updated, output_mappings)) = result {
-	///		//...
+	///     //...
 	/// }
 	/// ```
 
@@ -502,7 +515,7 @@ where
 	/// ```
 	/// # grin_wallet_api::doctest_helper_setup_doc_env!(wallet, wallet_config);
 	///
-	/// let api_owner = Owner::new(wallet.clone());
+	/// let api_owner = Owner::new(wallet.clone(), None);
 	/// let update_from_node = true;
 	/// let tx_id = None;
 	/// let tx_slate_id = None;
@@ -511,7 +524,7 @@ where
 	/// let result = api_owner.retrieve_txs(None, update_from_node, tx_id, tx_slate_id);
 	///
 	/// if let Ok((was_updated, tx_log_entries)) = result {
-	///		//...
+	///     //...
 	/// }
 	/// ```
 
@@ -579,7 +592,7 @@ where
 	/// ```
 	/// # grin_wallet_api::doctest_helper_setup_doc_env!(wallet, wallet_config);
 	///
-	/// let mut api_owner = Owner::new(wallet.clone());
+	/// let mut api_owner = Owner::new(wallet.clone(), None);
 	/// let update_from_node = true;
 	/// let minimum_confirmations=10;
 	///
@@ -587,7 +600,7 @@ where
 	/// let result = api_owner.retrieve_summary_info(None, update_from_node, minimum_confirmations);
 	///
 	/// if let Ok((was_updated, summary_info)) = result {
-	///		//...
+	///     //...
 	/// }
 	/// ```
 
@@ -665,17 +678,17 @@ where
 	/// ```
 	/// # grin_wallet_api::doctest_helper_setup_doc_env!(wallet, wallet_config);
 	///
-	/// let mut api_owner = Owner::new(wallet.clone());
+	/// let mut api_owner = Owner::new(wallet.clone(), None);
 	/// // Attempt to create a transaction using the 'default' account
 	/// let args = InitTxArgs {
-	/// 	src_acct_name: None,
-	/// 	amount: 2_000_000_000,
-	/// 	minimum_confirmations: 2,
-	/// 	max_outputs: 500,
-	/// 	num_change_outputs: 1,
-	/// 	selection_strategy_is_use_all: false,
-	/// 	message: Some("Have some Grins. Love, Yeastplume".to_owned()),
-	/// 	..Default::default()
+	///     src_acct_name: None,
+	///     amount: 2_000_000_000,
+	///     minimum_confirmations: 2,
+	///     max_outputs: 500,
+	///     num_change_outputs: 1,
+	///     selection_strategy_is_use_all: false,
+	///     message: Some("Have some Grins. Love, Yeastplume".to_owned()),
+	///     ..Default::default()
 	/// };
 	/// let result = api_owner.init_send_tx(
 	/// 	None,
@@ -830,17 +843,17 @@ where
 	/// ```
 	/// # grin_wallet_api::doctest_helper_setup_doc_env!(wallet, wallet_config);
 	///
-	/// let mut api_owner = Owner::new(wallet.clone());
+	/// let mut api_owner = Owner::new(wallet.clone(), None);
 	///
 	/// let args = IssueInvoiceTxArgs {
-	/// 	amount: 60_000_000_000,
-	/// 	..Default::default()
+	///     amount: 60_000_000_000,
+	///     ..Default::default()
 	/// };
 	/// let result = api_owner.issue_invoice_tx(None, args);
 	///
 	/// if let Ok(slate) = result {
-	///		// if okay, send to the payer to add their inputs
-	///		// . . .
+	///     // if okay, send to the payer to add their inputs
+	///     // . . .
 	/// }
 	/// ```
 	pub fn issue_invoice_tx(
@@ -885,27 +898,27 @@ where
 	/// ```
 	/// # grin_wallet_api::doctest_helper_setup_doc_env!(wallet, wallet_config);
 	///
-	/// let mut api_owner = Owner::new(wallet.clone());
+	/// let mut api_owner = Owner::new(wallet.clone(), None);
 	///
 	/// // . . .
 	/// // The slate has been recieved from the invoicer, somehow
 	/// # let slate = Slate::blank(2);
 	/// let args = InitTxArgs {
-	///		src_acct_name: None,
-	///		amount: slate.amount,
-	///		minimum_confirmations: 2,
-	///		max_outputs: 500,
-	///		num_change_outputs: 1,
-	///		selection_strategy_is_use_all: false,
-	///		..Default::default()
-	///	};
+	///     src_acct_name: None,
+	///     amount: slate.amount,
+	///     minimum_confirmations: 2,
+	///     max_outputs: 500,
+	///     num_change_outputs: 1,
+	///     selection_strategy_is_use_all: false,
+	///     ..Default::default()
+	/// };
 	///
 	/// let result = api_owner.process_invoice_tx(None, &slate, args);
 	///
 	/// if let Ok(slate) = result {
-	///	// If result okay, send back to the invoicer
-	///	// . . .
-	///	}
+	/// // If result okay, send back to the invoicer
+	/// // . . .
+	/// }
 	/// ```
 
 	pub fn process_invoice_tx(
@@ -960,16 +973,16 @@ where
 	/// ```
 	/// # grin_wallet_api::doctest_helper_setup_doc_env!(wallet, wallet_config);
 	///
-	/// let mut api_owner = Owner::new(wallet.clone());
+	/// let mut api_owner = Owner::new(wallet.clone(), None);
 	/// let args = InitTxArgs {
-	/// 	src_acct_name: None,
-	/// 	amount: 2_000_000_000,
-	/// 	minimum_confirmations: 10,
-	/// 	max_outputs: 500,
-	/// 	num_change_outputs: 1,
-	/// 	selection_strategy_is_use_all: false,
-	/// 	message: Some("Remember to lock this when we're happy this is sent".to_owned()),
-	/// 	..Default::default()
+	///     src_acct_name: None,
+	///     amount: 2_000_000_000,
+	///     minimum_confirmations: 10,
+	///     max_outputs: 500,
+	///     num_change_outputs: 1,
+	///     selection_strategy_is_use_all: false,
+	///     message: Some("Remember to lock this when we're happy this is sent".to_owned()),
+	///     ..Default::default()
 	/// };
 	/// let result = api_owner.init_send_tx(
 	/// 	None,
@@ -1027,16 +1040,16 @@ where
 	/// ```
 	/// # grin_wallet_api::doctest_helper_setup_doc_env!(wallet, wallet_config);
 	///
-	/// let mut api_owner = Owner::new(wallet.clone());
+	/// let mut api_owner = Owner::new(wallet.clone(), None);
 	/// let args = InitTxArgs {
-	/// 	src_acct_name: None,
-	/// 	amount: 2_000_000_000,
-	/// 	minimum_confirmations: 10,
-	/// 	max_outputs: 500,
-	/// 	num_change_outputs: 1,
-	/// 	selection_strategy_is_use_all: false,
-	/// 	message: Some("Finalize this tx now".to_owned()),
-	/// 	..Default::default()
+	///     src_acct_name: None,
+	///     amount: 2_000_000_000,
+	///     minimum_confirmations: 10,
+	///     max_outputs: 500,
+	///     num_change_outputs: 1,
+	///     selection_strategy_is_use_all: false,
+	///     message: Some("Finalize this tx now".to_owned()),
+	///     ..Default::default()
 	/// };
 	/// let result = api_owner.init_send_tx(
 	/// 	None,
@@ -1119,16 +1132,16 @@ where
 	/// ```
 	/// # grin_wallet_api::doctest_helper_setup_doc_env!(wallet, wallet_config);
 	///
-	/// let mut api_owner = Owner::new(wallet.clone());
+	/// let mut api_owner = Owner::new(wallet.clone(), None);
 	/// let args = InitTxArgs {
-	/// 	src_acct_name: None,
-	/// 	amount: 2_000_000_000,
-	/// 	minimum_confirmations: 10,
-	/// 	max_outputs: 500,
-	/// 	num_change_outputs: 1,
-	/// 	selection_strategy_is_use_all: false,
-	/// 	message: Some("Post this tx".to_owned()),
-	/// 	..Default::default()
+	///     src_acct_name: None,
+	///     amount: 2_000_000_000,
+	///     minimum_confirmations: 10,
+	///     max_outputs: 500,
+	///     num_change_outputs: 1,
+	///     selection_strategy_is_use_all: false,
+	///     message: Some("Post this tx".to_owned()),
+	///     ..Default::default()
 	/// };
 	/// let result = api_owner.init_send_tx(
 	/// 	None,
@@ -1193,16 +1206,16 @@ where
 	/// ```
 	/// # grin_wallet_api::doctest_helper_setup_doc_env!(wallet, wallet_config);
 	///
-	/// let mut api_owner = Owner::new(wallet.clone());
+	/// let mut api_owner = Owner::new(wallet.clone(), None);
 	/// let args = InitTxArgs {
-	/// 	src_acct_name: None,
-	/// 	amount: 2_000_000_000,
-	/// 	minimum_confirmations: 10,
-	/// 	max_outputs: 500,
-	/// 	num_change_outputs: 1,
-	/// 	selection_strategy_is_use_all: false,
-	/// 	message: Some("Cancel this tx".to_owned()),
-	/// 	..Default::default()
+	///     src_acct_name: None,
+	///     amount: 2_000_000_000,
+	///     minimum_confirmations: 10,
+	///     max_outputs: 500,
+	///     num_change_outputs: 1,
+	///     selection_strategy_is_use_all: false,
+	///     message: Some("Cancel this tx".to_owned()),
+	///     ..Default::default()
 	/// };
 	/// let result = api_owner.init_send_tx(
 	/// 	None,
@@ -1261,7 +1274,7 @@ where
 	/// ```
 	/// # grin_wallet_api::doctest_helper_setup_doc_env!(wallet, wallet_config);
 	///
-	/// let api_owner = Owner::new(wallet.clone());
+	/// let api_owner = Owner::new(wallet.clone(), None);
 	/// let update_from_node = true;
 	/// let tx_id = None;
 	/// let tx_slate_id = None;
@@ -1270,8 +1283,8 @@ where
 	/// let result = api_owner.retrieve_txs(None, update_from_node, tx_id, tx_slate_id);
 	///
 	/// if let Ok((was_updated, tx_log_entries)) = result {
-	///		let stored_tx = api_owner.get_stored_tx(None, &tx_log_entries[0]).unwrap();
-	///		//...
+	///     let stored_tx = api_owner.get_stored_tx(None, &tx_log_entries[0]).unwrap();
+	///     //...
 	/// }
 	/// ```
 
@@ -1318,16 +1331,16 @@ where
 	/// ```
 	/// # grin_wallet_api::doctest_helper_setup_doc_env!(wallet, wallet_config);
 	///
-	/// let mut api_owner = Owner::new(wallet.clone());
+	/// let mut api_owner = Owner::new(wallet.clone(), None);
 	/// let args = InitTxArgs {
-	/// 	src_acct_name: None,
-	/// 	amount: 2_000_000_000,
-	/// 	minimum_confirmations: 10,
-	/// 	max_outputs: 500,
-	/// 	num_change_outputs: 1,
-	/// 	selection_strategy_is_use_all: false,
-	/// 	message: Some("Just verify messages".to_owned()),
-	/// 	..Default::default()
+	///     src_acct_name: None,
+	///     amount: 2_000_000_000,
+	///     minimum_confirmations: 10,
+	///     max_outputs: 500,
+	///     num_change_outputs: 1,
+	///     selection_strategy_is_use_all: false,
+	///     message: Some("Just verify messages".to_owned()),
+	///     ..Default::default()
 	/// };
 	/// let result = api_owner.init_send_tx(
 	/// 	None,
@@ -1400,16 +1413,16 @@ where
 	/// ```
 	/// # grin_wallet_api::doctest_helper_setup_doc_env!(wallet, wallet_config);
 	///
-	/// let mut api_owner = Owner::new(wallet.clone());
+	/// let mut api_owner = Owner::new(wallet.clone(), None);
 	/// let result = api_owner.scan(
-	/// 	None,
-	/// 	Some(20000),
-	/// 	false,
+	///     None,
+	///     Some(20000),
+	///     false,
 	/// );
 	///
 	/// if let Ok(_) = result {
-	///		// Wallet outputs should be consistent with what's on chain
-	///		// ...
+	///     // Wallet outputs should be consistent with what's on chain
+	///     // ...
 	/// }
 	/// ```
 
@@ -1469,15 +1482,15 @@ where
 	/// ```
 	/// # grin_wallet_api::doctest_helper_setup_doc_env!(wallet, wallet_config);
 	///
-	/// let api_owner = Owner::new(wallet.clone());
+	/// let api_owner = Owner::new(wallet.clone(), None);
 	/// let result = api_owner.node_height(None);
 	///
 	/// if let Ok(node_height_result) = result {
-	///		if node_height_result.updated_from_node {
-	///			//we can assume node_height_result.height is relatively safe to use
+	///     if node_height_result.updated_from_node {
+	///          //we can assume node_height_result.height is relatively safe to use
 	///
-	///		}
-	///		//...
+	///     }
+	///     //...
 	/// }
 	/// ```
 
@@ -1526,12 +1539,12 @@ where
 	/// ```
 	/// # grin_wallet_api::doctest_helper_setup_doc_env!(wallet, wallet_config);
 	///
-	/// let api_owner = Owner::new(wallet.clone());
+	/// let api_owner = Owner::new(wallet.clone(), None);
 	/// let result = api_owner.get_top_level_directory();
 	///
 	/// if let Ok(dir) = result {
-	///		println!("Top level directory is: {}", dir);
-	///		//...
+	///     println!("Top level directory is: {}", dir);
+	///     //...
 	/// }
 	/// ```
 
@@ -1569,16 +1582,16 @@ where
 	///
 	/// # let dir = tempdir().map_err(|e| format!("{:#?}", e)).unwrap();
 	/// # let dir = dir
-	/// # 	.path()
-	/// # 	.to_str()
-	/// # 	.ok_or("Failed to convert tmpdir path to string.".to_owned())
-	/// # 	.unwrap();
+	/// #   .path()
+	/// #   .to_str()
+	/// #   .ok_or("Failed to convert tmpdir path to string.".to_owned())
+	/// #   .unwrap();
 	///
-	/// let api_owner = Owner::new(wallet.clone());
+	/// let api_owner = Owner::new(wallet.clone(), None);
 	/// let result = api_owner.set_top_level_directory(dir);
 	///
 	/// if let Ok(dir) = result {
-	///		//...
+	///    //...
 	/// }
 	/// ```
 
@@ -1619,18 +1632,18 @@ where
 	///
 	/// # let dir = tempdir().map_err(|e| format!("{:#?}", e)).unwrap();
 	/// # let dir = dir
-	/// # 	.path()
-	/// # 	.to_str()
-	/// # 	.ok_or("Failed to convert tmpdir path to string.".to_owned())
-	/// # 	.unwrap();
+	/// #   .path()
+	/// #   .to_str()
+	/// #   .ok_or("Failed to convert tmpdir path to string.".to_owned())
+	/// #   .unwrap();
 	///
-	/// let api_owner = Owner::new(wallet.clone());
+	/// let api_owner = Owner::new(wallet.clone(), None);
 	/// let _ = api_owner.set_top_level_directory(dir);
 	///
 	/// let result = api_owner.create_config(&ChainTypes::Mainnet, None, None, None, None );
 	///
 	/// if let Ok(_) = result {
-	///		//...
+	///    //...
 	/// }
 	/// ```
 
@@ -1684,18 +1697,18 @@ where
 	///
 	/// use grin_core::global::ChainTypes;
 	///
-	///	// note that the WalletInst struct does not necessarily need to contain an
-	///	// instantiated wallet
+	/// // note that the WalletInst struct does not necessarily need to contain an
+	/// // instantiated wallet
 	///
 	/// let dir = "path/to/wallet/dir";
 	///
 	/// # let dir = tempdir().map_err(|e| format!("{:#?}", e)).unwrap();
 	/// # let dir = dir
-	/// # 	.path()
-	/// # 	.to_str()
-	/// # 	.ok_or("Failed to convert tmpdir path to string.".to_owned())
-	/// # 	.unwrap();
-	/// let api_owner = Owner::new(wallet.clone());
+	/// #   .path()
+	/// #   .to_str()
+	/// #   .ok_or("Failed to convert tmpdir path to string.".to_owned())
+	/// #   .unwrap();
+	/// let api_owner = Owner::new(wallet.clone(), None);
 	/// let _ = api_owner.set_top_level_directory(dir);
 	///
 	/// // Create configuration
@@ -1706,7 +1719,7 @@ where
 	/// let result = api_owner.create_wallet(None, None, 0, pw, None);
 	///
 	/// if let Ok(r) = result {
-	///		//...
+	///     //...
 	/// }
 	/// ```
 
@@ -1754,17 +1767,17 @@ where
 	///
 	/// use grin_core::global::ChainTypes;
 	///
-	///	// note that the WalletInst struct does not necessarily need to contain an
-	///	// instantiated wallet
+	/// // note that the WalletInst struct does not necessarily need to contain an
+	/// // instantiated wallet
 	/// let dir = "path/to/wallet/dir";
 	///
 	/// # let dir = tempdir().map_err(|e| format!("{:#?}", e)).unwrap();
 	/// # let dir = dir
-	/// # 	.path()
-	/// # 	.to_str()
-	/// # 	.ok_or("Failed to convert tmpdir path to string.".to_owned())
-	/// # 	.unwrap();
-	/// let api_owner = Owner::new(wallet.clone());
+	/// #   .path()
+	/// #   .to_str()
+	/// #   .ok_or("Failed to convert tmpdir path to string.".to_owned())
+	/// #   .unwrap();
+	/// let api_owner = Owner::new(wallet.clone(), None);
 	/// let _ = api_owner.set_top_level_directory(dir);
 	///
 	/// // Create configuration
@@ -1777,8 +1790,8 @@ where
 	/// let result = api_owner.open_wallet(None, pw, true, None);
 	///
 	/// if let Ok(m) = result {
-	///		// use this mask in all subsequent calls
-	///		let mask = m;
+	///     // use this mask in all subsequent calls
+	///     let mask = m;
 	/// }
 	/// ```
 
@@ -1821,13 +1834,13 @@ where
 	///
 	/// use grin_core::global::ChainTypes;
 	///
-	///	// Set up as above
-	/// # let api_owner = Owner::new(wallet.clone());
+	/// // Set up as above
+	/// # let api_owner = Owner::new(wallet.clone(), None);
 	///
 	/// let res = api_owner.close_wallet(None);
 	///
 	/// if let Ok(_) = res {
-	///		// ...
+	///     // ...
 	/// }
 	/// ```
 
@@ -1857,14 +1870,14 @@ where
 	///
 	/// use grin_core::global::ChainTypes;
 	///
-	///	// Set up as above
-	/// # let api_owner = Owner::new(wallet.clone());
+	/// // Set up as above
+	/// # let api_owner = Owner::new(wallet.clone(), None);
 	///
 	///	let pw = ZeroingString::from("my_password");
 	/// let res = api_owner.get_mnemonic(None, pw, None);
 	///
 	/// if let Ok(mne) = res {
-	///		// ...
+	///     // ...
 	/// }
 	/// ```
 	pub fn get_mnemonic(
@@ -1903,15 +1916,15 @@ where
 	///
 	/// use grin_core::global::ChainTypes;
 	///
-	///	// Set up as above
-	/// # let api_owner = Owner::new(wallet.clone());
+	/// // Set up as above
+	/// # let api_owner = Owner::new(wallet.clone(), None);
 	///
 	///	let old = ZeroingString::from("my_password");
 	///	let new = ZeroingString::from("new_password");
 	/// let res = api_owner.change_password(None, old, new, None);
 	///
 	/// if let Ok(mne) = res {
-	///		// ...
+	///     // ...
 	/// }
 	/// ```
 	pub fn change_password(
@@ -1947,13 +1960,13 @@ where
 	///
 	/// use grin_core::global::ChainTypes;
 	///
-	///	// Set up as above
-	/// # let api_owner = Owner::new(wallet.clone());
+	/// // Set up as above
+	/// # let api_owner = Owner::new(wallet.clone(), None);
 	///
 	/// let res = api_owner.delete_wallet(None);
 	///
 	/// if let Ok(_) = res {
-	///		// ...
+	///     // ...
 	/// }
 	/// ```
 
@@ -2004,7 +2017,7 @@ where
 	/// use std::time::Duration;
 	///
 	/// // Set up as above
-	/// # let api_owner = Owner::new(wallet.clone());
+	/// # let api_owner = Owner::new(wallet.clone(), None);
 	///
 	/// let res = api_owner.start_updater(None, Duration::from_secs(60));
 	///
@@ -2059,7 +2072,7 @@ where
 	/// use std::time::Duration;
 	///
 	/// // Set up as above
-	/// # let api_owner = Owner::new(wallet.clone());
+	/// # let api_owner = Owner::new(wallet.clone(), None);
 	///
 	/// let res = api_owner.start_updater(None, Duration::from_secs(60));
 	///
@@ -2101,7 +2114,7 @@ where
 	/// use std::time::Duration;
 	///
 	/// // Set up as above
-	/// # let api_owner = Owner::new(wallet.clone());
+	/// # let api_owner = Owner::new(wallet.clone(), None);
 	///
 	/// let res = api_owner.start_updater(None, Duration::from_secs(60));
 	///
@@ -2165,7 +2178,7 @@ where
 	/// use std::time::Duration;
 	///
 	/// // Set up as above
-	/// # let api_owner = Owner::new(wallet.clone());
+	/// # let api_owner = Owner::new(wallet.clone(), None);
 	///
 	/// let res = api_owner.get_public_proof_address(None, 0);
 	///
@@ -2205,7 +2218,7 @@ where
 	/// use std::time::Duration;
 	///
 	/// // Set up as above
-	/// # let api_owner = Owner::new(wallet.clone());
+	/// # let api_owner = Owner::new(wallet.clone(), None);
 	///
 	/// let res = api_owner.proof_address_from_onion_v3(
 	///  "2a6at2obto3uvkpkitqp4wxcg6u36qf534eucbskqciturczzc5suyid"
@@ -2219,7 +2232,134 @@ where
 	/// ```
 
 	pub fn proof_address_from_onion_v3(&self, address_v3: &str) -> Result<DalekPublicKey, Error> {
-		address::pubkey_from_onion_v3(address_v3)
+		let addr = OnionV3Address::try_from(address_v3)?;
+		Ok(addr.to_ed25519()?)
+	}
+
+	/// Returns a single, exportable [PaymentProof](../grin_wallet_libwallet/api_impl/types/struct.PaymentProof.html)
+	/// from a completed transaction within the wallet.
+	///
+	/// The transaction must have been created with a payment proof, and the transaction must be
+	/// complete in order for a payment proof to be returned. Either the `tx_id` or `tx_slate_id`
+	/// argument must be provided, or the function will return an error.
+	///
+	/// # Arguments
+	/// * `keychain_mask` - Wallet secret mask to XOR against the stored wallet seed before using, if
+	/// being used.
+	/// * `refresh_from_node` - If true, the wallet will attempt to contact
+	/// a node (via the [`NodeClient`](../grin_wallet_libwallet/types/trait.NodeClient.html)
+	/// provided during wallet instantiation). If `false`, the results will
+	/// contain transaction information that may be out-of-date (from the last time
+	/// the wallet's output set was refreshed against the node).
+	/// Note this setting is ignored if the updater process is running via a call to
+	/// [`start_updater`](struct.Owner.html#method.start_updater)
+	/// * `tx_id` - If `Some(i)` return the proof associated with the transaction with id `i`
+	/// * `tx_slate_id` - If `Some(uuid)`, return the proof associated with the transaction with the
+	/// given `uuid`
+	///
+	/// # Returns
+	/// * Ok([PaymentProof](../grin_wallet_libwallet/api_impl/types/struct.PaymentProof.html)) if successful
+	/// * or [`libwallet::Error`](../grin_wallet_libwallet/struct.Error.html) if an error is encountered
+	/// or the proof is not present or complete
+	///
+	/// # Example
+	/// Set up as in [`new`](struct.Owner.html#method.new) method above.
+	/// ```
+	/// # grin_wallet_api::doctest_helper_setup_doc_env!(wallet, wallet_config);
+	///
+	/// let api_owner = Owner::new(wallet.clone(), None);
+	/// let update_from_node = true;
+	/// let tx_id = None;
+	/// let tx_slate_id = Some(Uuid::parse_str("0436430c-2b02-624c-2032-570501212b00").unwrap());
+	///
+	/// // Return all TxLogEntries
+	/// let result = api_owner.retrieve_payment_proof(None, update_from_node, tx_id, tx_slate_id);
+	///
+	/// if let Ok(p) = result {
+	///     //...
+	/// }
+	/// ```
+
+	pub fn retrieve_payment_proof(
+		&self,
+		keychain_mask: Option<&SecretKey>,
+		refresh_from_node: bool,
+		tx_id: Option<u32>,
+		tx_slate_id: Option<Uuid>,
+	) -> Result<PaymentProof, Error> {
+		let tx = {
+			let t = self.status_tx.lock();
+			t.clone()
+		};
+		let refresh_from_node = match self.updater_running.load(Ordering::Relaxed) {
+			true => false,
+			false => refresh_from_node,
+		};
+		owner::retrieve_payment_proof(
+			self.wallet_inst.clone(),
+			keychain_mask,
+			&tx,
+			refresh_from_node,
+			tx_id,
+			tx_slate_id,
+		)
+	}
+
+	/// Verifies a [PaymentProof](../grin_wallet_libwallet/api_impl/types/struct.PaymentProof.html)
+	/// This process entails:
+	///
+	/// * Ensuring the kernel identified by the proof's stored excess commitment exists in the kernel set
+	/// * Reproducing the signed message `amount|kernel_commitment|sender_address`
+	/// * Validating the proof's `recipient_sig` against the message using the recipient's
+	/// address as the public key and
+	/// * Validating the proof's `sender_sig` against the message using the senders's
+	/// address as the public key
+	///
+	/// This function also checks whether the sender or recipient address belongs to the currently
+	/// open wallet, and returns 2 booleans indicating whether the address belongs to the sender and
+	/// whether the address belongs to the recipient respectively
+	///
+	/// # Arguments
+	/// * `keychain_mask` - Wallet secret mask to XOR against the stored wallet seed before using, if
+	/// being used.
+	/// * `proof` A [PaymentProof](../grin_wallet_libwallet/api_impl/types/struct.PaymentProof.html))
+	///
+	/// # Returns
+	/// * Ok((bool, bool)) if the proof is valid. The first boolean indicates whether the sender
+	/// address belongs to this wallet, the second whether the recipient address belongs to this
+	/// wallet
+	/// * or [`libwallet::Error`](../grin_wallet_libwallet/struct.Error.html) if an error is encountered
+	/// or the proof is not present or complete
+	///
+	/// # Example
+	/// Set up as in [`new`](struct.Owner.html#method.new) method above.
+	/// ```
+	/// # grin_wallet_api::doctest_helper_setup_doc_env!(wallet, wallet_config);
+	///
+	/// let api_owner = Owner::new(wallet.clone(), None);
+	/// let update_from_node = true;
+	/// let tx_id = None;
+	/// let tx_slate_id = Some(Uuid::parse_str("0436430c-2b02-624c-2032-570501212b00").unwrap());
+	///
+	/// // Return all TxLogEntries
+	/// let result = api_owner.retrieve_payment_proof(None, update_from_node, tx_id, tx_slate_id);
+	///
+	/// // The proof will likely be exported as JSON to be provided to another party
+	///
+	/// if let Ok(p) = result {
+	///     let valid = api_owner.verify_payment_proof(None, &p);
+	///     if let Ok(_) = valid {
+	///       //...
+	///     }
+	/// }
+	/// ```
+
+	pub fn verify_payment_proof(
+		&self,
+		keychain_mask: Option<&SecretKey>,
+		proof: &PaymentProof,
+	) -> Result<(bool, bool), Error> {
+		owner::verify_payment_proof(self.wallet_inst.clone(), keychain_mask, proof)
 	}
 }
 
@@ -2245,6 +2385,8 @@ macro_rules! doctest_helper_setup_doc_env {
 		use config::WalletConfig;
 		use impls::{DefaultLCProvider, DefaultWalletImpl, HTTPNodeClient};
 		use libwallet::{BlockFees, InitTxArgs, IssueInvoiceTxArgs, Slate, WalletInst};
+
+		use uuid::Uuid;
 
 		let dir = tempdir().map_err(|e| format!("{:#?}", e)).unwrap();
 		let dir = dir

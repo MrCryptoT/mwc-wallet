@@ -13,31 +13,33 @@
 // limitations under the License.
 
 use crate::api::TLSConfig;
+use crate::cli::command_loop;
 use crate::cmd::wallet_args::ParseError::ArgumentError;
 use crate::config::GRIN_WALLET_DIR;
 use crate::util::file::get_first_line;
-use crate::util::{to_hex, Mutex, ZeroingString};
+use crate::util::secp::key::SecretKey;
+use crate::util::{Mutex, ZeroingString};
 /// Argument parsing and error handling for wallet commands
 use clap::ArgMatches;
 use failure::Fail;
-use grin_wallet_config::{MQSConfig, TorConfig, WalletConfig};
+use grin_wallet_api::Owner;
+use grin_wallet_config::{config_file_exists, MQSConfig, TorConfig, WalletConfig};
 use grin_wallet_controller::command;
 use grin_wallet_controller::{Error, ErrorKind};
 use grin_wallet_impls::tor::config::is_tor_address;
 use grin_wallet_impls::{DefaultLCProvider, DefaultWalletImpl};
 use grin_wallet_impls::{PathToSlate, SlateGetter as _};
 use grin_wallet_libwallet::Slate;
-use grin_wallet_libwallet::{
-	address, IssueInvoiceTxArgs, NodeClient, WalletInst, WalletLCProvider,
-};
+use grin_wallet_libwallet::{IssueInvoiceTxArgs, NodeClient, WalletInst, WalletLCProvider};
 use grin_wallet_util::grin_core as core;
 use grin_wallet_util::grin_core::core::amount_to_hr_string;
 use grin_wallet_util::grin_core::global;
 use grin_wallet_util::grin_keychain as keychain;
+use grin_wallet_util::OnionV3Address;
 use linefeed::terminal::Signal;
 use linefeed::{Interface, ReadResult};
 use rpassword;
-use std::env;
+use std::convert::TryFrom;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -60,6 +62,8 @@ pub enum ParseError {
 	ArgumentError(String),
 	#[fail(display = "Parsing IO error: {}", _0)]
 	IOError(String),
+	#[fail(display = "Wallet configuration already exists: {}", _0)]
+	WalletExists(String),
 	#[fail(display = "User Cancelled")]
 	CancelledError,
 }
@@ -81,36 +85,14 @@ pub fn prompt_password(password: &Option<ZeroingString>) -> ZeroingString {
 	}
 }
 
-fn getenv(key: &str) -> Option<String> {
-	// Accessing an env var
-	let ret = match env::var(key) {
-		Ok(val) => Some(val),
-		Err(_) => None,
-	};
-	return ret;
-}
-
-fn getpassword() -> Option<String> {
-	getenv("MWC_PASSWORD")
-}
-
 fn prompt_password_confirm() -> ZeroingString {
-	let env_password = getpassword();
-	if env_password.is_some() {
-		ZeroingString::from(env_password.unwrap())
-	} else {
-		let mut first = ZeroingString::from("first");
-		let mut second = ZeroingString::from("second");
-		while first != second {
-			first = prompt_password_stdout("Password: ");
-			second = prompt_password_stdout("Confirm Password: ");
-		}
-		first
+	let mut first = ZeroingString::from("first");
+	let mut second = ZeroingString::from("second");
+	while first != second {
+		first = prompt_password_stdout("Password: ");
+		second = prompt_password_stdout("Confirm Password: ");
 	}
-}
-
-fn getrecoveryphrase() -> Option<String> {
-	getenv("MWC_RECOVERY_PHRASE")
+	first
 }
 
 fn prompt_recovery_phrase<L, C, K>(
@@ -128,13 +110,6 @@ where
 	interface.set_prompt("phrase> ")?;
 	loop {
 		println!("Please enter your recovery phrase:");
-		let env_recovery_phrase = getrecoveryphrase();
-
-		if env_recovery_phrase.is_some() {
-			phrase = ZeroingString::from(env_recovery_phrase.unwrap());
-			break;
-		}
-
 		let res = interface.read_line()?;
 		match res {
 			ReadResult::Eof => break,
@@ -244,10 +219,10 @@ fn parse_required<'a>(args: &'a ArgMatches, name: &str) -> Result<&'a str, Parse
 	let arg = args.value_of(name);
 	match arg {
 		Some(ar) => Ok(ar),
-		None => Err(ParseError::ArgumentError(format!(
-			"Value for argument '{}' is required in this context",
-			name
-		))),
+		None => {
+			let msg = format!("Value for argument '{}' is required in this context", name,);
+			Err(ParseError::ArgumentError(msg))
+		}
 	}
 }
 
@@ -256,10 +231,10 @@ fn parse_u64(arg: &str, name: &str) -> Result<u64, ParseError> {
 	let val = arg.parse::<u64>();
 	match val {
 		Ok(v) => Ok(v),
-		Err(e) => Err(ParseError::ArgumentError(format!(
-			"Could not parse {} as a whole number, {}",
-			name, e
-		))),
+		Err(e) => {
+			let msg = format!("Could not parse {} as a whole number. e={}", name, e);
+			Err(ParseError::ArgumentError(msg))
+		}
 	}
 }
 
@@ -297,9 +272,8 @@ pub fn parse_global_args(
 			let key = match config.tls_certificate_key.clone() {
 				Some(k) => k,
 				None => {
-					return Err(ParseError::ArgumentError(format!(
-						"Private key for certificate is not set"
-					)))?
+					let msg = format!("Private key for certificate is not set");
+					return Err(ParseError::ArgumentError(msg));
 				}
 			};
 			Some(TLSConfig::new(file, key))
@@ -330,6 +304,7 @@ pub fn parse_init_args<L, C, K>(
 	config: &WalletConfig,
 	g_args: &command::GlobalArgs,
 	args: &ArgMatches,
+	test_mode: bool,
 ) -> Result<command::InitArgs, ParseError>
 where
 	DefaultWalletImpl<'static, C>: WalletInst<'static, L, C, K>,
@@ -337,6 +312,10 @@ where
 	C: NodeClient + 'static,
 	K: keychain::Keychain + 'static,
 {
+	if config_file_exists(&config.data_file_dir) && !test_mode {
+		return Err(ParseError::WalletExists(config.data_file_dir.clone()));
+	}
+
 	let list_length = match args.is_present("short_wordlist") {
 		false => 32,
 		true => 16,
@@ -383,9 +362,7 @@ pub fn parse_listen_args(
 	args: &ArgMatches,
 ) -> Result<command::ListenArgs, ParseError> {
 	if let Some(port) = args.value_of("port") {
-		config.api_listen_port = port
-			.parse()
-			.map_err(|e| ParseError::ArgumentError(format!("Unable to parse port value, {}", e)))?;
+		config.api_listen_port = port.parse().unwrap();
 	}
 	let method = parse_required(args, "method")?;
 	if args.is_present("no_tor") {
@@ -401,17 +378,10 @@ pub fn parse_owner_api_args(
 	args: &ArgMatches,
 ) -> Result<(), ParseError> {
 	if let Some(port) = args.value_of("port") {
-		let port = port
-			.parse()
-			.map_err(|e| ParseError::ArgumentError(format!("Unable to parse port value, {}", e)))?;
-		config.owner_api_listen_port = Some(port);
+		config.owner_api_listen_port = Some(port.parse().unwrap());
 	}
 	if args.is_present("run_foreign") {
 		config.owner_api_include_foreign = Some(true);
-	}
-
-	if args.is_present("run_mqs") {
-		config.owner_api_include_mqs_listener = Some(true);
 	}
 	Ok(())
 }
@@ -431,10 +401,11 @@ pub fn parse_send_args(args: &ArgMatches) -> Result<command::SendArgs, ParseErro
 	let amount = match amount {
 		Ok(a) => a,
 		Err(e) => {
-			return Err(ParseError::ArgumentError(format!(
-				"Could not parse amount as a number with optional decimal point, {}",
+			let msg = format!(
+				"Could not parse amount as a number with optional decimal point. e={}",
 				e
-			)))
+			);
+			return Err(ParseError::ArgumentError(msg));
 		}
 	};
 
@@ -481,10 +452,11 @@ pub fn parse_send_args(args: &ArgMatches) -> Result<command::SendArgs, ParseErro
 		&& !dest.starts_with("https://")
 		&& is_tor_address(&dest).is_err()
 	{
-		return Err(ParseError::ArgumentError(format!(
+		let msg = format!(
 			"HTTP Destination should start with http://: or https://: {}",
-			dest
-		)))?;
+			dest,
+		);
+		return Err(ParseError::ArgumentError(msg));
 	}
 
 	// change_outputs
@@ -516,11 +488,17 @@ pub fn parse_send_args(args: &ArgMatches) -> Result<command::SendArgs, ParseErro
 			true => {
 				// if the destination address is a TOR address, we don't need the address
 				// separately
-				match address::pubkey_from_onion_v3(&dest) {
-					Ok(k) => Some(to_hex(k.to_bytes().to_vec())),
-					Err(e) => {
-						warn!("Unable to parse Onion address '{}', {}", dest, e);
-						Some(parse_required(args, "proof_address")?.to_owned())
+				match OnionV3Address::try_from(dest) {
+					Ok(a) => Some(a),
+					Err(_) => {
+						let addr = parse_required(args, "proof_address")?;
+						match OnionV3Address::try_from(addr) {
+							Ok(a) => Some(a),
+							Err(e) => {
+								let msg = format!("Invalid proof address: {:?}", e);
+								return Err(ParseError::ArgumentError(msg));
+							}
+						}
 					}
 				}
 			}
@@ -537,6 +515,7 @@ pub fn parse_send_args(args: &ArgMatches) -> Result<command::SendArgs, ParseErro
 		"minimum_confirmations_change_outputs",
 	)?;
 	let exclude_change_outputs = args.is_present("exclude_change_outputs");
+
 	if minimum_confirmations_change_outputs_is_present && !exclude_change_outputs {
 		Err(ArgumentError("minimum_confirmations_change_outputs may only be specified if exclude_change_outputs is set".to_string()))
 	} else {
@@ -573,10 +552,8 @@ pub fn parse_receive_args(receive_args: &ArgMatches) -> Result<command::ReceiveA
 
 	// validate input
 	if !Path::new(&tx_file).is_file() {
-		return Err(ParseError::ArgumentError(format!(
-			"File {} not found.",
-			&tx_file
-		)));
+		let msg = format!("File {} not found.", &tx_file);
+		return Err(ParseError::ArgumentError(msg));
 	}
 
 	Ok(command::ReceiveArgs {
@@ -591,10 +568,8 @@ pub fn parse_finalize_args(args: &ArgMatches) -> Result<command::FinalizeArgs, P
 	let tx_file = parse_required(args, "input")?;
 
 	if !Path::new(&tx_file).is_file() {
-		return Err(ParseError::ArgumentError(format!(
-			"File {} not found.",
-			tx_file
-		)));
+		let msg = format!("File {} not found.", tx_file);
+		return Err(ParseError::ArgumentError(msg));
 	}
 
 	let dest_file = match args.is_present("dest") {
@@ -618,10 +593,11 @@ pub fn parse_issue_invoice_args(
 	let amount = match amount {
 		Ok(a) => a,
 		Err(e) => {
-			return Err(ParseError::ArgumentError(format!(
-				"Could not parse amount as a number with optional decimal point, {}",
+			let msg = format!(
+				"Could not parse amount as a number with optional decimal point. e={}",
 				e
-			)));
+			);
+			return Err(ParseError::ArgumentError(msg));
 		}
 	};
 	// message
@@ -697,10 +673,11 @@ pub fn parse_process_invoice_args(
 		&& !dest.starts_with("http://")
 		&& !dest.starts_with("https://")
 	{
-		return Err(ParseError::ArgumentError(format!(
+		let msg = format!(
 			"HTTP Destination should start with http://: or https://: {}",
-			dest
-		)));
+			dest,
+		);
+		return Err(ParseError::ArgumentError(msg));
 	}
 
 	// ttl_blocks
@@ -718,12 +695,7 @@ pub fn parse_process_invoice_args(
 
 		let slate = match PathToSlate((&tx_file).into()).get_tx() {
 			Ok(s) => s,
-			Err(e) => {
-				return Err(ParseError::ArgumentError(format!(
-					"Unable to parse 'input' value {}, {}",
-					tx_file, e
-				)))
-			}
+			Err(e) => return Err(ParseError::ArgumentError(format!("{}", e))),
 		};
 
 		prompt_pay_invoice(&slate, method, dest)?;
@@ -754,9 +726,16 @@ pub fn parse_info_args(args: &ArgMatches) -> Result<command::InfoArgs, ParseErro
 pub fn parse_check_args(args: &ArgMatches) -> Result<command::CheckArgs, ParseError> {
 	let delete_unconfirmed = args.is_present("delete_unconfirmed");
 	let start_height = parse_u64_or_none(args.value_of("start_height"));
+
+	let backwards_from_tip = parse_u64_or_none(args.value_of("backwards_from_tip"));
+	if backwards_from_tip.is_some() && start_height.is_some() {
+		let msg = format!("backwards_from tip and start_height cannot both be present");
+		return Err(ParseError::ArgumentError(msg));
+	}
 	Ok(command::CheckArgs {
-		start_height: start_height,
-		delete_unconfirmed: delete_unconfirmed,
+		start_height,
+		backwards_from_tip,
+		delete_unconfirmed,
 	})
 }
 
@@ -770,17 +749,14 @@ pub fn parse_txs_args(args: &ArgMatches) -> Result<command::TxsArgs, ParseError>
 		Some(tx) => match tx.parse() {
 			Ok(t) => Some(t),
 			Err(e) => {
-				return Err(ParseError::ArgumentError(format!(
-					"Could not parse txid parameter, {}",
-					e
-				)))
+				let msg = format!("Could not parse txid parameter. e={}", e);
+				return Err(ParseError::ArgumentError(msg));
 			}
 		},
 	};
 	if tx_id.is_some() && tx_slate_id.is_some() {
-		return Err(ParseError::ArgumentError(format!(
-			"At most one of 'id' (-i) or 'txid' (-t) may be provided."
-		)));
+		let msg = format!("At most one of 'id' (-i) or 'txid' (-t) may be provided.");
+		return Err(ParseError::ArgumentError(msg));
 	}
 	Ok(command::TxsArgs {
 		id: tx_id,
@@ -832,9 +808,7 @@ pub fn parse_repost_args(args: &ArgMatches) -> Result<command::RepostArgs, Parse
 	};
 
 	Ok(command::RepostArgs {
-		id: tx_id.ok_or(ParseError::ArgumentError(
-			"Please specify transaction id value".to_string(),
-		))?,
+		id: tx_id.unwrap(),
 		dump_file: dump_file,
 		fluff: fluff,
 	})
@@ -854,22 +828,57 @@ pub fn parse_cancel_args(args: &ArgMatches) -> Result<command::CancelArgs, Parse
 				Some(t)
 			}
 			Err(e) => {
-				return Err(ParseError::ArgumentError(format!(
-					"Could not parse txid parameter, {}",
-					e
-				)));
+				let msg = format!("Could not parse txid parameter. e={}", e);
+				return Err(ParseError::ArgumentError(msg));
 			}
 		},
 	};
 	if (tx_id.is_none() && tx_slate_id.is_none()) || (tx_id.is_some() && tx_slate_id.is_some()) {
-		return Err(ParseError::ArgumentError(format!(
-			"'id' (-i) or 'txid' (-t) argument is required."
-		)));
+		let msg = format!("'id' (-i) or 'txid' (-t) argument is required.");
+		return Err(ParseError::ArgumentError(msg));
 	}
 	Ok(command::CancelArgs {
 		tx_id: tx_id,
 		tx_slate_id: tx_slate_id,
 		tx_id_string: tx_id_string.to_owned(),
+	})
+}
+
+pub fn parse_export_proof_args(args: &ArgMatches) -> Result<command::ProofExportArgs, ParseError> {
+	let output_file = parse_required(args, "output")?;
+	let tx_id = match args.value_of("id") {
+		None => None,
+		Some(tx) => Some(parse_u64(tx, "id")? as u32),
+	};
+	let tx_slate_id = match args.value_of("txid") {
+		None => None,
+		Some(tx) => match tx.parse() {
+			Ok(t) => Some(t),
+			Err(e) => {
+				let msg = format!("Could not parse txid parameter. e={}", e);
+				return Err(ParseError::ArgumentError(msg));
+			}
+		},
+	};
+	if tx_id.is_some() && tx_slate_id.is_some() {
+		let msg = format!("At most one of 'id' (-i) or 'txid' (-t) may be provided.");
+		return Err(ParseError::ArgumentError(msg));
+	}
+	if tx_id.is_none() && tx_slate_id.is_none() {
+		let msg = format!("Either 'id' (-i) or 'txid' (-t) must be provided.");
+		return Err(ParseError::ArgumentError(msg));
+	}
+	Ok(command::ProofExportArgs {
+		output_file: output_file.to_owned(),
+		id: tx_id,
+		tx_slate_id: tx_slate_id,
+	})
+}
+
+pub fn parse_verify_proof_args(args: &ArgMatches) -> Result<command::ProofVerifyArgs, ParseError> {
+	let input_file = parse_required(args, "input")?;
+	Ok(command::ProofVerifyArgs {
+		input_file: input_file.to_owned(),
 	})
 }
 
@@ -920,9 +929,9 @@ where
 	node_client.set_node_url(&wallet_config.check_node_api_http_addr);
 	node_client.set_node_api_secret(global_wallet_args.node_api_secret.clone());
 
-	// legacy hack to avoid the need for changes in existing mwc-wallet.toml files
+	// legacy hack to avoid the need for changes in existing grin-wallet.toml files
 	// remove `wallet_data` from end of path as
-	// new lifecycle provider assumes mwc_wallet.toml is in root of data directory
+	// new lifecycle provider assumes grin_wallet.toml is in root of data directory
 	let mut top_level_wallet_dir = PathBuf::from(wallet_config.clone().data_file_dir);
 	if top_level_wallet_dir.ends_with(GRIN_WALLET_DIR) {
 		top_level_wallet_dir.pop();
@@ -974,6 +983,7 @@ where
 	match wallet_args.subcommand() {
 		("init", Some(_)) => open_wallet = false,
 		("recover", _) => open_wallet = false,
+		("cli", _) => open_wallet = false,
 		("owner_api", _) => {
 			// If wallet exists, open it. Otherwise, that's fine too.
 			let mut wallet_lock = wallet.lock();
@@ -1003,21 +1013,68 @@ where
 		false => None,
 	};
 
-	let km = (&keychain_mask).as_ref();
-
-	let _data_path_buf = wallet_config.get_data_path();
-	//let data_path = data_path_buf.to_str().unwrap();
-
 	let res = match wallet_args.subcommand() {
+		("cli", Some(_)) => command_loop(
+			wallet,
+			keychain_mask,
+			&wallet_config,
+			&tor_config,
+			&mqs_config,
+			&global_wallet_args,
+			test_mode,
+		),
+		_ => {
+			let mut owner_api = Owner::new(wallet, None);
+			parse_and_execute(
+				&mut owner_api,
+				keychain_mask,
+				&wallet_config,
+				&tor_config,
+				&mqs_config,
+				&global_wallet_args,
+				&wallet_args,
+				test_mode,
+				false,
+			)
+		}
+	};
+
+	if let Err(e) = res {
+		Err(e)
+	} else {
+		Ok(wallet_args.subcommand().0.to_owned())
+	}
+}
+
+pub fn parse_and_execute<L, C, K>(
+	owner_api: &mut Owner<L, C, K>,
+	keychain_mask: Option<SecretKey>,
+	wallet_config: &WalletConfig,
+	tor_config: &TorConfig,
+	mqs_config: &MQSConfig,
+	global_wallet_args: &command::GlobalArgs,
+	wallet_args: &ArgMatches,
+	test_mode: bool,
+	cli_mode: bool,
+) -> Result<(), Error>
+where
+	DefaultWalletImpl<'static, C>: WalletInst<'static, L, C, K>,
+	L: WalletLCProvider<'static, C, K> + 'static,
+	C: NodeClient + 'static,
+	K: keychain::Keychain + 'static,
+{
+	let km = (&keychain_mask).as_ref();
+	match wallet_args.subcommand() {
 		("init", Some(args)) => {
 			let a = arg_parse!(parse_init_args(
-				wallet.clone(),
-				&wallet_config,
-				&global_wallet_args,
-				&args
+				owner_api.wallet_inst.clone(),
+				wallet_config,
+				global_wallet_args,
+				&args,
+				test_mode,
 			));
 			command::init(
-				wallet,
+				owner_api,
 				&global_wallet_args,
 				a,
 				wallet_config.wallet_data_dir.as_deref(),
@@ -1025,7 +1082,7 @@ where
 		}
 		("recover", Some(_)) => {
 			let a = arg_parse!(parse_recover_args(&global_wallet_args,));
-			command::recover(wallet, a, wallet_config.wallet_data_dir.as_deref())
+			command::recover(owner_api, a, wallet_config.wallet_data_dir.as_deref())
 		}
 		("listen", Some(args)) => {
 			let mut c = wallet_config.clone();
@@ -1033,13 +1090,14 @@ where
 			let m = mqs_config.clone();
 			let a = arg_parse!(parse_listen_args(&mut c, &mut t, &args)); //TODO: be able to pass in mqs domain and port.
 			command::listen(
-				wallet,
+				owner_api,
 				Arc::new(Mutex::new(keychain_mask)),
 				&c,
 				&t,
 				&m,
 				&a,
 				&global_wallet_args.clone(),
+				cli_mode,
 			)
 		}
 		("owner_api", Some(args)) => {
@@ -1047,54 +1105,54 @@ where
 			let mut g = global_wallet_args.clone();
 			g.tls_conf = None;
 			arg_parse!(parse_owner_api_args(&mut c, &args));
-			command::owner_api(wallet, keychain_mask, &c, &tor_config, &mqs_config, &&g)
+			command::owner_api(owner_api, keychain_mask, &c, &tor_config, &mqs_config, &g)
 		}
 		("web", Some(_)) => command::owner_api(
-			wallet,
+			owner_api,
 			keychain_mask,
-			&wallet_config,
-			&tor_config,
-			&mqs_config,
-			&global_wallet_args,
+			wallet_config,
+			tor_config,
+			mqs_config,
+			global_wallet_args,
 		),
 		("account", Some(args)) => {
 			let a = arg_parse!(parse_account_args(&args));
-			command::account(wallet, km, a)
+			command::account(owner_api, km, a)
 		}
 		("send", Some(args)) => {
 			let a = arg_parse!(parse_send_args(&args));
 			command::send(
-				wallet,
+				owner_api,
 				&wallet_config,
 				km,
-				Some(tor_config),
-				Some(mqs_config),
+				Some(tor_config.clone()),
+				Some(mqs_config.clone()),
 				a,
 				wallet_config.dark_background_color_scheme.unwrap_or(true),
 			)
 		}
 		("receive", Some(args)) => {
 			let a = arg_parse!(parse_receive_args(&args));
-			command::receive(wallet, km, &global_wallet_args, a)
+			command::receive(owner_api, km, &global_wallet_args, a)
 		}
 		("finalize", Some(args)) => {
 			let a = arg_parse!(parse_finalize_args(&args));
-			command::finalize(wallet, km, a, false)
+			command::finalize(owner_api, km, a, false)
 		}
 		("finalize_invoice", Some(args)) => {
 			let a = arg_parse!(parse_finalize_args(&args));
-			command::finalize(wallet, km, a, true)
+			command::finalize(owner_api, km, a, true)
 		}
 		("invoice", Some(args)) => {
 			let a = arg_parse!(parse_issue_invoice_args(&args));
-			command::issue_invoice_tx(wallet, km, a)
+			command::issue_invoice_tx(owner_api, km, a)
 		}
 		("pay", Some(args)) => {
 			let a = arg_parse!(parse_process_invoice_args(&args, !test_mode));
 			command::process_invoice(
-				wallet,
+				owner_api,
 				km,
-				Some(tor_config),
+				Some(tor_config.clone()),
 				a,
 				wallet_config.dark_background_color_scheme.unwrap_or(true),
 			)
@@ -1102,7 +1160,7 @@ where
 		("info", Some(args)) => {
 			let a = arg_parse!(parse_info_args(&args));
 			command::info(
-				wallet,
+				owner_api,
 				km,
 				&global_wallet_args,
 				a,
@@ -1110,7 +1168,7 @@ where
 			)
 		}
 		("outputs", Some(_)) => command::outputs(
-			wallet,
+			owner_api,
 			km,
 			&global_wallet_args,
 			wallet_config.dark_background_color_scheme.unwrap_or(true),
@@ -1118,7 +1176,7 @@ where
 		("txs", Some(args)) => {
 			let a = arg_parse!(parse_txs_args(&args));
 			command::txs(
-				wallet,
+				owner_api,
 				km,
 				&global_wallet_args,
 				a,
@@ -1127,28 +1185,54 @@ where
 		}
 		("post", Some(args)) => {
 			let a = arg_parse!(parse_post_args(&args));
-			command::post(wallet, km, a)
+			command::post(owner_api, km, a)
 		}
 		// Submit is a synonim for 'post'. Since MWC intoduce it ealier, let's keep it
 		("submit", Some(args)) => {
 			let a = arg_parse!(parse_submit_args(&args));
-			command::submit(wallet, km, a)
+			command::submit(owner_api, km, a)
 		}
 		("repost", Some(args)) => {
 			let a = arg_parse!(parse_repost_args(&args));
-			command::repost(wallet, km, a)
+			command::repost(owner_api, km, a)
 		}
 		("cancel", Some(args)) => {
 			let a = arg_parse!(parse_cancel_args(&args));
-			command::cancel(wallet, km, a)
+			command::cancel(owner_api, km, a)
 		}
-		("address", Some(_)) => command::address(wallet, &global_wallet_args, km),
+		("export_proof", Some(_args)) => {
+			return Err(ErrorKind::ArgumentError(
+				"Command export_proof is not implemented yet".to_string(),
+			)
+			.into());
+			//let a = arg_parse!(parse_export_proof_args(&args));
+			//command::proof_export(owner_api, km, a)
+		}
+		("verify_proof", Some(_args)) => {
+			return Err(ErrorKind::ArgumentError(
+				"Command verify_proof is not implemented yet".to_string(),
+			)
+			.into());
+			//let a = arg_parse!(parse_verify_proof_args(&args));
+			//command::proof_verify(owner_api, km, a)
+		}
+		("address", Some(_)) => command::address(owner_api, &global_wallet_args, km),
 		("scan", Some(args)) => {
 			let a = arg_parse!(parse_check_args(&args));
-			command::scan(wallet, km, a)
+			command::scan(owner_api, km, a)
 		}
-		("dump-wallet-data", Some(args)) => {
-			command::dump_wallet_data(wallet, km, args.value_of("file").map(|s| String::from(s)))
+		("dump-wallet-data", Some(args)) => command::dump_wallet_data(
+			owner_api,
+			km,
+			args.value_of("file").map(|s| String::from(s)),
+		),
+		("open", Some(_)) => {
+			// for CLI mode only, should be handled externally
+			Ok(())
+		}
+		("close", Some(_)) => {
+			// for CLI mode only, should be handled externally
+			Ok(())
 		}
 		(cmd, _) => {
 			return Err(ErrorKind::ArgumentError(format!(
@@ -1157,10 +1241,5 @@ where
 			))
 			.into());
 		}
-	};
-	if let Err(e) = res {
-		Err(e)
-	} else {
-		Ok(wallet_args.subcommand().0.to_owned())
 	}
 }

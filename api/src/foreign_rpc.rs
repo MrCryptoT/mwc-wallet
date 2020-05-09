@@ -682,7 +682,7 @@ pub fn run_doctest_foreign(
 	)
 	.unwrap();
 	let mask2 = lc
-		.open_wallet(None, empty_string.clone(), use_token, true, None)
+		.open_wallet(None, empty_string, use_token, true, None)
 		.unwrap();
 	let wallet2 = Arc::new(Mutex::new(wallet2));
 

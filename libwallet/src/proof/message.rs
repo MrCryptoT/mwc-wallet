@@ -20,10 +20,11 @@ use rand::{thread_rng, Rng};
 use super::proofaddress;
 use crate::error::{Error, ErrorKind};
 
-use crate::encrypt;
+use ring::aead;
+use ring::pbkdf2;
 use std::num::NonZeroU32;
 
-/// Encripted message, used for Tx Proofs
+/// Encrypted message, used for Tx Proofs
 #[derive(Debug, Serialize, Deserialize)]
 pub struct EncryptedMessage {
 	/// Destination dddress for that massage
@@ -58,22 +59,24 @@ impl EncryptedMessage {
 		let salt: [u8; 8] = thread_rng().gen();
 		let nonce: [u8; 12] = thread_rng().gen();
 		let mut key = [0; 32];
-		ring::pbkdf2::derive(
-			&ring::digest::SHA512,
+		pbkdf2::derive(
+			ring::pbkdf2::PBKDF2_HMAC_SHA512,
 			NonZeroU32::new(100).unwrap(),
 			&salt,
 			common_secret_slice,
 			&mut key,
 		);
 		let mut enc_bytes = message.as_bytes().to_vec();
-		let suffix_len = encrypt::aead::CHACHA20_POLY1305.tag_len();
-		for _ in 0..suffix_len {
-			enc_bytes.push(0);
-		}
-		let sealing_key =
-			encrypt::aead::SealingKey::new(&encrypt::aead::CHACHA20_POLY1305, &key)
-				.map_err(|e| ErrorKind::TxProofGenericError(format!("Unable to encrypt, {}", e)))?;
-		encrypt::aead::seal_in_place(&sealing_key, &nonce, &[], &mut enc_bytes, suffix_len)
+		let unbound_key = aead::UnboundKey::new(&aead::CHACHA20_POLY1305, &key)
+			.map_err(|e| ErrorKind::TxProofGenericError(format!("Unable to build a key, {}", e)))?;
+		let sealing_key: aead::LessSafeKey = aead::LessSafeKey::new(unbound_key);
+		let aad = aead::Aad::from(&[]);
+		sealing_key
+			.seal_in_place_append_tag(
+				aead::Nonce::assume_unique_for_key(nonce),
+				aad,
+				&mut enc_bytes,
+			)
 			.map_err(|e| ErrorKind::TxProofGenericError(format!("Unable to encrypt, {}", e)))?;
 
 		Ok(EncryptedMessage {
@@ -106,14 +109,13 @@ impl EncryptedMessage {
 		let common_secret_slice = &common_secret_ser[1..33];
 
 		let mut key = [0; 32];
-		ring::pbkdf2::derive(
-			&ring::digest::SHA512,
+		pbkdf2::derive(
+			ring::pbkdf2::PBKDF2_HMAC_SHA512,
 			NonZeroU32::new(100).unwrap(),
 			&salt,
 			common_secret_slice,
 			&mut key,
 		);
-
 		Ok(key)
 	}
 
@@ -131,14 +133,22 @@ impl EncryptedMessage {
 				self.nonce, e
 			))
 		})?;
+		let mut n = [0u8; 12];
+		n.copy_from_slice(&nonce[0..12]);
 
-		let opening_key = encrypt::aead::OpeningKey::new(&encrypt::aead::CHACHA20_POLY1305, key)
+		let unbound_key = aead::UnboundKey::new(&aead::CHACHA20_POLY1305, key)
 			.map_err(|e| ErrorKind::TxProofGenericError(format!("Unable to build a key, {}", e)))?;
-		let decrypted_data =
-			encrypt::aead::open_in_place(&opening_key, &nonce, &[], 0, &mut encrypted_message)
-				.map_err(|e| {
-					ErrorKind::TxProofGenericError(format!("Unable to decrypt the message, {}", e))
-				})?;
+		let opening_key: aead::LessSafeKey = aead::LessSafeKey::new(unbound_key);
+		let aad = aead::Aad::from(&[]);
+		let decrypted_data = opening_key
+			.open_in_place(
+				aead::Nonce::assume_unique_for_key(n),
+				aad,
+				&mut encrypted_message,
+			)
+			.map_err(|e| {
+				ErrorKind::TxProofGenericError(format!("Unable to decrypt the message, {}", e))
+			})?;
 
 		let res_msg = String::from_utf8(decrypted_data.to_vec()).map_err(|e| {
 			ErrorKind::TxProofGenericError(format!("Decrypted message is corrupted, {}", e))

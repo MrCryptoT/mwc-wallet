@@ -62,9 +62,9 @@ use std::thread;
 use sysinfo::{Process, ProcessExt, Signal};
 
 #[cfg(windows)]
-const TOR_EXE_NAME: &'static str = "tor.exe";
+const TOR_EXE_NAME: &str = "tor.exe";
 #[cfg(not(windows))]
-const TOR_EXE_NAME: &'static str = "tor";
+const TOR_EXE_NAME: &str = "tor";
 
 #[derive(Fail, Debug)]
 pub enum Error {
@@ -272,7 +272,7 @@ impl TorProcess {
 								.captures(line)
 								.and_then(|c| c.name("perc"))
 								.and_then(|pc| pc.as_str().parse::<u8>().ok())
-								.ok_or(Error::InvalidBootstrapLine(line.to_string()))?;
+								.ok_or_else(|| Error::InvalidBootstrapLine(line.to_string()))?;
 
 							if perc >= completion_perc {
 								break;

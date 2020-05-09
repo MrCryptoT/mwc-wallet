@@ -24,6 +24,8 @@ use libwallet::{InitTxArgs, Slate};
 use std::thread;
 use std::time::Duration;
 
+use grin_wallet_util::OnionV3Address;
+
 #[macro_use]
 mod common;
 use common::{clean_output_dir, create_wallet_proxy, setup};
@@ -75,16 +77,16 @@ fn payment_proofs_test_impl(test_dir: &'static str) -> Result<(), wallet::Error>
 		test_framework::award_blocks_to_wallet(&chain, wallet1.clone(), mask1, bh as usize, false);
 
 	let mut address = None;
-	wallet::controller::owner_single_use(wallet2.clone(), mask2, |api, m| {
+	wallet::controller::owner_single_use(Some(wallet2.clone()), mask2, None, |api, m| {
 		address = Some(api.get_public_proof_address(m, 0)?);
 		Ok(())
 	})?;
 
-	let address = address.unwrap();
+	let address = OnionV3Address::from_bytes(address.as_ref().unwrap().to_bytes());
 	println!("Public address is: {:?}", address);
 	let amount = 2_000_000_000; // grin value: 60_000_000_000
 	let mut slate = Slate::blank(1);
-	wallet::controller::owner_single_use(wallet1.clone(), mask1, |sender_api, m| {
+	wallet::controller::owner_single_use(Some(wallet1.clone()), mask1, None, |sender_api, m| {
 		// note this will increment the block count as part of the transaction "Posting"
 		let args = InitTxArgs {
 			src_acct_name: None,
@@ -93,14 +95,14 @@ fn payment_proofs_test_impl(test_dir: &'static str) -> Result<(), wallet::Error>
 			max_outputs: 500,
 			num_change_outputs: 1,
 			selection_strategy_is_use_all: true,
-			payment_proof_recipient_address: Some(address),
+			payment_proof_recipient_address: Some(address.clone()),
 			..Default::default()
 		};
 		let slate_i = sender_api.init_send_tx(m, args, None, 1)?;
 
 		assert_eq!(
 			slate_i.payment_proof.as_ref().unwrap().receiver_address,
-			address
+			address.to_ed25519().unwrap(),
 		);
 		println!(
 			"Sender addr: {:?}",
@@ -126,14 +128,31 @@ fn payment_proofs_test_impl(test_dir: &'static str) -> Result<(), wallet::Error>
 		assert_eq!(pp.sender_address_path, 0);
 		assert_eq!(pp.sender_signature, None);
 
+		// check we should get an error at this point since proof is not complete
+		let pp = sender_api.retrieve_payment_proof(m, true, None, Some(slate.id));
+		assert!(pp.is_err());
+
 		slate = sender_api.finalize_tx(m, &slate)?;
+		sender_api.post_tx(m, &slate.tx, true)?;
+		Ok(())
+	})?;
 
+	let _ = test_framework::award_blocks_to_wallet(&chain, wallet1.clone(), mask1, 2, false);
+
+	wallet::controller::owner_single_use(Some(wallet1.clone()), mask1, None, |sender_api, m| {
 		// Check payment proof here
-		let (_, txs) = sender_api.retrieve_txs(m, true, None, Some(slate.id))?;
-		let tx = txs[0].clone();
+		let mut pp = sender_api.retrieve_payment_proof(m, true, None, Some(slate.id))?;
 
-		println!("{:?}", tx);
+		println!("{:?}", pp);
 
+		// verify, should be good
+		let res = sender_api.verify_payment_proof(m, &pp)?;
+		assert_eq!(res, (true, false));
+
+		// Modify values, should not be good
+		pp.amount = 20;
+		let res = sender_api.verify_payment_proof(m, &pp);
+		assert!(res.is_err());
 		Ok(())
 	})?;
 

@@ -18,6 +18,7 @@ use crate::keychain;
 use crate::libwallet;
 use crate::util::secp;
 use failure::{Backtrace, Context, Fail};
+use grin_wallet_util::OnionV3AddressError;
 use std::env;
 use std::fmt::{self, Display};
 
@@ -41,6 +42,10 @@ pub enum ErrorKind {
 	/// Keychain error
 	#[fail(display = "Keychain error, {}", _0)]
 	Keychain(keychain::Error),
+
+	/// Onion V3 Address Error
+	#[fail(display = "Onion V3 Address Error")]
+	OnionV3Address(OnionV3AddressError),
 
 	/// Error when formatting json
 	#[fail(display = "IO error, {}", _0)]
@@ -136,13 +141,7 @@ impl Fail for Error {
 impl Display for Error {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		let show_bt = match env::var("RUST_BACKTRACE") {
-			Ok(r) => {
-				if r == "1" {
-					true
-				} else {
-					false
-				}
-			}
+			Ok(r) => r == "1",
 			Err(_) => false,
 		};
 		let backtrace = match self.backtrace() {
@@ -151,7 +150,7 @@ impl Display for Error {
 		};
 		let inner_output = format!("{}", self.inner,);
 		let backtrace_output = format!("\nBacktrace: {}", backtrace);
-		let mut output = inner_output.clone();
+		let mut output = inner_output;
 		if show_bt {
 			output.push_str(&backtrace_output);
 		}
@@ -217,5 +216,11 @@ impl From<libtx::Error> for Error {
 		Error {
 			inner: Context::new(ErrorKind::LibTX(error.kind())),
 		}
+	}
+}
+
+impl From<OnionV3AddressError> for Error {
+	fn from(error: OnionV3AddressError) -> Error {
+		Error::from(ErrorKind::OnionV3Address(error))
 	}
 }

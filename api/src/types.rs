@@ -20,7 +20,6 @@ use crate::util::secp::key::{PublicKey, SecretKey};
 use crate::util::secp::pedersen;
 use crate::util::{from_hex, to_hex};
 
-use crate::libwallet::encrypt;
 use base64;
 use chrono::{DateTime, Utc};
 use ed25519_dalek::PublicKey as DalekPublicKey;
@@ -29,6 +28,17 @@ use ring::aead;
 use serde_json::{self, Value};
 use std::collections::HashMap;
 use uuid::Uuid;
+
+/// Represents a compliant JSON RPC 2.0 id.
+/// Valid id: Integer, String.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[serde(untagged)]
+pub enum JsonId {
+	/// Integer Id
+	IntId(u32),
+	/// String Id
+	StrId(String),
+}
 
 /// Wrapper for API Tokens
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -74,23 +84,24 @@ impl EncryptedBody {
 			})?
 			.as_bytes()
 			.to_vec();
-		let sealing_key = encrypt::aead::SealingKey::new(
-			&encrypt::aead::CHACHA20_POLY1305,
-			&enc_key.0,
-		)
-		.map_err(|e| {
-			ErrorKind::APIEncryption(format!("EncryptedBody Enc: Unable to create key, {}", e))
-		})?;
-		let nonce: [u8; 12] = thread_rng().gen();
-		let suffix_len = aead::AES_256_GCM.tag_len();
-		for _ in 0..suffix_len {
-			to_encrypt.push(0);
-		}
 
-		encrypt::aead::seal_in_place(&sealing_key, &nonce, &[], &mut to_encrypt, suffix_len)
-			.map_err(|e| {
-				ErrorKind::APIEncryption(format!("EncryptedBody: Encryption Failed, {}", e))
-			})?;
+		let nonce: [u8; 12] = thread_rng().gen();
+
+		let unbound_key = aead::UnboundKey::new(&aead::AES_256_GCM, &enc_key.0).unwrap();
+		let sealing_key: aead::LessSafeKey = aead::LessSafeKey::new(unbound_key);
+		let aad = aead::Aad::from(&[]);
+		let res = sealing_key.seal_in_place_append_tag(
+			aead::Nonce::assume_unique_for_key(nonce),
+			aad,
+			&mut to_encrypt,
+		);
+		if let Err(e) = res {
+			return Err(ErrorKind::APIEncryption(format!(
+				"EncryptedBody: encryption failed, {}",
+				e
+			))
+			.into());
+		}
 
 		Ok(EncryptedBody {
 			nonce: to_hex(nonce.to_vec()),
@@ -126,30 +137,39 @@ impl EncryptedBody {
 				e
 			))
 		})?;
-		let opening_key = encrypt::aead::OpeningKey::new(
-			&encrypt::aead::CHACHA20_POLY1305,
-			&dec_key.0,
-		)
-		.map_err(|e| {
-			ErrorKind::APIEncryption(format!("EncryptedBody Dec: Unable to create key, {}", e))
-		})?;
+
 		let nonce = from_hex(&self.nonce).map_err(|e| {
-			ErrorKind::APIEncryption(format!("EncryptedBody Dec: Invalid Nonce, {}", e))
+			ErrorKind::APIEncryption(format!(
+				"EncryptedBody Dec: Encrypted request contains invalid nonce, {}",
+				e
+			))
 		})?;
-		encrypt::aead::open_in_place(&opening_key, &nonce, &[], 0, &mut to_decrypt).map_err(
-			|e| {
-				ErrorKind::APIEncryption(format!(
-					"EncryptedBody Dec: Decryption Failed (is key correct?), {}",
-					e
-				))
-			},
-		)?;
-		for _ in 0..encrypt::aead::CHACHA20_POLY1305.tag_len() {
+
+		if nonce.len() < 12 {
+			return Err(ErrorKind::APIEncryption(
+				"EncryptedBody Dec: Invalid Nonce length".to_string(),
+			)
+			.into());
+		}
+		let mut n = [0u8; 12];
+		n.copy_from_slice(&nonce[0..12]);
+		let unbound_key = aead::UnboundKey::new(&aead::AES_256_GCM, &dec_key.0).unwrap();
+		let opening_key: aead::LessSafeKey = aead::LessSafeKey::new(unbound_key);
+		let aad = aead::Aad::from(&[]);
+		opening_key
+			.open_in_place(aead::Nonce::assume_unique_for_key(n), aad, &mut to_decrypt)
+			.map_err(|e| {
+				ErrorKind::APIEncryption(format!("EncryptedBody: decryption failed, {}", e))
+			})?;
+
+		for _ in 0..aead::AES_256_GCM.tag_len() {
 			to_decrypt.pop();
 		}
-		let decrypted = String::from_utf8(to_decrypt).map_err(|e| {
-			ErrorKind::APIEncryption(format!("EncryptedBody Dec: Invalid UTF-8, {}", e))
+
+		let decrypted = String::from_utf8(to_decrypt).map_err(|_| {
+			ErrorKind::APIEncryption("EncryptedBody Dec: Invalid UTF-8".to_string())
 		})?;
+
 		Ok(serde_json::from_str(&decrypted).map_err(|e| {
 			ErrorKind::APIEncryption(format!("EncryptedBody Dec: Invalid JSON, {}", e))
 		})?)
@@ -164,18 +184,18 @@ pub struct EncryptedRequest {
 	/// method
 	pub method: String,
 	/// id
-	pub id: u32,
+	pub id: JsonId,
 	/// Body params, which includes nonce and encrypted request
 	pub params: EncryptedBody,
 }
 
 impl EncryptedRequest {
 	/// from json
-	pub fn from_json(id: u32, json_in: &Value, enc_key: &SecretKey) -> Result<Self, Error> {
+	pub fn from_json(id: &JsonId, json_in: &Value, enc_key: &SecretKey) -> Result<Self, Error> {
 		Ok(EncryptedRequest {
 			jsonrpc: "2.0".to_owned(),
 			method: "encrypted_request_v3".to_owned(),
-			id: id,
+			id: id.clone(),
 			params: EncryptedBody::from_json(json_in, enc_key)?,
 		})
 	}
@@ -215,14 +235,14 @@ pub struct EncryptedResponse {
 	/// JSON RPC response
 	pub jsonrpc: String,
 	/// id
-	pub id: u32,
+	pub id: JsonId,
 	/// result
 	pub result: HashMap<String, EncryptedBody>,
 }
 
 impl EncryptedResponse {
 	/// from json
-	pub fn from_json(id: u32, json_in: &Value, enc_key: &SecretKey) -> Result<Self, Error> {
+	pub fn from_json(id: &JsonId, json_in: &Value, enc_key: &SecretKey) -> Result<Self, Error> {
 		let mut result_set = HashMap::new();
 		result_set.insert(
 			"Ok".to_string(),
@@ -230,7 +250,7 @@ impl EncryptedResponse {
 		);
 		Ok(EncryptedResponse {
 			jsonrpc: "2.0".to_owned(),
-			id: id,
+			id: id.clone(),
 			result: result_set,
 		})
 	}
@@ -284,14 +304,15 @@ pub struct EncryptionErrorResponse {
 	/// JSON RPC response
 	pub jsonrpc: String,
 	/// id
-	pub id: u32,
+	#[serde(with = "secp_ser::string_or_u64")]
+	pub id: u64,
 	/// error
 	pub error: EncryptionError,
 }
 
 impl EncryptionErrorResponse {
 	/// Create new response
-	pub fn new(id: u32, code: i32, message: &str) -> Self {
+	pub fn new(id: u64, code: i32, message: &str) -> Self {
 		EncryptionErrorResponse {
 			jsonrpc: "2.0".to_owned(),
 			id: id,
@@ -449,12 +470,13 @@ fn encrypted_request() -> Result<(), Error> {
 			"token": "d202964900000000d302964900000000d402964900000000d502964900000000"
 		}
 	});
-	let enc_req = EncryptedRequest::from_json(1, &req, &shared_key)?;
+	let enc_req =
+		EncryptedRequest::from_json(&JsonId::StrId(String::from("1")), &req, &shared_key)?;
 	println!("{:?}", enc_req);
 	let dec_req = enc_req.decrypt(&shared_key)?;
 	println!("{:?}", dec_req);
 	assert_eq!(req, dec_req);
-	let enc_res = EncryptedResponse::from_json(1, &req, &shared_key)?;
+	let enc_res = EncryptedResponse::from_json(&JsonId::IntId(1), &req, &shared_key)?;
 	println!("{:?}", enc_res);
 	println!("{:?}", enc_res.as_json_str()?);
 	let dec_res = enc_res.decrypt(&shared_key)?;

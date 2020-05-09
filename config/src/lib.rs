@@ -31,7 +31,9 @@ pub mod config;
 #[allow(missing_docs)]
 pub mod types;
 
-pub use crate::config::{initial_setup_wallet, GRIN_WALLET_DIR, WALLET_CONFIG_FILE_NAME};
+pub use crate::config::{
+	config_file_exists, initial_setup_wallet, GRIN_WALLET_DIR, WALLET_CONFIG_FILE_NAME,
+};
 pub use crate::types::{
 	ConfigError, GlobalWalletConfig, GlobalWalletConfigMembers, MQSConfig, TorConfig, WalletConfig,
 };

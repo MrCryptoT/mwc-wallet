@@ -22,8 +22,8 @@ use crate::keychain::{Identifier, Keychain};
 use crate::libwallet::slate_versions::v3::TransactionV3;
 use crate::libwallet::{
 	AcctPathMapping, ErrorKind, InitTxArgs, IssueInvoiceTxArgs, NodeClient, NodeHeightResult,
-	OutputCommitMapping, Slate, StatusMessage, TxLogEntry, VersionedSlate, WalletInfo,
-	WalletLCProvider,
+	OutputCommitMapping, PaymentProof, Slate, StatusMessage, TxLogEntry, VersionedSlate,
+	WalletInfo, WalletLCProvider,
 };
 use crate::types::TxLogEntryAPI;
 use crate::util;
@@ -75,7 +75,7 @@ pub trait OwnerRpcS {
 		"id": 1
 	}
 	# "#
-	# , true, 4, false, false, false);
+	# , true, 4, false, false, false, false);
 	```
 	*/
 	fn accounts(&self, token: Token) -> Result<Vec<AcctPathMapping>, ErrorKind>;
@@ -108,7 +108,7 @@ pub trait OwnerRpcS {
 		"id": 1
 	}
 	# "#
-	# ,true, 4, false, false, false);
+	# ,true, 4, false, false, false, false);
 	```
 	 */
 	fn create_account_path(&self, token: Token, label: &String) -> Result<Identifier, ErrorKind>;
@@ -141,7 +141,7 @@ pub trait OwnerRpcS {
 		"id": 1
 	}
 	# "#
-	# , true, 4, false, false, false);
+	# , true, 4, false, false, false, false);
 	```
 	 */
 	fn set_active_account(&self, token: Token, label: &String) -> Result<(), ErrorKind>;
@@ -212,7 +212,7 @@ pub trait OwnerRpcS {
 	  }
 	}
 	# "#
-	# , true, 2, false, false, false);
+	# , true, 2, false, false, false, false);
 	```
 	*/
 	fn retrieve_outputs(
@@ -309,7 +309,7 @@ pub trait OwnerRpcS {
 		  }
 		}
 	# "#
-	# , true, 2, false, false, false);
+	# , true, 2, false, false, false, false);
 	```
 	*/
 
@@ -360,7 +360,7 @@ pub trait OwnerRpcS {
 	  }
 	}
 	# "#
-	# ,true, 4, false, false, false);
+	# ,true, 4, false, false, false, false);
 	```
 	 */
 
@@ -392,7 +392,7 @@ pub trait OwnerRpcS {
 					"selection_strategy_is_use_all": true,
 					"message": "my message",
 					"target_slate_version": null,
-					"payment_proof_recipient_address": "d03c09e9c19bb74aa9ea44e0fe5ae237a9bf40bddf0941064a80913a4459c8bb",
+					"payment_proof_recipient_address": "pa7wkkdgs5bkteha7lykl7ff2wztgdrxxo442xdcq2lnaphe5aidd4id",
 					"ttl_blocks": null,
 					"address": null,
 					"estimate_only": false,
@@ -426,7 +426,7 @@ pub trait OwnerRpcS {
 				}
 			  ],
 			  "payment_proof": {
-				"receiver_address": "d03c09e9c19bb74aa9ea44e0fe5ae237a9bf40bddf0941064a80913a4459c8bb",
+				"receiver_address": "783f6528669742a990e0faf0a5fca5d5b3330e37bbb9cd5c628696d03ce4e810",
 				"receiver_signature": null,
 				"sender_address": "32cdd63928854f8b2628b1dce4626ddcdf35d56cb7cfdf7d64cca5822b78d4d3"
 			  },
@@ -467,7 +467,7 @@ pub trait OwnerRpcS {
 		  }
 		}
 		# "#
-		# ,true, 4, false, false, false);
+		# ,true, 4, false, false, false, false);
 		#
 		# // Short request. minimum_confirmations is ptional but we put it, otherwise there will be not enough funds for default value 10
 		# grin_wallet_api::doctest_helper_json_rpc_owner_assert_response!(
@@ -544,7 +544,7 @@ pub trait OwnerRpcS {
 		  }
 		}
 		# "#
-		# ,true, 4, false, false, false);
+		# ,true, 4, false, false, false, false);
 	```
 	*/
 
@@ -623,7 +623,7 @@ pub trait OwnerRpcS {
 		  }
 		}
 		# "#
-		# ,true, 4, false, false, false);
+		# ,true, 4, false, false, false, false);
 		#
 		# // Full list of arguments
 		# grin_wallet_api::doctest_helper_json_rpc_owner_assert_response!(
@@ -697,7 +697,7 @@ pub trait OwnerRpcS {
 		  }
 		}
 		# "#
-		# ,true, 4, false, false, false);
+		# ,true, 4, false, false, false, false);
 	```
 	*/
 
@@ -852,7 +852,7 @@ pub trait OwnerRpcS {
 		  }
 		}
 	# "#
-	# ,true, 4, false, false, false);
+	# ,true, 4, false, false, false, false);
 	```
 	*/
 
@@ -943,7 +943,7 @@ pub trait OwnerRpcS {
 		}
 	}
 	# "#
-	# ,true, 5 ,true, false, false);
+	# ,true, 5 ,true, false, false, false);
 
 	```
 	 */
@@ -1112,7 +1112,7 @@ pub trait OwnerRpcS {
 		}
 	}
 	# "#
-	# , true, 5, true, true, false);
+	# , true, 5, true, true, false, false);
 	```
 	 */
 	fn finalize_tx(&self, token: Token, slate: VersionedSlate)
@@ -1180,7 +1180,7 @@ pub trait OwnerRpcS {
 		}
 	}
 	# "#
-	# , true, 5, true, true, true);
+	# , true, 5, true, true, true, false);
 	```
 	 */
 
@@ -1214,7 +1214,7 @@ pub trait OwnerRpcS {
 		}
 	}
 	# "#
-	# , true, 5, true, true, false);
+	# , true, 5, true, true, false, false);
 	#
 	# grin_wallet_api::doctest_helper_json_rpc_owner_assert_response!(
 	# r#"
@@ -1239,7 +1239,7 @@ pub trait OwnerRpcS {
 		}
 	}
 	# "#
-	# , true, 5, true, true, false);
+	# , true, 5, true, true, false, false);
 	```
 	 */
 	fn cancel_tx(
@@ -1314,7 +1314,7 @@ pub trait OwnerRpcS {
 	  }
 	}
 	# "#
-	# , true, 5, true, true, false);
+	# , true, 5, true, true, false, false);
 	```
 	 */
 	fn get_stored_tx(
@@ -1400,7 +1400,7 @@ pub trait OwnerRpcS {
 		}
 	}
 	# "#
-	# ,true, 0 ,false, false, false);
+	# ,true, 0 ,false, false, false, false);
 	```
 	*/
 	fn verify_slate_messages(&self, token: Token, slate: VersionedSlate) -> Result<(), ErrorKind>;
@@ -1433,7 +1433,7 @@ pub trait OwnerRpcS {
 		}
 	}
 	# "#
-	# , true, 1, false, false, false);
+	# , true, 1, false, false, false, false);
 	```
 	 */
 	fn scan(
@@ -1472,7 +1472,7 @@ pub trait OwnerRpcS {
 		}
 	}
 	# "#
-	# , true, 5, false, false, false);
+	# , true, 5, false, false, false, false);
 	```
 	 */
 	fn node_height(&self, token: Token) -> Result<NodeHeightResult, ErrorKind>;
@@ -1555,7 +1555,7 @@ pub trait OwnerRpcS {
 		}
 	}
 	# "#
-	# , true, 5, false, false, false);
+	# , true, 5, false, false, false, false);
 	```
 	*/
 
@@ -1585,7 +1585,7 @@ pub trait OwnerRpcS {
 		}
 	}
 	# "#
-	# , true, 5, false, false, false);
+	# , true, 5, false, false, false, false);
 	```
 	*/
 
@@ -1655,7 +1655,7 @@ pub trait OwnerRpcS {
 		}
 	}
 	# "#
-	# , true, 5, false, false, false);
+	# , true, 5, false, false, false, false);
 	```
 	*/
 	fn create_config(
@@ -1678,7 +1678,7 @@ pub trait OwnerRpcS {
 		"params": {
 			"name": null,
 			"mnemonic": null,
-			"mnemonic_length": 0,
+			"mnemonic_length": 32,
 			"password": "my_secret_password"
 		},
 		"id": 1
@@ -1694,7 +1694,7 @@ pub trait OwnerRpcS {
 		}
 	}
 	# "#
-	# , true, 0, false, false, false);
+	# , true, 0, false, false, false, false);
 	```
 	*/
 
@@ -1731,7 +1731,7 @@ pub trait OwnerRpcS {
 		}
 	}
 	# "#
-	# , true, 0, false, false, false);
+	# , true, 0, false, false, false, false);
 	```
 	*/
 
@@ -1761,7 +1761,7 @@ pub trait OwnerRpcS {
 		}
 	}
 	# "#
-	# , true, 0, false, false, false);
+	# , true, 0, false, false, false, false);
 	```
 	*/
 
@@ -1792,7 +1792,7 @@ pub trait OwnerRpcS {
 		}
 	}
 	# "#
-	# , true, 0, false, false, false);
+	# , true, 0, false, false, false, false);
 	```
 	*/
 
@@ -1824,7 +1824,7 @@ pub trait OwnerRpcS {
 		}
 	}
 	# "#
-	# , true, 0, false, false, false);
+	# , true, 0, false, false, false, false);
 	```
 	*/
 	fn change_password(
@@ -1858,7 +1858,7 @@ pub trait OwnerRpcS {
 		}
 	}
 	# "#
-	# , true, 0, false, false, false);
+	# , true, 0, false, false, false, false);
 	```
 	*/
 	fn delete_wallet(&self, name: Option<String>) -> Result<(), ErrorKind>;
@@ -1888,7 +1888,7 @@ pub trait OwnerRpcS {
 		}
 	}
 	# "#
-	# , true, 0, false, false, false);
+	# , true, 0, false, false, false, false);
 	```
 	*/
 
@@ -1916,7 +1916,7 @@ pub trait OwnerRpcS {
 		}
 	}
 	# "#
-	# , true, 0, false, false, false);
+	# , true, 0, false, false, false, false);
 	```
 	*/
 	fn stop_updater(&self) -> Result<(), ErrorKind>;
@@ -1945,7 +1945,7 @@ pub trait OwnerRpcS {
 		}
 	}
 	# "#
-	# , true, 0, false, false, false);
+	# , true, 0, false, false, false, false);
 	```
 	*/
 
@@ -1976,7 +1976,7 @@ pub trait OwnerRpcS {
 		}
 	}
 	# "#
-	# , true, 0, false, false, false);
+	# , true, 0, false, false, false, false);
 	```
 	*/
 
@@ -2010,11 +2010,102 @@ pub trait OwnerRpcS {
 		}
 	}
 	# "#
-	# , true, 0, false, false, false);
+	# , true, 0, false, false, false, false);
 	```
 	*/
 
 	fn proof_address_from_onion_v3(&self, address_v3: String) -> Result<PubAddress, ErrorKind>;
+
+	/**
+	Networked version of [Owner::retrieve_payment_proof](struct.Owner.html#method.retrieve_payment_proof).
+	```
+	# grin_wallet_api::doctest_helper_json_rpc_owner_assert_response!(
+	# r#"
+	{
+		"jsonrpc": "2.0",
+		"method": "retrieve_payment_proof",
+		"params": {
+			"token": "d202964900000000d302964900000000d402964900000000d502964900000000",
+			"refresh_from_node": true,
+			"tx_id": null,
+			"tx_slate_id": "0436430c-2b02-624c-2032-570501212b00"
+		},
+		"id": 1
+	}
+	# "#
+	# ,
+	# r#"
+	{
+	  "id": 1,
+	  "jsonrpc": "2.0",
+	  "result": {
+		"Ok": {
+		  "amount": "2000000000",
+		  "excess": "08b3b8b83c622f630141a66c9cad96e19c78f745e4e2ddea85439f05d14a404640",
+		  "recipient_address": "pa7wkkdgs5bkteha7lykl7ff2wztgdrxxo442xdcq2lnaphe5aidd4id",
+		  "recipient_sig": "ac71a2f32b2aa677c816f6cbc496ca44c56fd39d60c8c247b4e64bb8d7bb8f40d4df59c99b1e86519595a70824878359cf5a8ebe1c8b43c4a7d4da81bc2caf0d",
+		  "sender_address": "glg5mojiqvhywjriwhooiytn3tptlvlmw7h567lezssyek3y2tjzznad",
+		  "sender_sig": "d14470bef1b777672ddbcc02d5d15036fe35a5e15d6149f082d57f3eb55507112c398ff983373171f0182da40fa759883bc6e6c2e1eb2079992a25ea55c1540b"
+		}
+	  }
+	}
+	# "#
+	# , true, 5, true, true, true, true);
+	```
+	*/
+
+	fn retrieve_payment_proof(
+		&self,
+		token: Token,
+		refresh_from_node: bool,
+		tx_id: Option<u32>,
+		tx_slate_id: Option<Uuid>,
+	) -> Result<PaymentProof, ErrorKind>;
+
+	/**
+	Networked version of [Owner::verify_payment_proof](struct.Owner.html#method.verify_payment_proof).
+	```
+	# grin_wallet_api::doctest_helper_json_rpc_owner_assert_response!(
+	# r#"
+	{
+		"jsonrpc": "2.0",
+		"method": "verify_payment_proof",
+		"params": {
+			"token": "d202964900000000d302964900000000d402964900000000d502964900000000",
+			"proof": {
+				   "amount": "2000000000",
+				"excess": "08b3b8b83c622f630141a66c9cad96e19c78f745e4e2ddea85439f05d14a404640",
+				"recipient_address": "pa7wkkdgs5bkteha7lykl7ff2wztgdrxxo442xdcq2lnaphe5aidd4id",
+				"recipient_sig": "ac71a2f32b2aa677c816f6cbc496ca44c56fd39d60c8c247b4e64bb8d7bb8f40d4df59c99b1e86519595a70824878359cf5a8ebe1c8b43c4a7d4da81bc2caf0d",
+				"sender_address": "glg5mojiqvhywjriwhooiytn3tptlvlmw7h567lezssyek3y2tjzznad",
+				"sender_sig": "d14470bef1b777672ddbcc02d5d15036fe35a5e15d6149f082d57f3eb55507112c398ff983373171f0182da40fa759883bc6e6c2e1eb2079992a25ea55c1540b"
+			}
+		},
+		"id": 1
+	}
+	# "#
+	# ,
+	# r#"
+	{
+		"id": 1,
+		"jsonrpc": "2.0",
+		"result": {
+			"Ok": [
+				true,
+				false
+			]
+		}
+	}
+	# "#
+	# , true, 5, true, true, true, true);
+	```
+	*/
+
+	fn verify_payment_proof(
+		&self,
+		token: Token,
+		proof: PaymentProof,
+	) -> Result<(bool, bool), ErrorKind>;
 
 	/**
 	Networked version of [Owner::set_tor_config](struct.Owner.html#method.set_tor_config).
@@ -2044,7 +2135,7 @@ pub trait OwnerRpcS {
 		}
 	}
 	# "#
-	# , true, 0, false, false, false);
+	# , true, 0, false, false, false, false);
 	```
 	*/
 	fn set_tor_config(&self, tor_config: Option<TorConfig>) -> Result<(), ErrorKind>;
@@ -2246,7 +2337,7 @@ where
 					.collect(),
 			),
 		)
-		.map(|x| x.map(|y| TransactionV3::from(y)))
+		.map(|x| x.map(TransactionV3::from))
 		.map_err(|e| e.kind())
 	}
 
@@ -2289,21 +2380,19 @@ where
 		let secp = secp_inst.lock();
 		let sec_key = SecretKey::new(&secp, &mut thread_rng());
 
-		let mut shared_pubkey = ecdh_pubkey.ecdh_pubkey.clone();
+		let mut shared_pubkey = ecdh_pubkey.ecdh_pubkey;
 		shared_pubkey
 			.mul_assign(&secp, &sec_key)
-			.map_err(|e| ErrorKind::Secp(e))?;
+			.map_err(ErrorKind::Secp)?;
 
 		let x_coord = shared_pubkey.serialize_vec(&secp, true);
-		let shared_key =
-			SecretKey::from_slice(&secp, &x_coord[1..]).map_err(|e| ErrorKind::Secp(e))?;
+		let shared_key = SecretKey::from_slice(&secp, &x_coord[1..]).map_err(ErrorKind::Secp)?;
 		{
 			let mut s = self.shared_key.lock();
 			*s = Some(shared_key);
 		}
 
-		let pub_key =
-			PublicKey::from_secret_key(&secp, &sec_key).map_err(|e| ErrorKind::Secp(e))?;
+		let pub_key = PublicKey::from_secret_key(&secp, &sec_key).map_err(ErrorKind::Secp)?;
 
 		Ok(ECDHPubkey {
 			ecdh_pubkey: pub_key,
@@ -2378,7 +2467,7 @@ where
 		let n = name.as_ref().map(|s| s.as_str());
 		let res = Owner::get_mnemonic(self, n, ZeroingString::from(password), None)
 			.map_err(|e| e.kind())?;
-		Ok(format!("{}", &*res))
+		Ok((&*res).to_string())
 	}
 
 	fn change_password(
@@ -2432,6 +2521,32 @@ where
 		)
 		.map_err(|e| e.kind())?;
 		Ok(PubAddress { address })
+	}
+
+	fn retrieve_payment_proof(
+		&self,
+		token: Token,
+		refresh_from_node: bool,
+		tx_id: Option<u32>,
+		tx_slate_id: Option<Uuid>,
+	) -> Result<PaymentProof, ErrorKind> {
+		Owner::retrieve_payment_proof(
+			self,
+			(&token.keychain_mask).as_ref(),
+			refresh_from_node,
+			tx_id,
+			tx_slate_id,
+		)
+		.map_err(|e| e.kind())
+	}
+
+	fn verify_payment_proof(
+		&self,
+		token: Token,
+		proof: PaymentProof,
+	) -> Result<(bool, bool), ErrorKind> {
+		Owner::verify_payment_proof(self, (&token.keychain_mask).as_ref(), &proof)
+			.map_err(|e| e.kind())
 	}
 
 	fn proof_address_from_onion_v3(&self, address_v3: String) -> Result<PubAddress, ErrorKind> {

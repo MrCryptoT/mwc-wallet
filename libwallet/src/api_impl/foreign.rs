@@ -131,7 +131,7 @@ where
 		use_test_rng,
 		num_outputs,
 	)?;
-	tx::update_message(&mut *w, keychain_mask, &mut ret_slate)?;
+	tx::update_message(&mut *w, keychain_mask, &ret_slate)?;
 
 	let keychain = w.keychain(keychain_mask)?;
 	let excess = ret_slate.calc_excess(&keychain)?;
@@ -167,8 +167,8 @@ where
 	let context = w.get_private_context(keychain_mask, sl.id.as_bytes(), 0)?;
 	// Participant id 0 for mwc713 compatibility
 	tx::complete_tx(&mut *w, keychain_mask, &mut sl, 0, &context)?;
-	tx::update_stored_tx(&mut *w, keychain_mask, &context, &mut sl, true)?;
-	tx::update_message(&mut *w, keychain_mask, &mut sl)?;
+	tx::update_stored_tx(&mut *w, keychain_mask, &context, &sl, true)?;
+	tx::update_message(&mut *w, keychain_mask, &sl)?;
 	{
 		let mut batch = w.batch(keychain_mask)?;
 		// Participant id 0 for mwc713 compatibility

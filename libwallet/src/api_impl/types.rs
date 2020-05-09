@@ -20,8 +20,9 @@ use crate::grin_util::secp::pedersen;
 use crate::slate_versions::ser as dalek_ser;
 use crate::slate_versions::SlateVersion;
 use crate::types::OutputData;
+use grin_wallet_util::OnionV3Address;
 
-use ed25519_dalek::PublicKey as DalekPublicKey;
+use ed25519_dalek::Signature as DalekSignature;
 
 /// Send TX API Args
 // TODO: This is here to ensure the legacy V1 API remains intact
@@ -102,9 +103,9 @@ pub struct InitTxArgs {
 	#[serde(default)]
 	pub ttl_blocks: Option<u64>,
 	/// If set, require a payment proof for the particular recipient
-	#[serde(with = "dalek_ser::option_dalek_pubkey_serde")]
+	#[serde(with = "dalek_ser::option_ov3_serde")]
 	#[serde(default)]
-	pub payment_proof_recipient_address: Option<DalekPublicKey>,
+	pub payment_proof_recipient_address: Option<OnionV3Address>,
 	/// address of another party to store in tx history.
 	#[serde(default)]
 	pub address: Option<String>,
@@ -292,4 +293,30 @@ pub struct VersionInfo {
 	pub foreign_api_version: u16,
 	/// Slate version
 	pub supported_slate_versions: Vec<SlateVersion>,
+}
+
+/// Packaged Payment Proof
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct PaymentProof {
+	/// Amount
+	#[serde(with = "secp_ser::string_or_u64")]
+	pub amount: u64,
+	/// Kernel Excess
+	#[serde(
+		serialize_with = "secp_ser::as_hex",
+		deserialize_with = "secp_ser::commitment_from_hex"
+	)]
+	pub excess: pedersen::Commitment,
+	/// Recipient Wallet Address (Onion V3)
+	#[serde(with = "dalek_ser::ov3_serde")]
+	pub recipient_address: OnionV3Address,
+	/// Recipient Signature
+	#[serde(with = "dalek_ser::dalek_sig_serde")]
+	pub recipient_sig: DalekSignature,
+	/// Sender Wallet Address (Onion V3)
+	#[serde(with = "dalek_ser::ov3_serde")]
+	pub sender_address: OnionV3Address,
+	/// Sender Signature
+	#[serde(with = "dalek_ser::dalek_sig_serde")]
+	pub sender_sig: DalekSignature,
 }

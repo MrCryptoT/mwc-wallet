@@ -12,10 +12,16 @@
 // limitations under the License.
 
 #[macro_use]
-extern crate log;
+extern crate lazy_static;
+#[macro_use]
+extern crate clap;
+
+//#[macro_use]
+//extern crate log;
 
 use grin_wallet_config as config;
 use grin_wallet_util::grin_api as api;
 use grin_wallet_util::grin_util as util;
 
+mod cli;
 pub mod cmd;

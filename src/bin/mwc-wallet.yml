@@ -44,6 +44,8 @@ args:
       long: api_server_address
       takes_value: true
 subcommands:
+  - cli:
+      about: Start the wallet in interactive CLI mode (EXPERIMENTAL and UNDER DEVELOPMENT)
   - account:
       about: List wallet accounts or create a new account
       args:
@@ -111,7 +113,7 @@ subcommands:
         - minimum_confirmations_change_outputs:
             help: minimum confirmations required for change outputs. This value may only be set if the -exclude_change_outputs flag is set.
             short: r
-            long: minimum_confirmations_change_outputs 
+            long: minimum_confirmations_change_outputs
             default_value: "1"
             takes_value: true
         - selection_strategy:
@@ -402,6 +404,10 @@ subcommands:
             short: r
             long: recover
             takes_value: false
+  - open:
+      about: Opens a wallet (interactive mode only)
+  - close:
+      about: Closes the wallet (interactive mode only)
   - recover:
       about: Displays a recovery phrase for the wallet. (use `init -r` to perform recovery)
   - address:
@@ -418,8 +424,34 @@ subcommands:
             help: If given, the first block from which to start the scan (default 1)
             short: h
             long: start_height
-            default_value: "1"
             takes_value: true
+        - backwards_from_tip:
+            help: If given, start scan b blocks back from the tip
+            short: b
+            long: backwards_from_tip,
+            takes_value: true
+  - export_proof:
+      about: Export a payment proof from a completed transaction
+      args:
+          - output:
+              help: Output proof file
+              index: 1
+          - id:
+              help: If specified, retrieve the proof for the given transaction ID
+              short: i
+              long: id
+              takes_value: true
+          - txid:
+              help: If specified, retrieve the proof for the given Slate ID
+              short: t
+              long: txid
+              takes_value: true
+  - verify_proof:
+      about: Verify a payment proof
+      args:
+          - input:
+              help: Filename of a proof file
+              index: 1
   - dump-wallet-data:
       about: Print wallet internal data (transactions, outputs)
       args:

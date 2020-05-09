@@ -110,8 +110,8 @@ where
 	K: Keychain + 'a,
 {
 	let label = label.to_owned();
-	if let Some(_) = wallet.acct_path_iter().find(|l| l.label == label) {
-		return Err(ErrorKind::AccountLabelAlreadyExists(label.clone()).into());
+	if wallet.acct_path_iter().any(|l| l.label == label) {
+		return Err(ErrorKind::AccountLabelAlreadyExists(label).into());
 	}
 
 	// We're always using paths at m/k/0 for parent keys for output derivations
@@ -133,7 +133,7 @@ where
 	};
 
 	let save_path = AcctPathMapping {
-		label: label.to_owned(),
+		label: label,
 		path: return_id.clone(),
 	};
 
@@ -157,7 +157,7 @@ where
 {
 	let label = label.to_owned();
 	let save_path = AcctPathMapping {
-		label: label.to_owned(),
+		label: label,
 		path: path.clone(),
 	};
 

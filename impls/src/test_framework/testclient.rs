@@ -22,13 +22,13 @@ use crate::chain::Chain;
 use crate::core::core::verifier_cache::LruVerifierCache;
 use crate::core::core::{Transaction, TxKernel};
 use crate::core::global::{set_mining_mode, ChainTypes};
-use crate::core::{pow, ser};
+use crate::core::pow;
 use crate::keychain::Keychain;
 use crate::libwallet;
 use crate::libwallet::api_impl::foreign;
 use crate::libwallet::slate_versions::v3::SlateV3;
 use crate::libwallet::{
-	HeaderInfo, NodeClient, NodeVersionInfo, Slate, TxWrapper, WalletInst, WalletLCProvider,
+	HeaderInfo, NodeClient, NodeVersionInfo, Slate, WalletInst, WalletLCProvider,
 };
 use crate::util;
 use crate::util::secp::key::SecretKey;
@@ -101,7 +101,7 @@ where
 		let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
 		let dir_name = format!("{}/.grin", chain_dir);
 		let c = Chain::init(
-			dir_name.to_string(),
+			dir_name,
 			Arc::new(NoopAdapter {}),
 			genesis_block,
 			pow::verify_size,
@@ -110,15 +110,14 @@ where
 		)
 		.unwrap();
 		let (tx, rx) = channel();
-		let retval = WalletProxy {
+		WalletProxy {
 			chain_dir: chain_dir.to_owned(),
 			chain: Arc::new(c),
 			tx: tx,
 			rx: rx,
 			wallets: HashMap::new(),
 			running: Arc::new(AtomicBool::new(false)),
-		};
-		retval
+		}
 	}
 
 	/// Add wallet with a given "address"
@@ -181,18 +180,9 @@ where
 	fn post_tx(&mut self, m: WalletProxyMessage) -> Result<WalletProxyMessage, libwallet::Error> {
 		let dest_wallet = self.wallets.get_mut(&m.sender_id).unwrap().1.clone();
 		let dest_wallet_mask = self.wallets.get_mut(&m.sender_id).unwrap().2.clone();
-		let wrapper: TxWrapper = serde_json::from_str(&m.body).map_err(|e| {
-			libwallet::ErrorKind::ClientCallback(format!("Error parsing TxWrapper, {}", e))
+		let tx: Transaction = serde_json::from_str(&m.body).map_err(|e| {
+			libwallet::ErrorKind::ClientCallback(format!("Error parsing Transaction, {}", e))
 		})?;
-
-		let tx_bin = util::from_hex(&wrapper.tx_hex).map_err(|e| {
-			libwallet::ErrorKind::ClientCallback(format!("Error parsing TxWrapper: tx_bin, {}", e))
-		})?;
-
-		let tx: Transaction =
-			ser::deserialize(&mut &tx_bin[..], ser::ProtocolVersion(1)).map_err(|e| {
-				libwallet::ErrorKind::ClientCallback(format!("Error parsing TxWrapper: tx, {}", e))
-			})?;
 
 		super::award_block_to_wallet(
 			&self.chain,
@@ -221,7 +211,7 @@ where
 		};
 
 		let slate: SlateV3 = serde_json::from_str(&m.body).map_err(|e| {
-			libwallet::ErrorKind::ClientCallback(format!("Error parsing TxWrapper, {}", e))
+			libwallet::ErrorKind::ClientCallback(format!("Error parsing Transaction, {}", e))
 		})?;
 
 		let slate: Slate = {
@@ -306,11 +296,11 @@ where
 		&mut self,
 		m: WalletProxyMessage,
 	) -> Result<WalletProxyMessage, libwallet::Error> {
-		let split = m.body.split(",");
+		let split = m.body.split(',');
 		//let mut api_outputs: HashMap<pedersen::Commitment, String> = HashMap::new();
 		let mut outputs: Vec<api::Output> = vec![];
 		for o in split {
-			if o.len() == 0 {
+			if o.is_empty() {
 				continue;
 			}
 			let c = util::from_hex(o).unwrap();
@@ -333,7 +323,7 @@ where
 		&mut self,
 		m: WalletProxyMessage,
 	) -> Result<WalletProxyMessage, libwallet::Error> {
-		let split = m.body.split(",").collect::<Vec<&str>>();
+		let split = m.body.split(',').collect::<Vec<&str>>();
 		let start_index = split[0].parse::<u64>().unwrap();
 		let max = split[1].parse::<u64>().unwrap();
 		let end_index = split[2].parse::<u64>().unwrap();
@@ -356,7 +346,7 @@ where
 		&mut self,
 		m: WalletProxyMessage,
 	) -> Result<WalletProxyMessage, libwallet::Error> {
-		let split = m.body.split(",").collect::<Vec<&str>>();
+		let split = m.body.split(',').collect::<Vec<&str>>();
 		let start_index = split[0].parse::<u64>().unwrap();
 		let end_index = split[1].parse::<u64>().unwrap();
 		let end_index = match end_index {
@@ -397,13 +387,21 @@ where
 		&mut self,
 		m: WalletProxyMessage,
 	) -> Result<WalletProxyMessage, libwallet::Error> {
-		let split = m.body.split(",").collect::<Vec<&str>>();
-		let excess = split[0];
+		let split = m.body.split(',').collect::<Vec<&str>>();
+		let excess = split[0].parse::<String>().unwrap();
 		let min = split[1].parse::<u64>().unwrap();
 		let max = split[2].parse::<u64>().unwrap();
-		let commit_bytes = util::from_hex(excess).unwrap();
+		let commit_bytes = util::from_hex(&excess).unwrap();
 		let commit = pedersen::Commitment::from_vec(commit_bytes);
-		let k = super::get_kernel_local(self.chain.clone(), &commit, Some(min), Some(max));
+		let min = match min {
+			0 => None,
+			m => Some(m),
+		};
+		let max = match max {
+			0 => None,
+			m => Some(m),
+		};
+		let k = super::get_kernel_local(self.chain.clone(), &commit, min, max);
 		Ok(WalletProxyMessage {
 			sender_id: "node".to_owned(),
 			dest: m.sender_id,
@@ -484,7 +482,7 @@ impl NodeClient for LocalWalletClient {
 	}
 	/// Posts a transaction to a grin node
 	/// In this case it will create a new block with award rewarded to
-	fn post_tx(&self, tx: &TxWrapper, _fluff: bool) -> Result<(), libwallet::Error> {
+	fn post_tx(&self, tx: &Transaction, _fluff: bool) -> Result<(), libwallet::Error> {
 		let m = WalletProxyMessage {
 			sender_id: self.id.clone(),
 			dest: self.node_url().to_owned(),
@@ -499,7 +497,7 @@ impl NodeClient for LocalWalletClient {
 		}
 		let r = self.rx.lock();
 		let m = r.recv().unwrap();
-		trace!("Received post_tx response: {:?}", m.clone());
+		trace!("Received post_tx response: {:?}", m);
 		Ok(())
 	}
 
@@ -582,7 +580,7 @@ impl NodeClient for LocalWalletClient {
 	) -> Result<HashMap<pedersen::Commitment, (String, u64, u64)>, libwallet::Error> {
 		let query_params: Vec<String> = wallet_outputs
 			.iter()
-			.map(|commit| format!("{}", util::to_hex(commit.as_ref().to_vec())))
+			.map(|commit| util::to_hex(commit.as_ref().to_vec()))
 			.collect();
 		let query_str = query_params.join(",");
 		let m = WalletProxyMessage {
@@ -750,7 +748,6 @@ impl NodeClient for LocalWalletClient {
 		start_height: u64,
 		end_height: u64,
 		_threads_number: usize,
-		_include_proof: bool,
 	) -> Result<Vec<api::BlockPrintable>, libwallet::Error> {
 		let m = WalletProxyMessage {
 			sender_id: self.id.clone(),

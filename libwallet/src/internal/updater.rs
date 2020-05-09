@@ -77,7 +77,7 @@ where
 	outputs = outputs
 		.iter()
 		.filter(|o| o.root_key_id == *parent_key_id)
-		.map(|o| o.clone())
+		.cloned()
 		.collect();
 
 	outputs.sort_by_key(|out| out.n_child);
@@ -107,7 +107,7 @@ where
 				ErrorKind::GenericError(format!("Unable to parse HEX commit {}, {}", c, e))
 			})?),
 			None => keychain // TODO: proper support for different switch commitment schemes
-				.commit(out.value, &out.key_id, &SwitchCommitmentType::Regular)?,
+				.commit(out.value, &out.key_id, SwitchCommitmentType::Regular)?,
 		};
 		res.push(OutputCommitMapping {
 			output: out,
@@ -238,7 +238,7 @@ where
 			batch.save(o)?;
 		}
 	}
-	let mut tx = tx.clone();
+	let mut tx = tx;
 	if tx.tx_type == TxLogEntryType::TxSent {
 		tx.tx_type = TxLogEntryType::TxSentCancelled;
 	}

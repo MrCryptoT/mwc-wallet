@@ -240,16 +240,16 @@ where
 	fn batch_no_mask<'a>(&'a mut self) -> Result<Box<dyn WalletOutputBatch<K> + 'a>, Error>;
 
 	/// Return the current child Index
-	fn current_child_index<'a>(&mut self, parent_key_id: &Identifier) -> Result<u32, Error>;
+	fn current_child_index(&mut self, parent_key_id: &Identifier) -> Result<u32, Error>;
 
 	/// Next child ID when we want to create a new output, based on current parent
-	fn next_child<'a>(&mut self, keychain_mask: Option<&SecretKey>) -> Result<Identifier, Error>;
+	fn next_child(&mut self, keychain_mask: Option<&SecretKey>) -> Result<Identifier, Error>;
 
 	/// last verified height of outputs directly descending from the given parent key
-	fn last_confirmed_height<'a>(&mut self) -> Result<u64, Error>;
+	fn last_confirmed_height(&mut self) -> Result<u64, Error>;
 
 	/// last block scanned during scan or restore
-	fn last_scanned_blocks<'a>(&mut self) -> Result<Vec<ScannedBlockInfo>, Error>;
+	fn last_scanned_blocks(&mut self) -> Result<Vec<ScannedBlockInfo>, Error>;
 }
 
 /// Batch trait to update the output data backend atomically. Trying to use a
@@ -354,7 +354,7 @@ pub trait NodeClient: Send + Sync + Clone {
 	fn set_node_api_secret(&mut self, node_api_secret: Option<String>);
 
 	/// Posts a transaction to a grin node
-	fn post_tx(&self, tx: &TxWrapper, fluff: bool) -> Result<(), Error>;
+	fn post_tx(&self, tx: &Transaction, fluff: bool) -> Result<(), Error>;
 
 	/// Returns the api version string and block header version as reported
 	/// by the node. Result can be cached for later use
@@ -423,7 +423,6 @@ pub trait NodeClient: Send + Sync + Clone {
 		start_height: u64,
 		end_height: u64,
 		threads_number: usize,
-		include_proof: bool,
 	) -> Result<Vec<grin_api::BlockPrintable>, Error>;
 }
 
@@ -523,29 +522,23 @@ impl OutputData {
 	/// Check if output is eligible to spend based on state and height and
 	/// confirmations
 	pub fn eligible_to_spend(&self, current_height: u64, minimum_confirmations: u64) -> bool {
-		if [OutputStatus::Spent, OutputStatus::Locked].contains(&self.status) {
-			return false;
-		} else if self.status == OutputStatus::Unconfirmed && self.is_coinbase {
-			return false;
-		} else if self.lock_height > current_height {
-			return false;
-		} else if self.status == OutputStatus::Unspent
-			&& self.num_confirmations(current_height) >= minimum_confirmations
+		if [OutputStatus::Spent, OutputStatus::Locked].contains(&self.status)
+			|| self.status == OutputStatus::Unconfirmed && self.is_coinbase
+			|| self.lock_height > current_height
 		{
-			return true;
-		} else if self.status == OutputStatus::Unconfirmed && minimum_confirmations == 0 {
-			return true;
+			false
 		} else {
-			return false;
+			(self.status == OutputStatus::Unspent
+				&& self.num_confirmations(current_height) >= minimum_confirmations)
+				|| self.status == OutputStatus::Unconfirmed && minimum_confirmations == 0
 		}
 	}
 
 	/// Marks this output as unspent if it was previously unconfirmed
 	pub fn mark_unspent(&mut self) {
-		match self.status {
-			OutputStatus::Unconfirmed => self.status = OutputStatus::Unspent,
-			_ => (),
-		}
+		if let OutputStatus::Unconfirmed = self.status {
+			self.status = OutputStatus::Unspent
+		};
 	}
 
 	/// Mark an output as spent
@@ -660,7 +653,7 @@ impl Context {
 	/// be kept between invocations
 	pub fn add_output(&mut self, output_id: &Identifier, mmr_index: &Option<u64>, amount: u64) {
 		self.output_ids
-			.push((output_id.clone(), mmr_index.clone(), amount));
+			.push((output_id.clone(), *mmr_index, amount));
 	}
 
 	/// Returns all stored outputs
@@ -671,8 +664,7 @@ impl Context {
 	/// Tracks IDs of my inputs into the transaction
 	/// be kept between invocations
 	pub fn add_input(&mut self, input_id: &Identifier, mmr_index: &Option<u64>, amount: u64) {
-		self.input_ids
-			.push((input_id.clone(), mmr_index.clone(), amount));
+		self.input_ids.push((input_id.clone(), *mmr_index, amount));
 	}
 
 	/// Returns all stored input identifiers
@@ -1007,7 +999,7 @@ impl TxLogEntry {
 	}
 
 	/// Given a vec of TX log entries, return credited + debited sums
-	pub fn sum_confirmed(txs: &Vec<TxLogEntry>) -> (u64, u64) {
+	pub fn sum_confirmed(txs: &[TxLogEntry]) -> (u64, u64) {
 		txs.iter().fold((0, 0), |acc, tx| match tx.confirmed {
 			true => (acc.0 + tx.amount_credited, acc.1 + tx.amount_debited),
 			false => acc,
@@ -1130,13 +1122,6 @@ impl ser::Readable for AcctPathMapping {
 			ser::Error::CorruptedData(format!("json to AcctPathMapping conversion failed, {}", e))
 		})
 	}
-}
-
-/// Dummy wrapper for the hex-encoded serialized transaction.
-#[derive(Serialize, Deserialize)]
-pub struct TxWrapper {
-	/// hex representation of transaction
-	pub tx_hex: String,
 }
 
 /// Store details of the last scanned block

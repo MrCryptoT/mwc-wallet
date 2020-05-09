@@ -15,10 +15,11 @@
 use crate::core::core::{self, amount_to_hr_string};
 use crate::core::global;
 use crate::libwallet::{
-	address, AcctPathMapping, Error, OutputCommitMapping, OutputStatus, TxLogEntry, WalletInfo,
+	AcctPathMapping, Error, OutputCommitMapping, OutputStatus, TxLogEntry, WalletInfo,
 };
 use crate::util;
 use colored::*;
+use grin_wallet_util::OnionV3Address;
 use prettytable;
 
 /// Display outputs in a pretty way
@@ -495,14 +496,14 @@ pub fn tx_messages(tx: &TxLogEntry, dark_background_color_scheme: bool) -> Resul
 
 	let msgs = match tx.messages.clone() {
 		None => {
-			println!("{}", "None");
+			println!("None");
 			return Ok(());
 		}
 		Some(m) => m.clone(),
 	};
 
 	if msgs.messages.is_empty() {
-		println!("{}", "None");
+		println!("None");
 		return Ok(());
 	}
 
@@ -566,14 +567,13 @@ pub fn payment_proof(tx: &TxLogEntry) -> Result<(), Error> {
 
 	let pp = match &tx.payment_proof {
 		None => {
-			println!("{}", "None");
+			println!("None");
 			return Ok(());
 		}
 		Some(p) => p.clone(),
 	};
 
-	let receiver_address = util::to_hex(pp.receiver_address.to_bytes().to_vec());
-	let receiver_onion_address = address::onion_v3_from_pubkey(&pp.receiver_address)?;
+	println!();
 	let receiver_signature = match pp.receiver_signature {
 		Some(s) => util::to_hex(s.to_bytes().to_vec()),
 		None => "None".to_owned(),
@@ -591,8 +591,6 @@ pub fn payment_proof(tx: &TxLogEntry) -> Result<(), Error> {
 		)
 	};
 
-	let sender_address = util::to_hex(pp.sender_address.to_bytes().to_vec());
-	let sender_onion_address = address::onion_v3_from_pubkey(&pp.sender_address)?;
 	let sender_signature = match pp.sender_signature {
 		Some(s) => util::to_hex(s.to_bytes().to_vec()),
 		None => "None".to_owned(),
@@ -602,14 +600,18 @@ pub fn payment_proof(tx: &TxLogEntry) -> Result<(), Error> {
 		None => "None".to_owned(),
 	};
 
-	println!("Receiver Address: {}", receiver_address);
-	println!("Receiver Address (Onion V3): {}", receiver_onion_address);
+	println!(
+		"Receiver Address: {}",
+		OnionV3Address::from_bytes(pp.receiver_address.to_bytes())
+	);
 	println!("Receiver Signature: {}", receiver_signature);
 	println!("Amount: {}", amount);
 	println!("Kernel Excess: {}", kernel_excess);
-	println!("Sender Address: {}", sender_address);
+	println!(
+		"Sender Address: {}",
+		OnionV3Address::from_bytes(pp.sender_address.to_bytes())
+	);
 	println!("Sender Signature: {}", sender_signature);
-	println!("Sender Address (Onion V3): {}", sender_onion_address);
 
 	println!();
 

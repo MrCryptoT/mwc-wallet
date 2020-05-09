@@ -19,16 +19,17 @@ use std::path::MAIN_SEPARATOR;
 
 use crate::blake2;
 use rand::{thread_rng, Rng};
+use ring::aead;
+use ring::pbkdf2;
 use serde_json;
 use util::ZeroingString;
 
 use crate::keychain::{mnemonic, Keychain};
-use crate::libwallet::encrypt;
 use crate::util;
 use crate::{Error, ErrorKind};
 use std::num::NonZeroU32;
 
-pub const SEED_FILE: &'static str = "wallet.seed";
+pub const SEED_FILE: &str = "wallet.seed";
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct WalletSeed(Vec<u8>);
@@ -145,7 +146,8 @@ impl WalletSeed {
 				data_file_dir.to_owned(),
 				"To create a new wallet from a recovery phrase, use 'mwc-wallet init -r'"
 					.to_owned(),
-			))?;
+			)
+			.into());
 		}
 		let seed = WalletSeed::from_mnemonic(word_list)?;
 		let enc_seed = EncryptedWalletSeed::from_seed(&seed, password)?;
@@ -171,6 +173,7 @@ impl WalletSeed {
 		seed_length: usize,
 		recovery_phrase: Option<util::ZeroingString>,
 		password: util::ZeroingString,
+		test_mode: bool,
 	) -> Result<WalletSeed, Error> {
 		WalletSeed::init_file_impl(
 			data_file_dir,
@@ -180,6 +183,7 @@ impl WalletSeed {
 			true,
 			true,
 			None,
+			test_mode,
 		)
 	}
 
@@ -193,6 +197,7 @@ impl WalletSeed {
 		write_seed: bool,
 		show_seed: bool,
 		passed_seed: Option<WalletSeed>,
+		test_mode: bool,
 	) -> Result<WalletSeed, Error> {
 		// create directory if it doesn't exist
 		fs::create_dir_all(data_file_dir)
@@ -202,7 +207,7 @@ impl WalletSeed {
 
 		warn!("Generating wallet seed file at: {}", seed_file_path);
 		let exists = WalletSeed::seed_file_exists(data_file_dir)?;
-		if exists {
+		if exists && !test_mode {
 			return Err(ErrorKind::WalletSeedExists(format!(
 				"Wallet seed already exists at: {}",
 				data_file_dir
@@ -278,7 +283,7 @@ impl WalletSeed {
 				 Run \"mwc wallet init\" to initialize a new wallet.",
 				seed_file_path
 			);
-			Err(ErrorKind::WalletSeedDoesntExist)?
+			Err(ErrorKind::WalletSeedDoesntExist.into())
 		}
 	}
 
@@ -317,32 +322,29 @@ impl EncryptedWalletSeed {
 		let nonce: [u8; 12] = thread_rng().gen();
 		let password = password.as_bytes();
 		let mut key = [0; 32];
-		// About why we need that and what are the arguments for:
-		//  https://en.wikipedia.org/wiki/PBKDF2
-		// Also check pbkdf2::derive args comments
-		ring::pbkdf2::derive(
-			&ring::digest::SHA512,
+		pbkdf2::derive(
+			ring::pbkdf2::PBKDF2_HMAC_SHA512,
 			NonZeroU32::new(100).unwrap(),
 			&salt,
 			password,
 			&mut key,
 		);
-		// Here 'key' is our password shuffled 100 times. 'key' will be used for symmetric encryption
 		let content = seed.0.to_vec();
-		// enc_bytes - the seed
-		let mut enc_bytes = content.clone();
-		let suffix_len = encrypt::aead::CHACHA20_POLY1305.tag_len();
-		// reserve space for the seed signature.
+		let mut enc_bytes = content;
+		/*let suffix_len = aead::CHACHA20_POLY1305.tag_len();
 		for _ in 0..suffix_len {
 			enc_bytes.push(0);
-		}
-		// 'key' aka shuffled password - is a nonce for  aead::SealingKey.
-		// What is CHACHA20_POLY1305:   https://en.wikipedia.org/wiki/Poly1305
-		// What is context:  https://docs.rs/failure/0.1.1/failure/struct.Context.html
-		let sealing_key = encrypt::aead::SealingKey::new(&encrypt::aead::CHACHA20_POLY1305, &key)
-			.map_err(|e| ErrorKind::Encryption(format!("Create key error, {}", e)))?;
-		encrypt::aead::seal_in_place(&sealing_key, &nonce, &[], &mut enc_bytes, suffix_len)
-			.map_err(|e| ErrorKind::Encryption(format!("seal_in_place error, {}", e)))?;
+		}*/
+		let unbound_key = aead::UnboundKey::new(&aead::CHACHA20_POLY1305, &key).unwrap();
+		let sealing_key: aead::LessSafeKey = aead::LessSafeKey::new(unbound_key);
+		let aad = aead::Aad::from(&[]);
+		sealing_key
+			.seal_in_place_append_tag(
+				aead::Nonce::assume_unique_for_key(nonce),
+				aad,
+				&mut enc_bytes,
+			)
+			.map_err(|e| ErrorKind::Encryption(format!("Seal in place error, {}", e)))?;
 
 		Ok(EncryptedWalletSeed {
 			encrypted_seed: util::to_hex(enc_bytes.to_vec()),
@@ -362,21 +364,32 @@ impl EncryptedWalletSeed {
 
 		let password = password.as_bytes();
 		let mut key = [0; 32];
-		ring::pbkdf2::derive(
-			&ring::digest::SHA512,
+		pbkdf2::derive(
+			ring::pbkdf2::PBKDF2_HMAC_SHA512,
 			NonZeroU32::new(100).unwrap(),
 			&salt,
 			password,
 			&mut key,
 		);
 
-		let opening_key = encrypt::aead::OpeningKey::new(&encrypt::aead::CHACHA20_POLY1305, &key)
-			.map_err(|e| ErrorKind::Encryption(format!("Create key error, {}", e)))?;
-		let decrypted_data =
-			encrypt::aead::open_in_place(&opening_key, &nonce, &[], 0, &mut encrypted_seed)
-				.map_err(|e| ErrorKind::Encryption(format!("open_in_place error, {}", e)))?;
+		let mut n = [0u8; 12];
+		n.copy_from_slice(&nonce[0..12]);
+		let unbound_key = aead::UnboundKey::new(&aead::CHACHA20_POLY1305, &key).unwrap();
+		let opening_key: aead::LessSafeKey = aead::LessSafeKey::new(unbound_key);
+		let aad = aead::Aad::from(&[]);
+		opening_key
+			.open_in_place(
+				aead::Nonce::assume_unique_for_key(n),
+				aad,
+				&mut encrypted_seed,
+			)
+			.map_err(|e| ErrorKind::Encryption(format!("Open in place error, {}", e)))?;
 
-		Ok(WalletSeed::from_bytes(&decrypted_data))
+		for _ in 0..aead::AES_256_GCM.tag_len() {
+			encrypted_seed.pop();
+		}
+
+		Ok(WalletSeed::from_bytes(&encrypted_seed))
 	}
 }
 

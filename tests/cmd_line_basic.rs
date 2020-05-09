@@ -130,10 +130,15 @@ fn command_line_test_impl(test_dir: &str) -> Result<(), grin_wallet_controller::
 	let (wallet1, mask1_i) =
 		instantiate_wallet(wallet_config1, client1.clone(), "password", "default")?;
 	let mask1 = (&mask1_i).as_ref();
-	grin_wallet_controller::controller::owner_single_use(wallet1.clone(), mask1, |api, m| {
-		api.set_active_account(m, "mining")?;
-		Ok(())
-	})?;
+	grin_wallet_controller::controller::owner_single_use(
+		Some(wallet1.clone()),
+		mask1,
+		None,
+		|api, m| {
+			api.set_active_account(m, "mining")?;
+			Ok(())
+		},
+	)?;
 
 	let mut bh = 10u64; // Note, we better to use 10 blocks, becaus of transactions numbers that this test expect
 	let _ =
@@ -213,16 +218,21 @@ fn command_line_test_impl(test_dir: &str) -> Result<(), grin_wallet_controller::
 	let mask1 = (&mask1_i).as_ref();
 
 	// Check our transaction log, should have 10 entries
-	grin_wallet_controller::controller::owner_single_use(wallet1.clone(), mask1, |api, m| {
-		api.set_active_account(m, "mining")?;
-		let (refreshed, txs) = api.retrieve_txs(m, true, None, None)?;
-		assert!(refreshed);
-		assert_eq!(txs.len(), bh as usize);
-		for t in txs {
-			assert!(t.kernel_excess.is_some());
-		}
-		Ok(())
-	})?;
+	grin_wallet_controller::controller::owner_single_use(
+		Some(wallet1.clone()),
+		mask1,
+		None,
+		|api, m| {
+			api.set_active_account(m, "mining")?;
+			let (refreshed, txs) = api.retrieve_txs(m, true, None, None)?;
+			assert!(refreshed);
+			assert_eq!(txs.len(), bh as usize);
+			for t in txs {
+				assert!(t.kernel_excess.is_some());
+			}
+			Ok(())
+		},
+	)?;
 
 	let _ = test_framework::award_blocks_to_wallet(&chain, wallet1.clone(), mask1, 10, false);
 	bh += 10;
@@ -244,13 +254,18 @@ fn command_line_test_impl(test_dir: &str) -> Result<(), grin_wallet_controller::
 	)?;
 	let mask2 = (&mask2_i).as_ref();
 
-	grin_wallet_controller::controller::owner_single_use(wallet2.clone(), mask2, |api, m| {
-		api.set_active_account(m, "account_1")?;
-		let (_, wallet1_info) = api.retrieve_summary_info(m, true, 1)?;
-		assert_eq!(wallet1_info.last_confirmed_height, bh);
-		assert_eq!(wallet1_info.amount_currently_spendable, 300_000_000); // grin: 10_000_000_000,  mwc 0.3 to nano
-		Ok(())
-	})?;
+	grin_wallet_controller::controller::owner_single_use(
+		Some(wallet2.clone()),
+		mask2,
+		None,
+		|api, m| {
+			api.set_active_account(m, "account_1")?;
+			let (_, wallet1_info) = api.retrieve_summary_info(m, true, 1)?;
+			assert_eq!(wallet1_info.last_confirmed_height, bh);
+			assert_eq!(wallet1_info.amount_currently_spendable, 300_000_000); // grin: 10_000_000_000,  mwc 0.3 to nano
+			Ok(())
+		},
+	)?;
 
 	// Self-send to same account, using smallest strategy
 	let arg_vec = vec![
@@ -309,13 +324,18 @@ fn command_line_test_impl(test_dir: &str) -> Result<(), grin_wallet_controller::
 	)?;
 	let mask1 = (&mask1_i).as_ref();
 
-	grin_wallet_controller::controller::owner_single_use(wallet1.clone(), mask1, |api, m| {
-		api.set_active_account(m, "mining")?;
-		let (refreshed, txs) = api.retrieve_txs(m, true, None, None)?;
-		assert!(refreshed);
-		assert_eq!(txs.len(), bh as usize + 1);
-		Ok(())
-	})?;
+	grin_wallet_controller::controller::owner_single_use(
+		Some(wallet1.clone()),
+		mask1,
+		None,
+		|api, m| {
+			api.set_active_account(m, "mining")?;
+			let (refreshed, txs) = api.retrieve_txs(m, true, None, None)?;
+			assert!(refreshed);
+			assert_eq!(txs.len(), bh as usize + 1);
+			Ok(())
+		},
+	)?;
 
 	// Try using the self-send method, splitting up outputs for the fun of it
 	let arg_vec = vec![
@@ -350,13 +370,18 @@ fn command_line_test_impl(test_dir: &str) -> Result<(), grin_wallet_controller::
 	)?;
 	let mask1 = (&mask1_i).as_ref();
 
-	grin_wallet_controller::controller::owner_single_use(wallet1.clone(), mask1, |api, m| {
-		api.set_active_account(m, "mining")?;
-		let (refreshed, txs) = api.retrieve_txs(m, true, None, None)?;
-		assert!(refreshed);
-		assert_eq!(txs.len(), bh as usize + 2);
-		Ok(())
-	})?;
+	grin_wallet_controller::controller::owner_single_use(
+		Some(wallet1.clone()),
+		mask1,
+		None,
+		|api, m| {
+			api.set_active_account(m, "mining")?;
+			let (refreshed, txs) = api.retrieve_txs(m, true, None, None)?;
+			assert!(refreshed);
+			assert_eq!(txs.len(), bh as usize + 2);
+			Ok(())
+		},
+	)?;
 
 	// Another file exchange, don't send, but unlock with repair command
 	let arg_vec = vec![
@@ -486,14 +511,19 @@ fn command_line_test_impl(test_dir: &str) -> Result<(), grin_wallet_controller::
 
 	// get tx output via -tx parameter
 	let mut tx_id = "".to_string();
-	grin_wallet_controller::controller::owner_single_use(wallet2.clone(), mask2, |api, m| {
-		api.set_active_account(m, "default")?;
-		let (_, txs) = api.retrieve_txs(m, true, None, None)?;
-		let some_tx_id = txs[0].tx_slate_id.clone();
-		assert!(some_tx_id.is_some());
-		tx_id = some_tx_id.unwrap().to_hyphenated().to_string().clone();
-		Ok(())
-	})?;
+	grin_wallet_controller::controller::owner_single_use(
+		Some(wallet2.clone()),
+		mask2,
+		None,
+		|api, m| {
+			api.set_active_account(m, "default")?;
+			let (_, txs) = api.retrieve_txs(m, true, None, None)?;
+			let some_tx_id = txs[0].tx_slate_id.clone();
+			assert!(some_tx_id.is_some());
+			tx_id = some_tx_id.unwrap().to_hyphenated().to_string().clone();
+			Ok(())
+		},
+	)?;
 	let arg_vec = vec!["mwc-wallet", "-p", "password", "txs", "-t", &tx_id[..]];
 	execute_command(&app, test_dir, "wallet2", &client2, arg_vec)?;
 

@@ -112,7 +112,7 @@ impl WalletConfig {
 	/// Use value from config file, defaulting to sensible value if missing.
 	pub fn owner_api_listen_port(&self) -> u16 {
 		self.owner_api_listen_port
-			.unwrap_or(WalletConfig::default_owner_api_listen_port())
+			.unwrap_or_else(WalletConfig::default_owner_api_listen_port)
 	}
 
 	/// Owner API listen address
@@ -151,6 +151,16 @@ pub enum ConfigError {
 	/// Error serializing config values
 	#[fail(display = "Error serializing configuration, {}", _0)]
 	SerializationError(String),
+
+	/// Path doesn't exist
+	#[fail(display = "Not found expected path {}", _0)]
+	PathNotFoundError(String),
+}
+
+impl From<io::Error> for ConfigError {
+	fn from(error: io::Error) -> ConfigError {
+		ConfigError::FileIOError(format!("Error loading config file, {}", error))
+	}
 }
 
 /// Tor configuration
@@ -189,11 +199,6 @@ impl Default for MQSConfig {
 			mwcmqs_domain: "mqs.mwc.mw".to_owned(),
 			mwcmqs_port: 443,
 		}
-	}
-}
-impl From<io::Error> for ConfigError {
-	fn from(error: io::Error) -> ConfigError {
-		ConfigError::FileIOError(format!("Error loading config file, {}", error))
 	}
 }
 

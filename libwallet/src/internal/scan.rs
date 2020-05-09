@@ -262,9 +262,9 @@ where
 		tx_log_entry: Some(log_id),
 	});
 
-	let max_child_index = found_parents.get(&parent_key_id).unwrap_or(&0).clone();
+	let max_child_index = *found_parents.get(&parent_key_id).unwrap_or(&0);
 	if output.n_child >= max_child_index {
-		found_parents.insert(parent_key_id.clone(), output.n_child);
+		found_parents.insert(parent_key_id, output.n_child);
 	}
 
 	batch.commit()?;
@@ -645,12 +645,7 @@ where
 				));
 			}
 
-			blocks.extend(client.get_blocks_by_height(
-				cur_height,
-				next_h,
-				SYNC_BLOCKS_THREADS,
-				true,
-			)?);
+			blocks.extend(client.get_blocks_by_height(cur_height, next_h, SYNC_BLOCKS_THREADS)?);
 			cur_height = next_h + 1;
 		}
 		// Checking blocks...
