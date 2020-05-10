@@ -2018,7 +2018,7 @@ pub trait OwnerRpcS {
 
 	/**
 	Networked version of [Owner::retrieve_payment_proof](struct.Owner.html#method.retrieve_payment_proof).
-	```no_run
+	```
 	# grin_wallet_api::doctest_helper_json_rpc_owner_assert_response!(
 	# r#"
 	{
@@ -2042,10 +2042,10 @@ pub trait OwnerRpcS {
 		"Ok": {
 		  "amount": "2000000000",
 		  "excess": "08b3b8b83c622f630141a66c9cad96e19c78f745e4e2ddea85439f05d14a404640",
-		  "recipient_address": "pa7wkkdgs5bkteha7lykl7ff2wztgdrxxo442xdcq2lnaphe5aidd4id",
-		  "recipient_sig": "ac71a2f32b2aa677c816f6cbc496ca44c56fd39d60c8c247b4e64bb8d7bb8f40d4df59c99b1e86519595a70824878359cf5a8ebe1c8b43c4a7d4da81bc2caf0d",
-		  "sender_address": "glg5mojiqvhywjriwhooiytn3tptlvlmw7h567lezssyek3y2tjzznad",
-		  "sender_sig": "d14470bef1b777672ddbcc02d5d15036fe35a5e15d6149f082d57f3eb55507112c398ff983373171f0182da40fa759883bc6e6c2e1eb2079992a25ea55c1540b"
+		  "recipient_address": "7rky2tvk763cq5kvhyxv7zkjxfytmao3qttqvoc6fsiawo4kzgii7bqd",
+		  "recipient_sig": "a2c0a8c4328dd6d8379cc1caf41137b15b0b4d2fe6cd9752525bb0020115b5a004e3e0f44258b2f2963bdd77fccc5ed516caef55bdd36f632f9fca6581c7cc0f",
+		  "sender_address": "fffqrotuelaodwjblwmifg36xjedjw4azbwvfexmxmmzsb6xvzbkhuqd",
+		  "sender_sig": "6509f1050e2569ce959ca18f4300d270947fb477429993808db45c3f8a69565f2ad571c9b8e4c3dfe58cdc2b0e05c106daee7df3c212686e1545019d15e71306"
 		}
 	  }
 	}
@@ -2064,7 +2064,7 @@ pub trait OwnerRpcS {
 
 	/**
 	Networked version of [Owner::verify_payment_proof](struct.Owner.html#method.verify_payment_proof).
-	```no_run
+	```
 	# grin_wallet_api::doctest_helper_json_rpc_owner_assert_response!(
 	# r#"
 	{
@@ -2073,12 +2073,12 @@ pub trait OwnerRpcS {
 		"params": {
 			"token": "d202964900000000d302964900000000d402964900000000d502964900000000",
 			"proof": {
-				   "amount": "2000000000",
-				"excess": "08b3b8b83c622f630141a66c9cad96e19c78f745e4e2ddea85439f05d14a404640",
-				"recipient_address": "pa7wkkdgs5bkteha7lykl7ff2wztgdrxxo442xdcq2lnaphe5aidd4id",
-				"recipient_sig": "ac71a2f32b2aa677c816f6cbc496ca44c56fd39d60c8c247b4e64bb8d7bb8f40d4df59c99b1e86519595a70824878359cf5a8ebe1c8b43c4a7d4da81bc2caf0d",
-				"sender_address": "glg5mojiqvhywjriwhooiytn3tptlvlmw7h567lezssyek3y2tjzznad",
-				"sender_sig": "d14470bef1b777672ddbcc02d5d15036fe35a5e15d6149f082d57f3eb55507112c398ff983373171f0182da40fa759883bc6e6c2e1eb2079992a25ea55c1540b"
+			  "amount": "2000000000",
+			  "excess": "08b3b8b83c622f630141a66c9cad96e19c78f745e4e2ddea85439f05d14a404640",
+			  "recipient_address": "7rky2tvk763cq5kvhyxv7zkjxfytmao3qttqvoc6fsiawo4kzgii7bqd",
+			  "recipient_sig": "a2c0a8c4328dd6d8379cc1caf41137b15b0b4d2fe6cd9752525bb0020115b5a004e3e0f44258b2f2963bdd77fccc5ed516caef55bdd36f632f9fca6581c7cc0f",
+			  "sender_address": "fffqrotuelaodwjblwmifg36xjedjw4azbwvfexmxmmzsb6xvzbkhuqd",
+			  "sender_sig": "6509f1050e2569ce959ca18f4300d270947fb477429993808db45c3f8a69565f2ad571c9b8e4c3dfe58cdc2b0e05c106daee7df3c212686e1545019d15e71306"
 			}
 		},
 		"id": 1
@@ -2560,41 +2560,3 @@ where
 		Ok(())
 	}
 }
-
-/*#[test]
-fn test1() {
-	crate::doctest_helper_json_rpc_owner_assert_response!(
-	r#"
-	{
-		"jsonrpc": "2.0",
-		"method": "retrieve_payment_proof",
-		"params": {
-			"token": "d202964900000000d302964900000000d402964900000000d502964900000000",
-			"refresh_from_node": true,
-			"tx_id": null,
-			"tx_slate_id": "0436430c-2b02-624c-2032-570501212b00"
-		},
-		"id": 1
-	}
-	"#
-	,
-	r#"
-	{
-	  "id": 1,
-	  "jsonrpc": "2.0",
-	  "result": {
-		"Ok": {
-		  "amount": "2000000000",
-		  "excess": "08b3b8b83c622f630141a66c9cad96e19c78f745e4e2ddea85439f05d14a404640",
-		  "recipient_address": "pa7wkkdgs5bkteha7lykl7ff2wztgdrxxo442xdcq2lnaphe5aidd4id",
-		  "recipient_sig": "ac71a2f32b2aa677c816f6cbc496ca44c56fd39d60c8c247b4e64bb8d7bb8f40d4df59c99b1e86519595a70824878359cf5a8ebe1c8b43c4a7d4da81bc2caf0d",
-		  "sender_address": "glg5mojiqvhywjriwhooiytn3tptlvlmw7h567lezssyek3y2tjzznad",
-		  "sender_sig": "d14470bef1b777672ddbcc02d5d15036fe35a5e15d6149f082d57f3eb55507112c398ff983373171f0182da40fa759883bc6e6c2e1eb2079992a25ea55c1540b"
-		}
-	  }
-	}
-	"#
-	, true, 5, true, true, true, true);
-
-}
-*/

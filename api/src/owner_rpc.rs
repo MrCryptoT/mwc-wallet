@@ -1688,7 +1688,8 @@ pub fn run_doctest_owner(
 		assert!(wallet_refreshed);
 	}
 
-	//let proof_address = api_impl::owner::get_public_proof_address(wallet2.clone(), (&mask2).as_ref(), 0).unwrap();
+	//	let proof_address = api_impl::owner::get_public_proof_address(wallet2.clone(), (&mask2).as_ref(), 0).unwrap();
+	//	println!("Wallet 2 proof_address: {}", proof_address);
 
 	if perform_tx {
 		api_impl::owner::update_wallet_state(wallet1.clone(), (&mask1).as_ref(), &None).unwrap();
@@ -1698,7 +1699,7 @@ pub fn run_doctest_owner(
 		let w = w_lock.lc_provider().unwrap().wallet_inst().unwrap();
 		let proof_address = match payment_proof {
 			true => {
-				let address = "783f6528669742a990e0faf0a5fca5d5b3330e37bbb9cd5c628696d03ce4e810";
+				let address = "fc558d4eaaffb62875553e2f5fe549b9713601db84e70ab85e2c900b3b8ac990";
 				Some(OnionV3Address::try_from(address).unwrap())
 			}
 			false => None,
