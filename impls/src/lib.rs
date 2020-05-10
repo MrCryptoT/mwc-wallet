@@ -44,9 +44,10 @@ pub mod test_framework;
 pub mod tor;
 
 pub use crate::adapters::{
-	create_sender, CloseReason, HttpSlateSender, KeybaseAllChannels, KeybaseChannel,
-	MWCMQPublisher, MWCMQSAddress, MWCMQSubscriber, MwcMqsChannel, PathToSlate, SlateGetter,
-	SlatePutter, SlateReceiver, SlateSender, SubscriptionHandler,
+	create_sender, Address, AddressType, CloseReason, HttpSlateSender, HttpsAddress,
+	KeybaseAddress, KeybaseAllChannels, KeybaseChannel, MWCMQPublisher, MWCMQSAddress,
+	MWCMQSubscriber, MwcMqsChannel, PathToSlate, Publisher, SlateGetter, SlatePutter,
+	SlateReceiver, SlateSender, Subscriber, SubscriptionHandler,
 };
 pub use crate::backends::{wallet_db_exists, LMDBBackend};
 pub use crate::error::{Error, ErrorKind};

@@ -126,6 +126,15 @@ pub enum ErrorKind {
 	/// Other
 	#[fail(display = "Generic error: {}", _0)]
 	GenericError(String),
+
+	#[fail(display = "unkown address!, {}", _0)]
+	UnknownAddressType(String),
+
+	#[fail(display = "could not parse `{}` to a keybase address!", 0)]
+	KeybaseAddressParsingError(String),
+
+	#[fail(display = "could not parse `{}` to a https address!", 0)]
+	HttpsAddressParsingError(String),
 }
 
 impl Fail for Error {

@@ -23,6 +23,8 @@
 
 /// Some crypto releted utils.
 pub mod crypto;
+/// Key derivation that come froom mwc713. Expected that they will be used for all transports
+pub mod hasher;
 /// Proff messages
 pub mod message;
 /// Addresses
@@ -30,4 +32,5 @@ pub mod proofaddress;
 /// Proofs that come froom mwc713. Expected that they will be used for all transports
 pub mod tx_proof;
 
-mod base58;
+///
+pub mod base58;

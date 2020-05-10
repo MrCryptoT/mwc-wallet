@@ -12,9 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::error::{Error, ErrorKind};
+use super::types::{Address, AddressType, Publisher, Subscriber, SubscriptionHandler};
+use crate::error::ErrorKind;
 use crate::libwallet::proof::crypto;
 use crate::libwallet::proof::crypto::Hex;
+use failure::Error;
 use grin_wallet_libwallet::proof::message::EncryptedMessage;
 use grin_wallet_libwallet::proof::proofaddress::ProvableAddress;
 use grin_wallet_libwallet::proof::tx_proof::TxProof;
@@ -22,6 +24,7 @@ use grin_wallet_libwallet::Slate;
 use grin_wallet_util::grin_util::secp::key::SecretKey;
 use regex::Regex;
 use std::collections::HashMap;
+use std::fmt::{self, Debug, Display};
 use std::io::Read;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -30,24 +33,11 @@ use std::{thread, time};
 
 extern crate nanoid;
 
-pub enum CloseReason {
-	Normal,
-	Abnormal(Error),
-}
-
-pub trait SubscriptionHandler: Send {
-	fn on_open(&self);
-	fn on_slate(&self, from: &MWCMQSAddress, slate: &mut Slate, proof: Option<&mut TxProof>);
-	fn on_close(&self, result: CloseReason);
-	fn on_dropped(&self);
-	fn on_reestablished(&self);
-}
-
 const TIMEOUT_ERROR_REGEX: &str = r"timed out";
 const DEFAULT_MWCMQS_DOMAIN: &str = "mqs.mwc.mw";
 pub const DEFAULT_MWCMQS_PORT: u16 = 443;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct MWCMQSAddress {
 	pub address: ProvableAddress,
 	pub domain: String,
@@ -64,9 +54,18 @@ impl MWCMQSAddress {
 			port: port.unwrap_or(DEFAULT_MWCMQS_PORT),
 		}
 	}
+}
 
+//this is not really useful for MWCMQSAddress, mwc-wallet uses the Display trait
+impl Display for MWCMQSAddress {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		write!(f, "mwcmqs://{}", self.address.public_key)?;
+		Ok(())
+	}
+}
+impl Address for MWCMQSAddress {
 	/// Extract the address plus additional data
-	pub fn from_str(s: &str) -> Result<Self, Error> {
+	fn from_str(s: &str) -> Result<Self, Error> {
 		let re = Regex::new(MWCMQ_ADDRESS_REGEX).unwrap();
 		let captures = re.captures(s);
 		if captures.is_none() {
@@ -103,7 +102,7 @@ impl MWCMQSAddress {
 		))
 	}
 
-	pub fn get_stripped(&self) -> String {
+	fn get_stripped(&self) -> String {
 		let mut res = self.address.public_key.clone();
 		if self.domain != DEFAULT_MWCMQS_DOMAIN || self.port != DEFAULT_MWCMQS_PORT {
 			res.push_str(&format!("@{}", self.domain));
@@ -113,9 +112,8 @@ impl MWCMQSAddress {
 		}
 		res
 	}
-
-	pub fn to_string(&self) -> String {
-		format!("mwcmqs://{}", self.get_stripped())
+	fn address_type(&self) -> AddressType {
+		AddressType::MWCMQS
 	}
 }
 
@@ -124,7 +122,6 @@ pub struct MWCMQPublisher {
 	address: MWCMQSAddress,
 	broker: MWCMQSBroker,
 	secret_key: SecretKey,
-
 }
 
 impl MWCMQPublisher {
@@ -139,13 +136,15 @@ impl MWCMQPublisher {
 			address,
 			broker: MWCMQSBroker::new(mwcmqs_domain, mwcmqs_port, print_to_log),
 			secret_key: secret_key.clone(),
-
 		})
 	}
-
-	pub fn post_slate(&self, slate: &Slate, to: &MWCMQSAddress) -> Result<(), Error> {
+}
+impl Publisher for MWCMQPublisher {
+	fn post_slate(&self, slate: &Slate, to: &dyn Address) -> Result<(), Error> {
+		let to_address_raw = format!("mwcmqs://{}", to.get_stripped());
+		let to_address = MWCMQSAddress::from_str(&to_address_raw)?;
 		self.broker
-			.post_slate(slate, to, &self.address, &self.secret_key)?;
+			.post_slate(slate, &to_address, &self.address, &self.secret_key)?;
 		Ok(())
 	}
 }
@@ -165,14 +164,15 @@ impl MWCMQSubscriber {
 			secret_key: publisher.secret_key.clone(),
 		})
 	}
-
-	pub fn start(&mut self, handler: Box<dyn SubscriptionHandler + Send>) -> Result<(), Error> {
+}
+impl Subscriber for MWCMQSubscriber {
+	fn start(&mut self, handler: Box<dyn SubscriptionHandler + Send>) -> Result<(), Error> {
 		self.broker
 			.subscribe(&self.address.address, &self.secret_key, handler);
 		Ok(())
 	}
 
-	pub fn stop(&mut self) -> bool {
+	fn stop(&mut self) -> bool {
 		if let Ok(client) = reqwest::Client::builder()
 			.timeout(Duration::from_secs(60))
 			.build()
@@ -198,7 +198,7 @@ impl MWCMQSubscriber {
 		}
 	}
 
-	pub fn is_running(&self) -> bool {
+	fn is_running(&self) -> bool {
 		self.broker.is_running()
 	}
 }
@@ -208,11 +208,11 @@ struct MWCMQSBroker {
 	running: Arc<AtomicBool>,
 	pub mwcmqs_domain: String,
 	pub mwcmqs_port: u16,
-	pub print_to_log : bool,
+	pub print_to_log: bool,
 }
 
 impl MWCMQSBroker {
-	fn new(mwcmqs_domain: String, mwcmqs_port: u16, print_to_log : bool ) -> Self {
+	fn new(mwcmqs_domain: String, mwcmqs_port: u16, print_to_log: bool) -> Self {
 		Self {
 			running: Arc::new(AtomicBool::new(false)),
 			mwcmqs_domain,
@@ -242,7 +242,7 @@ impl MWCMQSBroker {
 			&pkey,
 			&skey,
 		)
-			.map_err(|e| ErrorKind::GenericError(format!("Unable encrypt slate, {}", e)))?;
+		.map_err(|e| ErrorKind::GenericError(format!("Unable encrypt slate, {}", e)))?;
 
 		let message_ser = &serde_json::to_string(&message).map_err(|e| {
 			ErrorKind::MqsGenericError(format!("Unable convert Message to Json, {}", e))
@@ -319,7 +319,7 @@ impl MWCMQSBroker {
 	}
 	fn do_log_info(&self, message: String) {
 		if self.print_to_log {
-			info!("{}",message);
+			info!("{}", message);
 		} else {
 			println!("{}", message);
 		}
@@ -327,7 +327,7 @@ impl MWCMQSBroker {
 
 	fn do_log_warn(&self, message: String) {
 		if self.print_to_log {
-			warn!("{}",message);
+			warn!("{}", message);
 		} else {
 			println!("{}", message);
 		}
@@ -335,7 +335,7 @@ impl MWCMQSBroker {
 
 	fn do_log_error(&self, message: String) {
 		if self.print_to_log {
-			error!("{}",message);
+			error!("{}", message);
 		} else {
 			println!("{}", message);
 		}

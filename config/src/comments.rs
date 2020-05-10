@@ -232,6 +232,15 @@ fn comments() -> HashMap<String, String> {
 		.to_string(),
 	);
 
+	retval.insert(
+		"grinbox_address_index".to_string(),
+		"
+# MWC MQS address defive index. Every new index will give you a new address that will be used for
+# communication with message queue
+"
+		.to_string(),
+	);
+
 	retval
 }
 

@@ -17,16 +17,21 @@ use crate::grin_util::secp::key::PublicKey;
 use crate::grin_util::secp::Secp256k1;
 use grin_keychain::base58;
 
+///
 pub trait Base58<T> {
+	///need to add documentation
 	fn from_base58_check(str: &str, version_bytes: Vec<u8>) -> Result<T, Error>;
+	///need to add documentation
 	fn to_base58_check(&self, version: Vec<u8>) -> String;
 }
 
+///
 fn to_base58_check(data: &[u8], version: Vec<u8>) -> String {
 	let payload: Vec<u8> = version.iter().chain(data.iter()).map(|x| *x).collect();
 	base58::check_encode_slice(payload.as_slice())
 }
 
+///
 fn from_base58_check(data: &str, version_bytes: usize) -> Result<(Vec<u8>, Vec<u8>), Error> {
 	let payload: Vec<u8> = base58::from_check(data).map_err(|e| {
 		ErrorKind::Base58Error(format!("Unable decode base58 string {}, {}", data, e))
@@ -37,6 +42,7 @@ fn from_base58_check(data: &str, version_bytes: usize) -> Result<(Vec<u8>, Vec<u
 	))
 }
 
+///
 pub fn serialize_public_key(public_key: &PublicKey) -> Vec<u8> {
 	let secp = Secp256k1::new();
 	let ser = public_key.serialize_vec(&secp, true);

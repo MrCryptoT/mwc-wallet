@@ -445,7 +445,7 @@ pub trait OwnerRpc: Sync + Send {
 				  "payment_proof": {
 					"receiver_address": "d03c09e9c19bb74aa9ea44e0fe5ae237a9bf40bddf0941064a80913a4459c8bb",
 					"receiver_signature": null,
-					"sender_address": "32cdd63928854f8b2628b1dce4626ddcdf35d56cb7cfdf7d64cca5822b78d4d3"
+					"sender_address": "294b08ba7422c0e1d9215d98829b7eba4834db80c86d5292ecbb199907d7ae42"
 				  },
 				  "ttl_cutoff_height": "7",
 				  "tx": {

@@ -47,11 +47,6 @@ pub struct WalletConfig {
 	pub owner_api_include_mqs_listener: Option<bool>,
 	///To enable this amount for an invoice amount, for example if the value is 50000000000 that is 50 mwc or less,
 	pub max_auto_accept_invoice: Option<u64>,
-	//	/// mwcmqs domain
-	//	pub mwcmqs_domain: Option<String>,
-	//	/// mwcmqs port
-	//	pub mwcmqs_port: Option<u16>,
-	//mqs address index
 	pub grinbox_address_index: Option<u32>,
 	/// The directory in which wallet files are stored
 	pub data_file_dir: String,
