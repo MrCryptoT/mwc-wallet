@@ -15,8 +15,8 @@
 mod file;
 pub mod http;
 mod keybase;
-mod mwcmq;
-mod types;
+pub mod mwcmq;
+pub mod types;
 
 pub use self::file::PathToSlate;
 pub use self::http::HttpSlateSender;
@@ -30,6 +30,7 @@ use crate::error::{Error, ErrorKind};
 use crate::libwallet::Slate;
 use crate::tor::config::complete_tor_address;
 use crate::util::ZeroingString;
+
 pub use mwcmq::{
 	get_mwcmqs_brocker, init_mwcmqs_access_data, MWCMQPublisher, MWCMQSubscriber, MwcMqsChannel,
 };
@@ -37,6 +38,11 @@ pub use types::{
 	Address, AddressType, CloseReason, HttpsAddress, KeybaseAddress, MWCMQSAddress, Publisher,
 	Subscriber, SubscriptionHandler,
 };
+
+use std::sync::mpsc::{channel, Receiver, Sender};
+use crate::util::Mutex;
+use std::sync::Arc;
+use std::time::Duration;
 
 /// Sends transactions to a corresponding SlateReceiver
 pub trait SlateSender {

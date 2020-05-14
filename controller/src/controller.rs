@@ -25,6 +25,10 @@ use crate::{Error, ErrorKind};
 use grin_wallet_api::JsonId;
 use grin_wallet_util::OnionV3Address;
 use hyper::body;
+use futures::future::{err, ok};
+use futures::{Future, Stream};
+use grinswap::swap::message::Message;
+
 use hyper::header::HeaderValue;
 use hyper::{Body, Request, Response, StatusCode};
 use serde::{Deserialize, Serialize};
@@ -479,6 +483,8 @@ where
 	C: NodeClient + 'static,
 	K: Keychain + 'static,
 {
+	fn on_message(&mut self, _from: &dyn Address, _message: Message) {}
+
 	fn on_open(&self) {
 		self.do_log_warn(format!("listener started for [{}]", self.name));
 	}

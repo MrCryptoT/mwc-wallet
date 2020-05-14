@@ -36,7 +36,7 @@ use grin_wallet_util::grin_util as util;
 
 use grin_wallet_config as config;
 
-mod adapters;
+pub mod adapters;
 mod backends;
 mod client_utils;
 mod error;

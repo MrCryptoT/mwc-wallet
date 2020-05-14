@@ -37,3 +37,5 @@ grin_wallet_api = { path = "../api", version = "3.2.0" }
 grin_wallet_impls = { path = "../impls", version = "3.2.0" }
 grin_wallet_libwallet = { path = "../libwallet", version = "3.2.0" }
 grin_wallet_config = { path = "../config", version = "3.2.0" }
+grinswap = { git = "https://github.com/mwcproject/mwcswap", branch = "master"}
+

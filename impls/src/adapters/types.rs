@@ -1,7 +1,11 @@
 //The following is support mqs usage in mwc713
 use crate::error::{Error, ErrorKind};
 use crate::libwallet::proof::tx_proof::TxProof;
+
+use grin_wallet_config::WalletConfig;
+
 use grin_wallet_libwallet::Slate;
+use grinswap::{Context, Message, Swap};
 use std::sync::mpsc::{Receiver, Sender};
 use url::Url; //only for the Address::parse
 
@@ -30,6 +34,8 @@ pub trait Publisher {
 		signature: String,
 		source_address: &ProvableAddress,
 	) -> Result<String, Error>;
+
+	fn post_take(&self, message: &Message, to: &str) -> Result<(), Error>;
 }
 
 pub trait Subscriber {
@@ -43,6 +49,7 @@ pub trait Subscriber {
 		message_receive_channel: Receiver<bool>,
 	);
 	fn reset_notification_channels(&self);
+	fn on_message(&mut self, from: &dyn Address, message: Message, config: &WalletConfig);
 }
 
 pub trait SubscriptionHandler: Send {
@@ -58,6 +65,7 @@ pub trait SubscriptionHandler: Send {
 		message_receive_channel: Receiver<bool>,
 	);
 	fn reset_notification_channels(&self);
+	fn on_message(&mut self, from: &dyn Address, message: Message);
 }
 
 //The following is support mqs usage in mwc713
@@ -257,4 +265,12 @@ impl dyn Address {
 		};
 		Ok(address)
 	}
+}
+
+pub trait ContextHolderType: Send {
+	fn get_context(&mut self) -> Option<&Context>;
+	fn set_context(&mut self, ctx: Context);
+	fn set_swap(&mut self, swap: Swap);
+	fn get_swap(&mut self) -> Option<&mut Swap>;
+	fn get_objs(&mut self) -> Option<(&Context, &mut Swap)>;
 }
