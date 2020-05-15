@@ -27,15 +27,15 @@ use crate::error::{Error, ErrorKind};
 use crate::libwallet::Slate;
 use crate::tor::config::complete_tor_address;
 use crate::util::ZeroingString;
-pub use mwcmq::{MWCMQPublisher, MWCMQSAddress, MWCMQSubscriber};
+pub use mwcmq::{
+	get_mwcmqs_brocker, init_mwcmqs_access_data, MWCMQPublisher, MWCMQSAddress, MWCMQSubscriber,
+};
 pub use types::{
 	Address, AddressType, CloseReason, HttpsAddress, KeybaseAddress, Publisher, Subscriber,
 	SubscriptionHandler,
 };
 
-use crate::util::Mutex;
-use std::sync::mpsc::{Receiver, Sender};
-use std::sync::Arc;
+use std::sync::mpsc::{channel, Receiver, Sender};
 use std::time::Duration;
 
 /// Sends transactions to a corresponding SlateReceiver
@@ -149,78 +149,68 @@ pub fn create_sender(
 //===============add with mwcmqs feature=============
 //may need to move to other place later
 pub struct MwcMqsChannel {
-	mwcmqs_broker: Arc<Mutex<Option<(MWCMQPublisher, MWCMQSubscriber)>>>,
-	rx: Arc<Mutex<Option<Receiver<Slate>>>>,
-	tx: Arc<Mutex<Option<Sender<bool>>>>,
 	des_address: String,
 	finalize: bool,
 }
 
 impl MwcMqsChannel {
-	pub fn new(
-		mwcmqs_broker: Arc<Mutex<Option<(MWCMQPublisher, MWCMQSubscriber)>>>,
-		rx_withlock: Arc<Mutex<Option<Receiver<Slate>>>>,
-		tx_withlock: Arc<Mutex<Option<Sender<bool>>>>,
-		des_address: String,
-		finalize: bool,
-	) -> Self {
+	pub fn new(des_address: String, finalize: bool) -> Self {
 		Self {
-			mwcmqs_broker: mwcmqs_broker,
-			rx: rx_withlock,
 			des_address: des_address,
-			tx: tx_withlock,
 			finalize: finalize,
 		}
 	}
-}
 
-impl SlateSender for MwcMqsChannel {
-	fn send_tx(&self, slate: &Slate) -> Result<Slate, Error> {
-		let mwcmqs_broker_lock = self.mwcmqs_broker.lock();
-		let tx_lock = self.tx.lock();
-		//notify the mqs thread to do finalizing and proof.
-		if let Some(i) = &*tx_lock {
-			i.send(self.finalize).map_err(|e| {
-				ErrorKind::MqsGenericError(format!("Unable to contact MQS worker, {}", e))
+	fn send_tx_to_mqs(
+		&self,
+		slate: &Slate,
+		mwcmqs_publisher: MWCMQPublisher,
+		rx_slate: Receiver<Slate>,
+		tx_finalize: Sender<bool>,
+	) -> Result<Slate, Error> {
+		let des_address = MWCMQSAddress::from_str(self.des_address.as_ref()).map_err(|e| {
+			ErrorKind::MqsGenericError(format!("Invalid destination address, {}", e))
+		})?;
+		tx_finalize.send(self.finalize).map_err(|e| {
+			ErrorKind::MqsGenericError(format!("Unable to contact MQS worker, {}", e))
+		})?;
+		mwcmqs_publisher
+			.post_slate(&slate, &des_address)
+			.map_err(|e| {
+				ErrorKind::MqsGenericError(format!(
+					"MQS unable to transfer slate {} to the worker, {}",
+					slate.id, e
+				))
 			})?;
-		}
-
-		if let Some(i) = &*mwcmqs_broker_lock {
-			let mwcmqs_publisher = &i.0;
-			let des_address = MWCMQSAddress::from_str(self.des_address.as_ref()).map_err(|e| {
-				ErrorKind::MqsGenericError(format!("Invalid destination address, {}", e))
-			})?;
-			mwcmqs_publisher
-				.post_slate(&slate, &des_address)
-				.map_err(|e| {
-					ErrorKind::MqsGenericError(format!(
-						"MQS unable to transfer slate {} to the worker, {}",
-						slate.id, e
-					))
-				})?;
-		} else {
-			return Err(ErrorKind::MqsGenericError(format!(
-				"MQS is not started, not able to send the slate {}",
-				slate.id
-			))
-			.into());
-		}
 
 		//expect to get slate back.
-		let rx_withlock = self.rx.lock();
-		if let Some(i) = &*rx_withlock {
-			let rx = &i;
-			let slate_returned = rx.recv_timeout(Duration::from_secs(120)).map_err(|e| {
+		let slate_returned = rx_slate
+			.recv_timeout(Duration::from_secs(120))
+			.map_err(|e| {
 				ErrorKind::MqsGenericError(format!(
 					"MQS unable to process slate {}, {}",
 					slate.id, e
 				))
 			})?;
+		return Ok(slate_returned);
+	}
+}
 
-			return Ok(slate_returned);
+impl SlateSender for MwcMqsChannel {
+	fn send_tx(&self, slate: &Slate) -> Result<Slate, Error> {
+		if let Some((mwcmqs_publisher, mwcmqs_subscriber)) = get_mwcmqs_brocker() {
+			// Creating channels for notification
+			let (tx_slate, rx_slate) = channel(); //this chaneel is used for listener thread to send message to other thread
+									  //this chaneel is used for listener thread to receive message from other thread
+			let (tx_finalize, rx_finalize) = channel();
+
+			mwcmqs_subscriber.set_notification_channels(tx_slate, rx_finalize);
+			let res = self.send_tx_to_mqs(slate, mwcmqs_publisher, rx_slate, tx_finalize);
+			mwcmqs_subscriber.reset_notification_channels();
+			res
 		} else {
 			return Err(ErrorKind::MqsGenericError(format!(
-				"MQS receive channel is broken, failed to process slate {}",
+				"MQS is not started, not able to send the slate {}",
 				slate.id
 			))
 			.into());

@@ -32,7 +32,7 @@ use crate::core::core::Transaction;
 use crate::core::ser;
 use crate::libwallet::{
 	AcctPathMapping, Context, Error, ErrorKind, NodeClient, OutputData, ScannedBlockInfo,
-	TxLogEntry, WalletBackend, WalletOutputBatch,
+	TxLogEntry, TxProof, WalletBackend, WalletOutputBatch,
 };
 use crate::util::secp::constants::SECRET_KEY_SIZE;
 use crate::util::secp::key::SecretKey;
@@ -144,6 +144,8 @@ where
 			batch.put_ser(&acct_key, &default_account)?;
 			batch.commit()?;
 		}
+
+		TxProof::init_proof_backend(data_file_dir)?;
 
 		let res = LMDBBackend {
 			db: store,

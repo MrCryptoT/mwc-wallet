@@ -4,6 +4,7 @@ use crate::error::ErrorKind;
 use crate::libwallet::proof::tx_proof::TxProof;
 use failure::Error;
 use grin_wallet_libwallet::Slate;
+use std::sync::mpsc::{Receiver, Sender};
 use url::Url; //only for the Address::parse
 
 use regex::Regex;
@@ -21,9 +22,16 @@ pub trait Publisher {
 }
 
 pub trait Subscriber {
-	fn start(&mut self, handler: Box<dyn SubscriptionHandler + Send>) -> Result<(), Error>;
+	fn start(&mut self) -> Result<(), Error>;
 	fn stop(&mut self) -> bool;
 	fn is_running(&self) -> bool;
+
+	fn set_notification_channels(
+		&self,
+		slate_send_channel: Sender<Slate>,
+		message_receive_channel: Receiver<bool>,
+	);
+	fn reset_notification_channels(&self);
 }
 
 pub trait SubscriptionHandler: Send {
@@ -32,6 +40,13 @@ pub trait SubscriptionHandler: Send {
 	fn on_close(&self, result: CloseReason);
 	fn on_dropped(&self);
 	fn on_reestablished(&self);
+
+	fn set_notification_channels(
+		&self,
+		slate_send_channel: Sender<Slate>,
+		message_receive_channel: Receiver<bool>,
+	);
+	fn reset_notification_channels(&self);
 }
 
 //The following is support mqs usage in mwc713

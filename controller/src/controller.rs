@@ -42,6 +42,7 @@ use crate::apiwallet::{
 	ForeignCheckMiddlewareFn, ForeignRpc, Owner, OwnerRpc, OwnerRpcS,
 };
 use crate::config::{MQSConfig, TorConfig, WalletConfig};
+use crate::core::global;
 use crate::impls::tor::config as tor_config;
 use crate::impls::tor::process as tor_process;
 use crate::keychain::Keychain;
@@ -51,7 +52,8 @@ use grin_wallet_libwallet::proof::proofaddress::ProvableAddress;
 use grin_wallet_libwallet::proof::tx_proof::TxProof;
 use std::collections::HashMap;
 use std::net::SocketAddr;
-use std::sync::mpsc::{channel, Receiver, Sender};
+use std::pin::Pin;
+use std::sync::mpsc::{Receiver, Sender};
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
@@ -207,6 +209,7 @@ where
 	Ok(sec_addr_key)
 }
 
+#[derive(Clone)]
 pub struct Controller<L, C, K>
 where
 	L: WalletLCProvider<'static, C, K> + 'static,
@@ -214,13 +217,20 @@ where
 	K: Keychain + 'static,
 {
 	/// Wallet instance
-	pub name: String,
-	pub wallet: Arc<Mutex<Box<dyn WalletInst<'static, L, C, K> + 'static>>>,
-	pub publisher: Arc<MWCMQPublisher>,
-	pub slate_send_channel: Option<Sender<Slate>>,
-	pub message_receive_channel: Option<Receiver<bool>>,
-	pub max_auto_accept_invoice: Option<u64>,
-	pub keychain_mask: Arc<Mutex<Option<SecretKey>>>,
+	name: String,
+	wallet: Arc<Mutex<Box<dyn WalletInst<'static, L, C, K> + 'static>>>,
+
+	publisher: Arc<Mutex<Option<Box<dyn Publisher + Send>>>>,
+
+	// mwc-wallet doesn have this field allways None. we don't want mwc-wallet to be able to process them.
+	// Autoinvoice
+	max_auto_accept_invoice: Option<u64>,
+
+	slate_send_channel: Arc<Mutex<Option<Sender<Slate>>>>,
+	message_receive_channel: Arc<Mutex<Option<Receiver<bool>>>>,
+	keychain_mask: Arc<Mutex<Option<SecretKey>>>,
+	// what to do with logs. Print them to console or into the logs
+	print_to_log: bool,
 }
 
 impl<L, C, K> Controller<L, C, K>
@@ -232,28 +242,46 @@ where
 	pub fn new(
 		name: &str,
 		wallet: Arc<Mutex<Box<dyn WalletInst<'static, L, C, K>>>>,
-		publisher: Arc<MWCMQPublisher>,
-		slate_send_channel: Option<Sender<Slate>>,
-		message_receive_channel: Option<Receiver<bool>>,
 		keychain_mask: Arc<Mutex<Option<SecretKey>>>,
-	) -> Result<Self, Error>
+		max_auto_accept_invoice: Option<u64>,
+		print_to_log: bool,
+	) -> Self
 	where
 		L: WalletLCProvider<'static, C, K>,
 		C: NodeClient + 'static,
 		K: Keychain + 'static,
 	{
-		Ok(Self {
+		if max_auto_accept_invoice.is_some() && global::is_mainnet() {
+			panic!("Auto invoicing disable for the mainnet");
+		}
+
+		Self {
 			name: name.to_string(),
 			wallet,
-			publisher,
-			slate_send_channel,
-			message_receive_channel,
-			max_auto_accept_invoice: None,
+			publisher: Arc::new(Mutex::new(None)),
+			max_auto_accept_invoice,
+			slate_send_channel: Arc::new(Mutex::new(None)),
+			message_receive_channel: Arc::new(Mutex::new(None)),
 			keychain_mask,
-		})
+			print_to_log,
+		}
 	}
-	fn set_max_auto_accept_invoice(&mut self, max_auto_accept_invoice: Option<u64>) {
-		self.max_auto_accept_invoice = max_auto_accept_invoice;
+
+	pub fn clone(&self) -> Self {
+		Self {
+			name: self.name.clone(),
+			wallet: self.wallet.clone(),
+			publisher: self.publisher.clone(),
+			max_auto_accept_invoice: self.max_auto_accept_invoice.clone(),
+			slate_send_channel: self.slate_send_channel.clone(),
+			message_receive_channel: self.message_receive_channel.clone(),
+			keychain_mask: self.keychain_mask.clone(),
+			print_to_log: self.print_to_log,
+		}
+	}
+
+	pub fn set_publisher(&self, publisher: Box<dyn Publisher + Send>) {
+		self.publisher.lock().replace(publisher);
 	}
 
 	fn process_incoming_slate(
@@ -270,6 +298,9 @@ where
 		if slate.num_participants > slate.participant_data.len() {
 			//TODO: this needs to be changed to properly figure out if this slate is an invoice or a send
 			if slate.tx.inputs().len() == 0 {
+				// mwc-wallet doesn't support invoices
+				Err(ErrorKind::DoesNotAcceptInvoices)?;
+
 				// reject by default unless wallet is set to auto accept invoices under a certain threshold
 
 				let max_auto_accept_invoice = self
@@ -278,6 +309,10 @@ where
 
 				if slate.amount > max_auto_accept_invoice {
 					Err(ErrorKind::InvoiceAmountTooBig(slate.amount))?;
+				}
+
+				if global::is_mainnet() {
+					panic!("Auto invoicing disable for the mainnet");
 				}
 
 				//create the args
@@ -335,15 +370,15 @@ where
 		} else {
 			//request may come to here from owner api or send command
 
-			if let Some(s) = &self.slate_send_channel {
+			if let Some(slate_sender) = &*self.slate_send_channel.lock() {
 				//this happens when the request is from owner_api
 
 				let mut should_finalize = false;
 
-				if let Some(s) = &self.message_receive_channel {
+				if let Some(finalize_reciever) = &*self.message_receive_channel.lock() {
 					//this happens when the request is from owner_api
 					//unless get false from owner_api, it should always finalize tx here.
-					should_finalize = s
+					should_finalize = finalize_reciever
 						.recv_timeout(Duration::from_secs(15))
 						.unwrap_or_else(|_| true);
 				}
@@ -362,7 +397,7 @@ where
 
 				//send the slate to owner_api
 				let slate_immutable = slate.clone();
-				let _ = s.send(slate_immutable);
+				let _ = slate_sender.send(slate_immutable);
 			} else {
 				//verify slate message
 				slate
@@ -405,6 +440,30 @@ where
 			Ok(true)
 		}
 	}
+
+	fn do_log_info(&self, message: String) {
+		if self.print_to_log {
+			info!("{}", message);
+		} else {
+			println!("{}", message);
+		}
+	}
+
+	fn do_log_warn(&self, message: String) {
+		if self.print_to_log {
+			warn!("{}", message);
+		} else {
+			println!("{}", message);
+		}
+	}
+
+	fn do_log_error(&self, message: String) {
+		if self.print_to_log {
+			error!("{}", message);
+		} else {
+			println!("{}", message);
+		}
+	}
 }
 
 impl<L, C, K> SubscriptionHandler for Controller<L, C, K>
@@ -414,7 +473,7 @@ where
 	K: Keychain + 'static,
 {
 	fn on_open(&self) {
-		warn!("listener started for [{}]", self.name);
+		self.do_log_warn(format!("listener started for [{}]", self.name));
 	}
 
 	fn on_slate(&self, from: &dyn Address, slate: &mut Slate, proof: Option<&mut TxProof>) {
@@ -423,49 +482,55 @@ where
 		if slate.num_participants > slate.participant_data.len() {
 			let message = &slate.participant_data[0].message;
 			if message.is_some() {
-				info!(
+				self.do_log_info(format!(
 					"slate [{}] received from [{}] for [{}] MWCs. Message: [\"{}\"]",
 					slate.id.to_string(),
 					display_from,
 					core::amount_to_hr_string(slate.amount, false),
 					message.clone().unwrap()
-				);
+				));
 			} else {
-				info!(
+				self.do_log_info(format!(
 					"slate [{}] received from [{}] for [{}] MWCs.",
 					slate.id.to_string(),
 					display_from,
 					core::amount_to_hr_string(slate.amount, false)
-				);
+				));
 			}
 		} else {
-			info!(
+			self.do_log_info(format!(
 				"slate [{}] received back from [{}] for [{}] MWCs",
 				slate.id.to_string(),
 				display_from,
 				core::amount_to_hr_string(slate.amount, false)
-			);
+			));
 		};
-		let from_address_raw = format!("mwcmqs://{}", from.get_stripped());
+		let from_address_raw = from.get_stripped();
 
 		let result = self
 			.process_incoming_slate(Some(from_address_raw), slate, None, proof)
 			.and_then(|is_finalized| {
 				if !is_finalized {
 					self.publisher
+						.lock()
+						.as_ref()
+						.expect("call set_publisher() method!!!")
 						.post_slate(slate, from)
 						.map_err(|e| {
-							error!("ERROR: Unable to send slate with MQS, {}", e);
+							self.do_log_error(format!("ERROR: Unable to send slate back, {}", e));
 							e
 						})
 						.expect("failed posting slate!");
-					info!(
+					self.do_log_info(format!(
 						"slate [{}] sent back to [{}] successfully",
 						slate.id.to_string(),
 						display_from
-					);
+					));
 				} else {
-					info!("slate [{}] finalized successfully", slate.id.to_string());
+					self.do_log_info(format!(
+						"slate [{}] finalized successfully",
+						slate.id.to_string()
+					));
 				}
 				Ok(())
 			});
@@ -474,25 +539,45 @@ where
 
 		match result {
 			Ok(()) => {}
-			Err(e) => error!("{}", e),
+			Err(e) => self.do_log_error(format!("{}", e)),
 		}
 	}
 
 	fn on_close(&self, reason: CloseReason) {
 		match reason {
-			CloseReason::Normal => info!("listener [{}] stopped", self.name),
-			CloseReason::Abnormal(_) => {
-				error!("ERROR: listener [{}] stopped unexpectedly", self.name)
-			}
+			CloseReason::Normal => self.do_log_info(format!("listener [{}] stopped", self.name)),
+			CloseReason::Abnormal(_) => self.do_log_error(format!(
+				"ERROR: listener [{}] stopped unexpectedly",
+				self.name
+			)),
 		}
 	}
 
 	fn on_dropped(&self) {
-		warn!("WARNING: listener [{}] lost connection. it will keep trying to restore connection in the background.", self.name)
+		self.do_log_info(format!("WARNING: listener [{}] lost connection. it will keep trying to restore connection in the background.", self.name))
 	}
 
 	fn on_reestablished(&self) {
-		info!("INFO: listener [{}] reestablished connection.", self.name)
+		self.do_log_info(format!(
+			"INFO: listener [{}] reestablished connection.",
+			self.name
+		))
+	}
+
+	fn set_notification_channels(
+		&self,
+		slate_send_channel: Sender<Slate>,
+		message_receive_channel: Receiver<bool>,
+	) {
+		self.slate_send_channel.lock().replace(slate_send_channel);
+		self.message_receive_channel
+			.lock()
+			.replace(message_receive_channel);
+	}
+
+	fn reset_notification_channels(&self) {
+		let _ = self.slate_send_channel.lock().take();
+		let _ = self.message_receive_channel.lock().take();
 	}
 }
 
@@ -501,8 +586,6 @@ pub fn init_start_mwcmqs_listener<L, C, K>(
 	wallet: Arc<Mutex<Box<dyn WalletInst<'static, L, C, K>>>>,
 	mqs_config: MQSConfig,
 	keychain_mask: Arc<Mutex<Option<SecretKey>>>,
-	slate_send_channel: Option<Sender<Slate>>,
-	message_receive_channel: Option<Receiver<bool>>,
 	wait_for_thread: bool,
 ) -> Result<(MWCMQPublisher, MWCMQSubscriber), Error>
 where
@@ -516,10 +599,7 @@ where
 	start_mwcmqs_listener(
 		wallet,
 		mqs_config,
-		config.max_auto_accept_invoice,
 		config.grinbox_address_index(),
-		slate_send_channel,
-		message_receive_channel,
 		wait_for_thread,
 		keychain_mask,
 	)
@@ -530,10 +610,7 @@ where
 fn start_mwcmqs_listener<L, C, K>(
 	wallet: Arc<Mutex<Box<dyn WalletInst<'static, L, C, K>>>>,
 	mqs_config: MQSConfig,
-	max_auto_accept_invoice: Option<u64>,
 	address_index: u32,
-	slate_send_channel: Option<Sender<Slate>>,
-	message_receive_channel: Option<Receiver<bool>>,
 	wait_for_thread: bool,
 	keychain_mask: Arc<Mutex<Option<SecretKey>>>,
 ) -> Result<(MWCMQPublisher, MWCMQSubscriber), Error>
@@ -563,50 +640,42 @@ where
 		Some(mwcmqs_port),
 	);
 
+	let controller = Controller::new(
+		&mwcmqs_address.get_stripped(),
+		wallet.clone(),
+		keychain_mask,
+		None,
+		true,
+	);
+
 	let mwcmqs_publisher = MWCMQPublisher::new(
 		mwcmqs_address.clone(),
 		&mwcmqs_secret_key,
 		mwcmqs_domain,
 		mwcmqs_port,
 		true,
-	)
-	.map_err(|e| ErrorKind::GenericError(format!("Unable to create mwcmqs publisher, {}", e)))?;
+		Box::new(controller.clone()),
+	);
+	// Cross reference, need to setup the secondary pointer
+	controller.set_publisher(Box::new(mwcmqs_publisher.clone()));
 
-	let mwcmqs_subscriber = MWCMQSubscriber::new(&mwcmqs_publisher).map_err(|e| {
-		ErrorKind::GenericError(format!("Unable to create mwcmqs subscriber, {}", e))
-	})?;
+	let mwcmqs_subscriber = MWCMQSubscriber::new(&mwcmqs_publisher);
 
-	let cloned_publisher = mwcmqs_publisher.clone();
 	let mut cloned_subscriber = mwcmqs_subscriber.clone();
 
 	let thread = thread::Builder::new()
 		.name("mwcmqs-broker".to_string())
 		.spawn(move || {
-			let mut controller = match Controller::new(
-				&mwcmqs_address.get_stripped(),
-				wallet.clone(),
-				Arc::new(cloned_publisher),
-				slate_send_channel,
-				message_receive_channel,
-				keychain_mask,
-			) {
-				Ok(r) => r,
-				Err(e) => {
-					error!("Unable to start mwcmqs controller, {}", e);
-					// This thread only will be ended
-					panic!("Unable to start mwcmqs controller!");
-				}
-			};
-
-			controller.set_max_auto_accept_invoice(max_auto_accept_invoice);
-
-			if let Err(e) = cloned_subscriber.start(Box::new(controller)) {
+			if let Err(e) = cloned_subscriber.start() {
 				let err_str = format!("Unable to start mwcmqs controller, {}", e);
 				error!("{}", err_str);
 				panic!("{}", err_str);
 			}
 		})
 		.map_err(|e| ErrorKind::GenericError(format!("Unable to start mwcmqs broker, {}", e)))?;
+
+	// Publishing this running MQS service
+	crate::impls::init_mwcmqs_access_data(mwcmqs_publisher.clone(), mwcmqs_subscriber.clone());
 
 	if wait_for_thread {
 		let _ = thread.join();
@@ -626,10 +695,7 @@ pub fn owner_listener<L, C, K>(
 	api_secret: Option<String>,
 	tls_config: Option<TLSConfig>,
 	owner_api_include_foreign: Option<bool>,
-	owner_api_include_mqs_listener: Option<bool>,
-	config: WalletConfig,
 	tor_config: Option<TorConfig>,
-	mqs_config: Option<MQSConfig>,
 ) -> Result<(), Error>
 where
 	L: WalletLCProvider<'static, C, K> + 'static,
@@ -649,83 +715,17 @@ where
 		));
 		router.add_middleware(basic_auth_middleware);
 	}
-	let mut running_mqs = false;
-	if owner_api_include_mqs_listener.unwrap_or(false) {
-		running_mqs = true;
-	}
-
 	let mut running_foreign = false;
 	if owner_api_include_foreign.unwrap_or(false) {
 		running_foreign = true;
 	}
 
-	let (tx, rx) = channel(); //this chaneel is used for listener thread to send message to other thread
-
-	//this chaneel is used for listener thread to receive message from other thread
-	let (tx_from_others, rx_from_others) = channel();
-
-	// If so configured, run mqs listener
-	//mqs feature
-	let mut mwcmqs_broker: Option<(MWCMQPublisher, MWCMQSubscriber)> = None;
-	if running_mqs {
-		warn!("Starting MWCMQS Listener");
-		//check if there is mqs_config
-		let mqs_config_unwrapped;
-		match mqs_config {
-			Some(s) => {
-				mqs_config_unwrapped = s;
-			}
-			None => {
-				return Err(ErrorKind::MQSConfig(format!("NO MQS config!")).into());
-			}
-		}
-
-		//create the tx_proof dir inside the wallet_data folder.
-		{
-			wallet_lock!(wallet, w);
-			TxProof::init_proof_backend(w.get_data_file_dir()).unwrap_or_else(|e| {
-				error!("Unable to init proof_backend{}", e);
-			});
-		}
-
-		//start mwcmqs listener
-		let result = start_mwcmqs_listener(
-			wallet.clone(),
-			mqs_config_unwrapped,
-			config.max_auto_accept_invoice,
-			config.grinbox_address_index(),
-			Some(tx),
-			Some(rx_from_others),
-			false,
-			keychain_mask.clone(),
-		);
-		match result {
-			Err(e) => {
-				error!("Error starting MWCMQS listener: {}", e);
-			}
-			Ok((publisher, subscriber)) => {
-				mwcmqs_broker = Some((publisher, subscriber));
-			}
-		}
-	}
-	let mwcmqs_broker_withlock = Arc::new(Mutex::new(mwcmqs_broker));
-	let rx_withlock = Arc::new(Mutex::new(Some(rx)));
-	let tx_withlock = Arc::new(Mutex::new(Some(tx_from_others)));
-
-	let api_handler_v2 = OwnerAPIHandlerV2::new(
-		wallet.clone(),
-		mwcmqs_broker_withlock.clone(),
-		rx_withlock.clone(),
-		tx_withlock.clone(),
-	);
+	let api_handler_v2 = OwnerAPIHandlerV2::new(wallet.clone());
 	let api_handler_v3 = OwnerAPIHandlerV3::new(
 		wallet.clone(),
 		keychain_mask.clone(),
 		tor_config,
 		running_foreign,
-		mwcmqs_broker_withlock,
-		rx_withlock,
-		tx_withlock,
 	);
 
 	router
@@ -829,9 +829,6 @@ where
 {
 	/// Wallet instance
 	pub wallet: Arc<Mutex<Box<dyn WalletInst<'static, L, C, K> + 'static>>>,
-	mwcmqs_broker: Arc<Mutex<Option<(MWCMQPublisher, MWCMQSubscriber)>>>,
-	rx_withlock: Arc<Mutex<Option<Receiver<Slate>>>>,
-	tx_withlock: Arc<Mutex<Option<Sender<bool>>>>,
 }
 
 impl<L, C, K> OwnerAPIHandlerV2<L, C, K>
@@ -843,16 +840,8 @@ where
 	/// Create a new owner API handler for GET methods
 	pub fn new(
 		wallet: Arc<Mutex<Box<dyn WalletInst<'static, L, C, K> + 'static>>>,
-		mwcmqs_broker: Arc<Mutex<Option<(MWCMQPublisher, MWCMQSubscriber)>>>,
-		rx_withlock: Arc<Mutex<Option<Receiver<Slate>>>>,
-		tx_withlock: Arc<Mutex<Option<Sender<bool>>>>,
 	) -> OwnerAPIHandlerV2<L, C, K> {
-		OwnerAPIHandlerV2 {
-			wallet,
-			mwcmqs_broker,
-			rx_withlock,
-			tx_withlock,
-		}
+		OwnerAPIHandlerV2 { wallet }
 	}
 
 	async fn call_api(req: Request<Body>, api: Owner<L, C, K>) -> Result<serde_json::Value, Error> {
@@ -870,14 +859,17 @@ where
 	async fn handle_post_request(
 		req: Request<Body>,
 		wallet: Arc<Mutex<Box<dyn WalletInst<'static, L, C, K> + 'static>>>,
-		mwcmqs_broker: Arc<Mutex<Option<(MWCMQPublisher, MWCMQSubscriber)>>>,
-		rx_withlock: Arc<Mutex<Option<Receiver<Slate>>>>,
-		tx_withlock: Arc<Mutex<Option<Sender<bool>>>>,
 	) -> Result<Response<Body>, Error> {
-		let mut api = Owner::new(wallet, None);
-		//check to see if mqs listener is started, if it is started, pass it to Owner.rs
-		api.set_mqs_broker(mwcmqs_broker, rx_withlock, tx_withlock);
-		let res = Self::call_api(req, api).await?;
+		let api = Owner::new(wallet, None);
+
+		//Here is a wrapper to call future from that.
+		// Issue that we can't call future form future
+		let handler = move || -> Pin<Box<dyn std::future::Future<Output=Result<serde_json::Value, Error>>>> {
+			let future = Self::call_api(req, api);
+			Box::pin(future)
+		};
+		let res = crate::executor::RunHandlerInThread::new(handler).await?;
+
 		Ok(json_response_pretty(&res))
 	}
 }
@@ -890,13 +882,8 @@ where
 {
 	fn post(&self, req: Request<Body>) -> ResponseFuture {
 		let wallet = self.wallet.clone();
-		let mwcmqs_broker = self.mwcmqs_broker.clone();
-		let rx_withlock = self.rx_withlock.clone();
-		let tx_withlock = self.tx_withlock.clone();
 		Box::pin(async move {
-			match Self::handle_post_request(req, wallet, mwcmqs_broker, rx_withlock, tx_withlock)
-				.await
-			{
+			match Self::handle_post_request(req, wallet).await {
 				Ok(r) => Ok(r),
 				Err(e) => {
 					error!("Request Error: {:?}", e);
@@ -1171,13 +1158,9 @@ where
 		keychain_mask: Arc<Mutex<Option<SecretKey>>>,
 		tor_config: Option<TorConfig>,
 		running_foreign: bool,
-		mwcmqs_broker: Arc<Mutex<Option<(MWCMQPublisher, MWCMQSubscriber)>>>,
-		rx_withlock: Arc<Mutex<Option<Receiver<Slate>>>>,
-		tx_withlock: Arc<Mutex<Option<Sender<bool>>>>,
 	) -> OwnerAPIHandlerV3<L, C, K> {
-		let mut owner_api = Owner::new(wallet.clone(), None);
+		let owner_api = Owner::new(wallet.clone(), None);
 		owner_api.set_tor_config(tor_config);
-		owner_api.set_mqs_broker(mwcmqs_broker, rx_withlock, tx_withlock);
 		let owner_api = Arc::new(owner_api);
 		OwnerAPIHandlerV3 {
 			wallet,
@@ -1187,18 +1170,6 @@ where
 			running_foreign,
 		}
 	}
-
-	/*
-	//Here is a wrapper to call future from that.
-	// Issue that we can't call future form future
-	Box::new(parse_body(req).and_then(move |val: serde_json::Value| {
-			let handler = move || -> serde_json::Value {
-				......
-			};
-			crate::executor::RunHandlerInThread::new(handler)
-		}))
-
-	*/
 
 	async fn call_api(
 		req: Request<Body>,
@@ -1273,7 +1244,15 @@ where
 		running_foreign: bool,
 		api: Arc<Owner<L, C, K>>,
 	) -> Result<Response<Body>, Error> {
-		let res = Self::call_api(req, key, mask, running_foreign, api).await?;
+		//Here is a wrapper to call future from that.
+		// Issue that we can't call future form future
+		let handler = move || -> Pin<Box<dyn std::future::Future<Output=Result<serde_json::Value, Error>>>> {
+			let future = Self::call_api(req, key, mask, running_foreign, api);
+			Box::pin(future)
+		};
+		let res = crate::executor::RunHandlerInThread::new(handler).await?;
+
+		//let res = Self::call_api(req, key, mask, running_foreign, api).await?;
 		Ok(json_response_pretty(&res))
 	}
 }
@@ -1335,17 +1314,6 @@ where
 		}
 	}
 
-	/*
-	   //Here is a wrapper to call future from that.
-	   // Issue that we can't call future form future
-	   Box::new(parse_body(req).and_then(move |val: serde_json::Value| {
-			   let handler = move || -> serde_json::Value {
-				   ......
-			   };
-			   crate::executor::RunHandlerInThread::new(handler)
-		   }))
-	*/
-
 	async fn call_api(
 		req: Request<Body>,
 		api: Foreign<'static, L, C, K>,
@@ -1367,7 +1335,14 @@ where
 		wallet: Arc<Mutex<Box<dyn WalletInst<'static, L, C, K> + 'static>>>,
 	) -> Result<Response<Body>, Error> {
 		let api = Foreign::new(wallet, mask, Some(check_middleware));
-		let res = Self::call_api(req, api).await?;
+
+		//Here is a wrapper to call future from that.
+		// Issue that we can't call future form future
+		let handler = move || -> Pin<Box<dyn std::future::Future<Output=Result<serde_json::Value, Error>>>> {
+			let future = Self::call_api(req, api);
+			Box::pin(future)
+		};
+		let res = crate::executor::RunHandlerInThread::new(handler).await?;
 		Ok(json_response_pretty(&res))
 	}
 }

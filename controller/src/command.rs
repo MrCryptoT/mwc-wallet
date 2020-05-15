@@ -36,7 +36,6 @@ use serde_json as json;
 use std::fs::File;
 use std::io::{Read, Write};
 use std::sync::atomic::Ordering;
-use std::sync::mpsc::channel;
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
@@ -191,8 +190,6 @@ where
 				wallet_inst,
 				mqs_config.clone(),
 				keychain_mask,
-				None,
-				None,
 				true,
 			)
 			.map_err(|e| {
@@ -225,6 +222,19 @@ where
 	// keychain mask needs to be a sinlge instance, in case the foreign API is
 	// also being run at the same time
 	let km = Arc::new(Mutex::new(keychain_mask));
+
+	// Starting MQS first
+	if config.owner_api_include_mqs_listener.unwrap_or(false) {
+		let _ = controller::init_start_mwcmqs_listener(
+			config.clone(),
+			owner_api.wallet_inst.clone(),
+			mqs_config.clone(),
+			km.clone(),
+			false,
+		)?;
+	}
+
+	// Now Owner API
 	controller::owner_listener(
 		owner_api.wallet_inst.clone(),
 		km,
@@ -232,10 +242,7 @@ where
 		g_args.api_secret.clone(),
 		g_args.tls_conf.clone(),
 		config.owner_api_include_foreign.clone(),
-		config.owner_api_include_mqs_listener.clone(),
-		config.clone(),
 		Some(tor_config.clone()),
-		Some(mqs_config.clone()),
 	)
 	.map_err(|e| ErrorKind::LibWallet(format!("Unable to start Listener, {}", e)))?;
 	Ok(())
@@ -379,11 +386,6 @@ where
 					.into());
 				}
 			};
-			//start the mqs listener if needed.
-			let mut mqs_broker = None;
-			let (tx, rx) = channel(); //this channel is used for listener thread to send message to other thread
-						  //this channel is used for listener thread to receive message from other thread
-			let (tx_from_others, rx_from_others) = channel();
 
 			//if it is mwcmqs, start listner first.
 			match args.method.as_str() {
@@ -404,23 +406,13 @@ where
 						Some(&m) => Some(m.to_owned()),
 					};
 					//start the listener finalize tx
-					let result = controller::init_start_mwcmqs_listener(
+					let _ = controller::init_start_mwcmqs_listener(
 						config.clone(),
 						wallet_inst.clone(),
 						mqs_config_unwrapped,
 						Arc::new(Mutex::new(km)),
-						Some(tx),
-						Some(rx_from_others),
 						false,
-					);
-					match result {
-						Err(_e) => {
-							//mqs_broker = None;
-						}
-						Ok((publisher, subscriber)) => {
-							mqs_broker = Some((publisher, subscriber));
-						}
-					}
+					)?;
 					thread::sleep(Duration::from_millis(2000));
 				}
 				_ => {}
@@ -462,13 +454,7 @@ where
 						&args.dest,
 						&args.apisecret,
 						tor_config,
-						Some(MwcMqsChannel::new(
-							Arc::new(Mutex::new(mqs_broker)),
-							Arc::new(Mutex::new(Some(rx))),
-							Arc::new(Mutex::new(Some(tx_from_others))),
-							args.dest.clone(),
-							true,
-						)),
+						Some(MwcMqsChannel::new(args.dest.clone(), true)),
 					)?;
 					slate = sender.send_tx(&slate)?;
 				}

@@ -37,5 +37,6 @@ pub mod command;
 pub mod controller;
 pub mod display;
 mod error;
+pub mod executor;
 
 pub use crate::error::{Error, ErrorKind};

@@ -34,13 +34,11 @@ use crate::libwallet::{
 use crate::util::logger::LoggingConfig;
 use crate::util::secp::key::SecretKey;
 use crate::util::{from_hex, static_secp_instance, Mutex, ZeroingString};
-use colored::Colorize;
-use grin_wallet_impls::{MWCMQPublisher, MWCMQSubscriber};
 use grin_wallet_libwallet::proof::tx_proof::TxProof;
 use grin_wallet_util::OnionV3Address;
 use std::convert::TryFrom;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::mpsc::{channel, Sender};
 use std::sync::Arc;
 use std::thread;
 use std::thread::JoinHandle;
@@ -89,9 +87,6 @@ where
 	updater_log_thread: Option<JoinHandle<()>>,
 	// Atomic to stop the thread
 	updater_log_running_state: Arc<AtomicBool>,
-	mwcmqs_broker: Arc<Mutex<Option<(MWCMQPublisher, MWCMQSubscriber)>>>,
-	rx_withlock: Arc<Mutex<Option<Receiver<Slate>>>>,
-	tx_withlock: Arc<Mutex<Option<Sender<bool>>>>,
 }
 
 // Owner need to release the resources. We have a thread that is running in background
@@ -231,9 +226,6 @@ where
 			tor_config: Mutex::new(None),
 			updater_log_thread: handle,
 			updater_log_running_state: running,
-			mwcmqs_broker: Arc::new(Mutex::new(None)),
-			rx_withlock: Arc::new(Mutex::new(None)),
-			tx_withlock: Arc::new(Mutex::new(None)),
 		}
 	}
 
@@ -248,27 +240,6 @@ where
 	pub fn set_tor_config(&self, tor_config: Option<TorConfig>) {
 		let mut lock = self.tor_config.lock();
 		*lock = tor_config;
-	}
-
-	/// Set mqs_broker for this instance of the OwnerAPI, used during
-	/// `init_send_tx` when send args are present and a mqs address is specified
-	///
-	/// # Arguments
-	/// * `mwcmqs_broker`
-	/// # Returns
-	/// * Nothing
-
-	pub fn set_mqs_broker(
-		&mut self,
-		mwcmqs_broker: Arc<Mutex<Option<(MWCMQPublisher, MWCMQSubscriber)>>>,
-		rx_withlock: Arc<Mutex<Option<Receiver<Slate>>>>,
-		tx_withlock: Arc<Mutex<Option<Sender<bool>>>>,
-	) {
-		//		let mut lock = self.mwcmqs_broker.lock();
-		//		*lock = mwcmqs_broker;
-		self.mwcmqs_broker = mwcmqs_broker;
-		self.rx_withlock = rx_withlock;
-		self.tx_withlock = tx_withlock;
 	}
 
 	/// Returns a list of accounts stored in the wallet (i.e. mappings between
@@ -767,13 +738,7 @@ where
 							&sa.dest,
 							&sa.apisecret,
 							tor_config_lock.clone(),
-							Some(MwcMqsChannel::new(
-								self.mwcmqs_broker.clone(),
-								self.rx_withlock.clone(),
-								self.tx_withlock.clone(),
-								sa.dest.clone(),
-								sa.finalize.clone(),
-							)),
+							Some(MwcMqsChannel::new(sa.dest.clone(), sa.finalize.clone())),
 						)
 						.map_err(|e| {
 							ErrorKind::GenericError(format!("Unable to crete a sender, {}", e))
@@ -804,7 +769,7 @@ where
 					};
 					println!(
 						"slate [{}] finalized successfully in owner_api",
-						slate.id.to_string().bright_green()
+						slate.id.to_string()
 					);
 				}
 
@@ -813,7 +778,7 @@ where
 				}
 				println!(
 					"slate [{}] posted successfully in owner_api",
-					slate.id.to_string().bright_green()
+					slate.id.to_string()
 				);
 				Ok(slate)
 			}
