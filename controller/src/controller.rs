@@ -252,7 +252,7 @@ where
 		K: Keychain + 'static,
 	{
 		if max_auto_accept_invoice.is_some() && global::is_mainnet() {
-			panic!("Auto invoicing disable for the mainnet");
+			panic!("Auto invoicing must be disabled for the mainnet");
 		}
 
 		Self {
@@ -312,7 +312,7 @@ where
 				}
 
 				if global::is_mainnet() {
-					panic!("Auto invoicing disable for the mainnet");
+					panic!("Auto invoicing must be disabled for the mainnet");
 				}
 
 				//create the args
