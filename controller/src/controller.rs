@@ -505,10 +505,10 @@ where
 				core::amount_to_hr_string(slate.amount, false)
 			));
 		};
-		let from_address_raw = from.get_stripped();
+		let from_address_full_name = from.get_full_name();
 
 		let result = self
-			.process_incoming_slate(Some(from_address_raw), slate, None, proof)
+			.process_incoming_slate(Some(from_address_full_name), slate, None, proof)
 			.and_then(|is_finalized| {
 				if !is_finalized {
 					self.publisher

@@ -57,6 +57,7 @@ pub trait Address: Debug + Display {
 		Self: Sized;
 	fn address_type(&self) -> AddressType;
 	fn get_stripped(&self) -> String;
+	fn get_full_name(&self) -> String;
 }
 
 #[derive(Debug, PartialEq)]
@@ -96,6 +97,10 @@ impl Address for KeybaseAddress {
 	fn get_stripped(&self) -> String {
 		format!("{}", self.username)
 	}
+
+	fn get_full_name(&self) -> String {
+		"keybase://".to_string() + &self.get_stripped()
+	}
 }
 
 impl Display for KeybaseAddress {
@@ -126,6 +131,10 @@ impl Address for HttpsAddress {
 
 	fn get_stripped(&self) -> String {
 		self.uri.clone()
+	}
+
+	fn get_full_name(&self) -> String {
+		self.get_stripped()
 	}
 }
 

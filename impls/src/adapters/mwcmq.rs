@@ -133,6 +133,11 @@ impl Address for MWCMQSAddress {
 		}
 		res
 	}
+
+	fn get_full_name(&self) -> String {
+		"mwcmqs://".to_string() + &self.get_stripped()
+	}
+
 	fn address_type(&self) -> AddressType {
 		AddressType::MWCMQS
 	}
