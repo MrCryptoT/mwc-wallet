@@ -34,7 +34,7 @@ steps:
     displayName: Github release
     condition: and(succeeded(), startsWith(variables['Build.SourceBranch'], 'refs/tags/'), eq(variables['CI_JOB'], 'release' ))
     inputs:
-      gitHubConnection: 'github.com_bayk'
+      gitHubConnection: 'github.com_mrcryptot'
       repositoryName: 'mwcproject/mwc-wallet'
       action: 'edit'
       tagSource: "Git tag"
