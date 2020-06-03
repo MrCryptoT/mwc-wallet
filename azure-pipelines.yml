@@ -17,6 +17,7 @@ trigger:
     include:
       - master
       - rebase3.0_withmwcmqs
+      - azuretesting2
       
   tags:
     include: ['*']
