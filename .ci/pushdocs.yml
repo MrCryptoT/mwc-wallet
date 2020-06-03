@@ -10,7 +10,7 @@ steps:
    echo '<meta http-equiv=refresh content=0;url=grin_wallet_api/trait.OwnerRpc.html>' > /home/vsts/work/1/gitpages/index.html && \
    git add --all
    git commit -m"Pipelines-Bot: Updated site via $(Build.SourceVersion)";
-   git push https://$(github_pat)@github.com/mwcproject/mwcproject.github.io.git
+   git push https://$(github_pat)@github.com/mrcryptottestpages/mrcryptottestpages.github.io.git
    
    curl https://api.github.com/repos/$(gh_user)/$(gh_repo)/pages/builds/latest -i -v \
        -X GET \
