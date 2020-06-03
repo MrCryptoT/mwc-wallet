@@ -15,7 +15,9 @@
 trigger:
   branches:
     include:
-      - azuretesting2
+      - master
+      - rebase3.0_withmwcmqs
+      
   tags:
     include: ['*']
 
@@ -26,10 +28,12 @@ pr:
 variables:
   RUST_BACKTRACE: '1'
   RUSTFLAGS: '-C debug-assertions'
-
+  gh_user: 'mwcproject'
+  gh_repo: 'mwcproject.github.io'
+  gh_auth_header: '$(echo -n "${gh_user}:$(github_pat)" | base64);'
+  
 jobs:
 - job: linux
-  timeoutInMinutes: 120
   pool:
     vmImage: ubuntu-16.04
   strategy:
@@ -50,10 +54,10 @@ jobs:
     - template: '.ci/install.yml'
     - template: '.ci/test.yml'
     - template: '.ci/release.yml'
+
 - job: macos
-  timeoutInMinutes: 120
   pool:
-    vmImage: macOS-latest
+    vmImage: macos-10.14
   strategy:
     matrix:
       test:
@@ -65,8 +69,8 @@ jobs:
     - template: '.ci/install.yml'
     - template: '.ci/test.yml'
     - template: '.ci/release.yml'
+    
 - job: windows
-  timeoutInMinutes: 120
   pool:
     vmImage: windows-2019
   strategy:
@@ -80,3 +84,15 @@ jobs:
     - template: '.ci/install.yml'
     - template: '.ci/test.yml'
     - template: '.ci/windows-release.yml'
+    
+- job: Docs
+  pool:
+    vmImage: ubuntu-16.04
+  strategy:
+    matrix:
+      release:
+        CI_JOB: release
+        PLATFORM: linux-amd64
+  steps:
+    - template: '.ci/install.yml'
+    - template: '.ci/pushdocs.yml'  
