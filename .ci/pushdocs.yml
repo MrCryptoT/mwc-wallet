@@ -1,10 +1,10 @@
 steps:
 - script: |
    cd /home/vsts/work/1/s/api && cargo fetch  && cargo doc --offline --no-deps
-   mkdir /home/vsts/work/1/gitpages && cd /home/vsts/work/1/gitpages && git clone https://anything:$(github_pat)@github.com/$(gh_user)/$(gh_repo).git .
+   mkdir /home/vsts/work/1/gitpages && cd /home/vsts/work/1/gitpages && git clone https://anything:$(github_pat)@github.com/$(ghpages_user)/$(ghpages_repo).git .
    
    cd  /home/vsts/work/1/gitpages
-   git config user.name $(gh_user)
+   git config user.name $(ghpages_user)
    git checkout master
    cp -a /home/vsts/work/1/s/target/doc/* /home/vsts/work/1/gitpages/
    echo '<meta http-equiv=refresh content=0;url=grin_wallet_api/trait.OwnerRpc.html>' > /home/vsts/work/1/gitpages/index.html && \
@@ -12,9 +12,9 @@ steps:
    git commit -m"Pipelines-Bot: Updated site via $(Build.SourceVersion)";
    git push https://$(github_pat)@github.com/mrcryptottestpages/mrcryptottestpages.github.io.git
    
-   curl https://api.github.com/repos/$(gh_user)/$(gh_repo)/pages/builds/latest -i -v \
+   curl https://api.github.com/repos/$(ghpages_user)/$(ghpages_repo)/pages/builds/latest -i -v \
        -X GET \
        -H "Accept: application/vnd.github.mister-fantastic-preview+json" \
-       -H "Authorization: Basic $(gh_auth_header)"
+       -H "Authorization: Basic $(ghpages_auth_header)"
   displayName: 'Create and Push Docs'
   condition: and(succeeded(), contains(variables['Build.SourceBranch'], 'refs/tags/'), eq(variables['CI_JOB'], 'release' ))
