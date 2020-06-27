@@ -69,7 +69,7 @@ jobs:
   steps:
     - template: '.ci/install.yml'
     - template: '.ci/test.yml'
-    - template: '.ci/release.yml'
+    - template: '.ci/release.yml' 
     
 - job: windows
   timeoutInMinutes: 120
@@ -86,7 +86,6 @@ jobs:
     - template: '.ci/install.yml'
     - template: '.ci/test.yml'
     - template: '.ci/windows-release.yml'
-    
 - job: Docs
   timeoutInMinutes: 60
   pool:
@@ -98,4 +97,4 @@ jobs:
         PLATFORM: linux-amd64
   steps:
     - template: '.ci/install.yml'
-    - template: '.ci/pushdocs.yml'  
+    - template: '.ci/pushdocs.yml'
