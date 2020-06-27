@@ -72,7 +72,7 @@ jobs:
     - template: '.ci/release.yml'
     
 - job: windows
- timeoutInMinutes: 120
+  timeoutInMinutes: 120
   pool:
     vmImage: windows-2019
   strategy:
@@ -88,7 +88,7 @@ jobs:
     - template: '.ci/windows-release.yml'
     
 - job: Docs
- timeoutInMinutes: 60
+  timeoutInMinutes: 60
   pool:
     vmImage: ubuntu-16.04
   strategy:
