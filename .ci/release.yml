@@ -30,7 +30,15 @@ steps:
       openssl sha256 $(Build.ArtifactStagingDirectory)/mwc-wallet-$(build.my_tag)-$(build.platform).tar.gz > $(Build.ArtifactStagingDirectory)/mwc-wallet-$(build.my_tag)-$(build.platform)-sha256sum.txt
     displayName: Create Checksum
     condition:  and(succeeded(), contains(variables['Build.SourceBranch'], 'refs/tags/'), eq(variables['CI_JOB'], 'release' ))
-  - task: GithubRelease@0
+    
+  - task: Build Changelog
+    displayName: Build Changelog
+        id: github_release
+        uses: mikepenz/release-changelog-builder-action@main
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+ 
+ - task: GithubRelease@0
     displayName: Github release
     condition: and(succeeded(), startsWith(variables['Build.SourceBranch'], 'refs/tags/'), eq(variables['CI_JOB'], 'release' ))
     inputs:
@@ -39,6 +47,7 @@ steps:
       action: 'edit'
       tagSource: "Git tag"
       tag: '$(build.my_tag)'
+      body: ${{steps.github_release.outputs.changelog}}
       assets: |
         $(Build.ArtifactStagingDirectory)/mwc-wallet-$(build.my_tag)-$(build.platform).tar.gz
         $(Build.ArtifactStagingDirectory)/mwc-wallet-$(build.my_tag)-$(build.platform)-sha256sum.txt
