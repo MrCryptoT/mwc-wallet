@@ -39,6 +39,7 @@ steps:
       action: 'edit'
       tagSource: "Git tag"
       tag: '$(build.my_tag)'
+      compareWith: 'lastFullRelease'
       assets: |
         $(Build.ArtifactStagingDirectory)/mwc-wallet-$(build.my_tag)-$(build.platform).tar.gz
         $(Build.ArtifactStagingDirectory)/mwc-wallet-$(build.my_tag)-$(build.platform)-sha256sum.txt
