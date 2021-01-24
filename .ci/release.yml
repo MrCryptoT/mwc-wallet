@@ -53,3 +53,4 @@ steps:
         $(Build.ArtifactStagingDirectory)/mwc-wallet-$(build.my_tag)-$(build.platform)-sha256sum.txt
       assetUploadMode: 'replace'
       addChangeLog: true
+      compareWith: 'lastFullRelease'
