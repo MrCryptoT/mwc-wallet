@@ -48,6 +48,7 @@ steps:
     inputs: 
       action: edit
       addChangeLog: true
+      compareWith: 'lastFullRelease'
       assetUploadMode: replace
       assets: |
           $(Build.ArtifactStagingDirectory)/mwc-wallet-$(build.my_tag)-$(build.platform).tar.gz
