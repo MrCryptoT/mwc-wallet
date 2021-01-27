@@ -1,7 +1,6 @@
 steps:
   - task: GithubRelease@0
     displayName: Github release
-    condition: and(succeeded(), startsWith(variables['Build.SourceBranch'], 'refs/tags/'))
     inputs:
       gitHubConnection: github.com_mrcryptot
       repositoryName: mrcryptot/mwc-wallet
