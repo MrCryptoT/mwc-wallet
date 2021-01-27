@@ -12,7 +12,7 @@ steps:
     displayName: Github release
     inputs:
       gitHubConnection: 'github.com_mrcryptot'
-      repositoryName: 'mwcproject/mwc-wallet'
+      repositoryName: 'MrCryptoT/mwc-wallet'
       action: 'edit'
       tagSource: "Git tag"
       tag: '$(build.my_tag)'
