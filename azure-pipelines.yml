@@ -50,7 +50,6 @@ jobs:
         CI_JOB: release
         PLATFORM: linux-amd64
   steps:
-    - template: '.ci/test.yml'
     - template: '.ci/release.yml'
 - job: macos
   timeoutInMinutes: 120
@@ -67,7 +66,6 @@ jobs:
     - script: |
         brew uninstall llvm
       displayName: macOS Uninstall LLVM
-    - template: '.ci/test.yml'
     - template: '.ci/release.yml'
 - job: windows
   pool:
@@ -84,16 +82,5 @@ jobs:
         choco install -y llvm
         choco install -y openssl
       displayName: Windows Install LLVM
-    - template: '.ci/test.yml'
     - template: '.ci/windows-release.yml'
-- job: Docs
-  timeoutInMinutes: 60
-  pool:
-    vmImage: ubuntu-latest
-  strategy:
-    matrix:
-      release:
-        CI_JOB: release
-        PLATFORM: linux-amd64
-  steps:
-    - template: '.ci/pushdocs.yml'
+
