@@ -17,4 +17,3 @@ steps:
       title: '$(build.my_tag)'
       assetUploadMode: 'replace'
       addChangeLog: true
-
