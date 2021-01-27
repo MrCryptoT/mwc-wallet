@@ -5,7 +5,7 @@ steps:
       echo $MY_TAG
       echo "##vso[task.setvariable variable=build.my_tag]$MY_TAG"
       echo "##vso[task.setvariable variable=build.platform]$PLATFORM"
-      LastRelease=git describe --abbrev=0 MY_TAG^
+      LastRelease=git describe --abbrev=0 --tags
       echo $LastRelease
     displayName: "Create my tag variable"
   - task: GithubRelease@0
