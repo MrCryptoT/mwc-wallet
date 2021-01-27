@@ -14,6 +14,8 @@ steps:
       echo $MY_TAG
       echo "##vso[task.setvariable variable=build.my_tag]$MY_TAG"
       echo "##vso[task.setvariable variable=build.platform]$PLATFORM"
+      LastRelease=git describe --abbrev=0 MY_TAG^
+      echo $LastRelease
     displayName: "Create my tag variable"
     condition:  and(succeeded(), contains(variables['Build.SourceBranch'], 'refs/tags/'), eq(variables['CI_JOB'], 'release' ))
   - task: CopyFiles@2
@@ -50,3 +52,5 @@ steps:
       title: '$(build.my_tag)'
       assetUploadMode: 'replace'
       addChangeLog: true
+      lastRelease: 'lastReleaseByTag'
+      releaseTag: '$(build.LastRelease)'
