@@ -45,3 +45,4 @@ steps:
       assetUploadMode: 'replace'
       addChangeLog: true
       compareWith: 'lastFullRelease'
+
