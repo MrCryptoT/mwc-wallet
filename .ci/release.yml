@@ -1,4 +1,11 @@
 steps:
+  - script: |
+      MY_TAG="$(Build.SourceBranch)"
+      MY_TAG=${MY_TAG#refs/tags/}
+      echo $MY_TAG
+      echo "##vso[task.setvariable variable=build.my_tag]$MY_TAG"
+      echo "##vso[task.setvariable variable=build.platform]$PLATFORM"
+    displayName: "Create my tag variable"
   - task: GithubRelease@0
     displayName: Github release
     inputs:
