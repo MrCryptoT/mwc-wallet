@@ -1,52 +1,13 @@
 steps:
-  - script: 'cargo test --all'
-    displayName: Cargo Test All
-    condition:  and(succeeded(), contains(variables['Build.SourceBranch'], 'refs/tags/'), eq(variables['CI_JOB'], 'release' ))
-  - script: './build_static_linux.sh'
-    displayName: Build Linux Release
-    condition: and(succeeded(), eq( variables['Agent.OS'], 'Linux' ))
-  - script: './build_static.sh'
-    displayName: Build MacOS Release
-    condition: and(succeeded(), eq( variables['Agent.OS'], 'Darwin' ))
-  - script: |
-      MY_TAG="$(Build.SourceBranch)"
-      MY_TAG=${MY_TAG#refs/tags/}
-      echo $MY_TAG
-      echo "##vso[task.setvariable variable=build.my_tag]$MY_TAG"
-      echo "##vso[task.setvariable variable=build.platform]$PLATFORM"
-    displayName: "Create my tag variable"
-    condition:  and(succeeded(), contains(variables['Build.SourceBranch'], 'refs/tags/'), eq(variables['CI_JOB'], 'release' ))
-  - task: CopyFiles@2
-    displayName: Copy assets
-    condition:  and(succeeded(), contains(variables['Build.SourceBranch'], 'refs/tags/'), eq(variables['CI_JOB'], 'release' ))
-    inputs:
-      sourceFolder: '$(Build.SourcesDirectory)/target/release'
-      contents: 'mwc-wallet'
-      targetFolder: '$(Build.BinariesDirectory)/mwc-wallet'
-  - task: ArchiveFiles@2
-    displayName: Gather assets
-    condition:  and(succeeded(), contains(variables['Build.SourceBranch'], 'refs/tags/'), eq(variables['CI_JOB'], 'release' ))
-    inputs:
-      rootFolderOrFile: '$(Build.BinariesDirectory)/mwc-wallet'
-      archiveType: 'tar'
-      tarCompression: 'gz'
-      archiveFile: '$(Build.ArtifactStagingDirectory)/mwc-wallet-$(build.my_tag)-$(build.platform).tar.gz'
-  - script: |
-      cd $(Build.ArtifactStagingDirectory) && openssl sha256 mwc-wallet-$(build.my_tag)-$(build.platform).tar.gz > mwc-wallet-$(build.my_tag)-$(build.platform)-sha256sum.txt
-    displayName: Create Checksum
-    condition:  and(succeeded(), contains(variables['Build.SourceBranch'], 'refs/tags/'), eq(variables['CI_JOB'], 'release' ))
-  - task: GithubRelease@0
+ - task: GithubRelease@0
     displayName: Github release
-    condition: and(succeeded(), startsWith(variables['Build.SourceBranch'], 'refs/tags/'), eq(variables['CI_JOB'], 'release' ))
+    condition: and(succeeded(), startsWith(variables['Build.SourceBranch'], 'refs/tags/'))
     inputs:
       gitHubConnection: github.com_mrcryptot
       repositoryName: mrcryptot/mwc-wallet
       action: 'edit'
       tagSource: "Git tag"
       tag: '$(build.my_tag)'
-      assets: |
-        $(Build.ArtifactStagingDirectory)/mwc-wallet-$(build.my_tag)-$(build.platform).tar.gz
-        $(Build.ArtifactStagingDirectory)/mwc-wallet-$(build.my_tag)-$(build.platform)-sha256sum.txt
       title: '$(build.my_tag)'
       assetUploadMode: 'replace'
       addChangeLog: true
